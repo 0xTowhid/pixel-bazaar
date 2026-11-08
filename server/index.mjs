@@ -37,14 +37,16 @@ const sha = s => createHash('sha256').update(s).digest('hex');
 const hmac = s => createHmac('sha256', SECRET).update(s).digest();
 
 // ---------- contract access ----------
-let view, operatorCall;
+let view, operatorCall, hasKey;
+const mockKeys = new Map();
 let mock;
 if (MOCK) {
   mock = new Engine(OPERATOR, CONTRACT, sha);
-  mock.create_npc(OPERATOR, 'rita');
+  mock.create_npc(OPERATOR, 'rita'); mock.create_npc(OPERATOR, 'kaito');
   view = async (method, args) => { const fn = mock[method]; if (!fn) throw new Error('no view ' + method); return method === 'get_player' ? fn.call(mock, args.account_id) : method === 'mt_balance_of' ? fn.call(mock, args.account_id, args.token_id) : fn.call(mock); };
+  hasKey = async (account, pk) => mockKeys.get(account) === pk;
   operatorCall = async (method, args) => {
-    if (method === 'register_player') return mock.register_player(OPERATOR, args.name);
+    if (method === 'register_player') { const id = mock.register_player(OPERATOR, args.name); mockKeys.set(id, args.public_key); return id; }
     return mock[method](OPERATOR, args);
   };
 } else {
@@ -52,6 +54,7 @@ if (MOCK) {
   const provider = new JsonRpcProvider({ url: NODE_URL });
   const operator = new Account(OPERATOR, provider, OPERATOR_KEY);
   view = (method, args = {}) => provider.callFunction({ contractId: CONTRACT, method, args });
+  hasKey = async (account, pk) => { try { await provider.viewAccessKey({ accountId: account, publicKey: pk }); return true; } catch { return false; } };
   operatorCall = (method, args, deposit = '0') => operator.callFunction({ contractId: CONTRACT, methodName: method, args, gas: teraToGas('100'), deposit: nearToYocto(deposit) });
 }
 
@@ -60,14 +63,15 @@ function plan(account, season, day) {
   const seedBytes = hmac(`${account}|${season}|${day}`), accBytes = hmac(`${account}|${season}|acc`);
   const rng = Rules.mulberry32(seedBytes.readUInt32LE(0));
   const acc = Rules.seasonAccuracy(Rules.mulberry32(accBytes.readUInt32LE(0)));
-  const { truth, rumors } = Rules.planDay(rng, acc);
+  const { truth, rumors, kaito } = Rules.planDay(rng, acc);
   const rumorText = Rules.encodeRumors(rumors);
   const salt = hmac(`${account}|${season}|${day}|salt`).toString('hex');
   const commitment = sha(`${account}|${season}|${day}|${truth}|${rumorText}|${salt}`);
   const weather = Rules.EVENTS[truth].weather || null;
   const r = rumors.rita;
-  const npc_move = r.lying ? { npc: `rita.${CONTRACT}`, good: Rules.GOODS.findIndex(g => g.id === Rules.EVENTS[r.ev].good), long: false } : null;
-  return { truth, rumors, rumorText, salt, commitment, weather, npc_move };
+  const npc_moves = [{ npc: `kaito.${CONTRACT}`, good: kaito.good, long: kaito.long }];
+  if (r.lying) npc_moves.push({ npc: `rita.${CONTRACT}`, good: Rules.EVENTS[r.ev].fx[0][0], long: false });
+  return { truth, rumors, rumorText, salt, commitment, weather, npc_moves, kaito };
 }
 
 // ---------- http ----------
@@ -86,9 +90,15 @@ const routes = {
     if (limited(req.socket.remoteAddress)) throw new Error('Too many new players from your network. Try again in an hour.');
     const accountId = `${name}.${CONTRACT}`;
     if (await view('get_player', { account_id: accountId })) throw new Error('That name is taken.');
-    if (MOCK) await operatorCall('register_player', { name }); else await operatorCall('register_player', { name, public_key: body.publicKey }, PLAYER_FUNDING);
+    await operatorCall('register_player', { name, public_key: body.publicKey }, PLAYER_FUNDING);
     if (!(await view('get_player', { account_id: accountId }))) throw new Error('Account creation failed. Try another name.');
     return { accountId };
+  },
+  // Log in on a new device: is this the right key for this account?
+  'POST /api/check-key': async body => {
+    if (!(await view('get_player', { account_id: body.accountId }))) throw new Error('No trader with that name.');
+    if (!(await hasKey(body.accountId, body.publicKey))) throw new Error('Wrong password or recovery code.');
+    return { ok: true };
   },
   // Start (or resume) the player's current day: commit it on chain, return the rumors.
   'POST /api/day': async body => {
@@ -97,9 +107,11 @@ const routes = {
     if (p.finished) return { finished: true };
     const d = plan(body.accountId, p.season, p.day);
     let tx = null;
-    if (!p.commitment) tx = await operatorCall('commit_day', { player: body.accountId, day: p.day, commitment: d.commitment, weather: d.weather, npc_move: d.npc_move });
+    if (!p.commitment) tx = await operatorCall('commit_day', { player: body.accountId, day: p.day, commitment: d.commitment, weather: d.weather, npc_moves: d.npc_moves });
     else if (p.commitment !== d.commitment) throw new Error('commitment mismatch');
-    return { season: p.season, day: p.day, rumors: d.rumors, weather: d.weather, commitment: d.commitment, tx: txHash(tx) };
+    // the restored lighthouse tells the truth about storms
+    const stormWarning = p.projects && p.projects[1] ? d.truth === 0 : null;
+    return { season: p.season, day: p.day, rumors: d.rumors, weather: d.weather, kaito: d.kaito, stormWarning, commitment: d.commitment, tx: txHash(tx) };
   },
   // Reveal the event after the player has gone to sleep.
   'POST /api/settle': async body => {
@@ -114,7 +126,7 @@ const routes = {
 function txHash(r) { return r && typeof r === 'object' ? (r.transaction?.hash || r.transaction_outcome?.id || null) : null; }
 if (MOCK) {
   routes['POST /mock/call'] = async b => { mock[b.method](b.accountId, b.args || {}); return { ok: true }; };
-  routes['POST /mock/view'] = async b => view(b.method, b.args || {});
+  routes['POST /mock/view'] = async b => b.method === 'get_inventory' ? mock.get_inventory(b.args.account_id) : view(b.method, b.args || {});
 }
 
 http.createServer(async (req, res) => {

@@ -56,7 +56,11 @@ const World = (() => {
     sailor: { x: 94.5, y: 31.6 }, master: { x: 81.5, y: 24.6 }, farmer: { x: 15.5, y: 26.6 },
     hermit: { x: 79.5, y: 16.6 }, seer: { x: 45.5, y: 9.2 }, fisher: { x: 53.5, y: 52.6 },
     bridge: { x: 34.5, y: 31 }, boatDock: { x: 96.5, y: 39.6 }, boatIsland: { x: 101.5, y: 34.6 }, chest: { x: 103.5, y: 32.8 },
-    v1: { x: 58.5, y: 31.6 }, v2: { x: 44.5, y: 45.6 },
+    v1: { x: 58.5, y: 31.6 }, v2: { x: 44.5, y: 45.6 }, kaito: { x: 52.5, y: 41.4 }, cat: { x: 41.5, y: 28.4 },
+    // farm plots: 12 behind your house, 6 on the Hill Farms past the bridge
+    plots: [...[18, 19].flatMap(y => [42, 43, 44, 45, 46, 47].map(x => ({ x, y }))), ...[18, 19, 20, 21, 22, 23].map(x => ({ x, y: 27 }))],
+    rocks: [[41, 11], [52, 12], [80, 5], [79, 9], [83, 12], [73, 15], [81, 14], [86, 10]].map(([x, y]) => ({ x, y })),
+    fishSpots: [{ x: 54.5, y: 49.9 }, { x: 92.5, y: 30.7 }],
   };
 
   function build(images) {
@@ -85,6 +89,8 @@ const World = (() => {
     for (const [x, y] of [[51, 5], [37, 9], [67, 13], [46, 15]]) prop('nature', 0, 8, 2, 2, x, y, 1);
     // ---- Frost Camp ----
     prop('house', 0, 11, 3, 3, 75, 4); prop('house', 6, 11, 3, 3, 82, 8); prop('house', 3, 11, 3, 3, 76, 11);
+    // ---- rocks to mine (boulders) ----
+    P.rockProps = P.rocks.map((r, i) => prop('nature', i % 2 ? 4 : 0, 12, 2, 2, r.x, r.y, 1, { rock: i }));
     // ---- Town ----
     prop('house', 0, 5, 3, 2, 54, 26, 0);          // torii gate over the north road (walk-through)
     prop('house', 0, 0, 4, 3, 38, 24);             // your home
@@ -151,7 +157,7 @@ const World = (() => {
     // ground details per area
     for (let i = 0; i < 700; i++) {
       const x = Math.floor(rnd() * W), y = Math.floor(rnd() * H);
-      if (dirt.has(key(x, y)) || water.has(key(x, y)) || solid[y][x]) continue;
+      if (dirt.has(key(x, y)) || water.has(key(x, y)) || solid[y][x] || P.plots.some(p => p.x === x && p.y === y)) continue;
       const z = zone(x, y);
       if (z === 'farm' || z === 'town') tileTo(gctx, 'nature', Math.floor(rnd() * 8), 11, x, y);
       else if (z === 'woods') tileTo(gctx, 'detail', Math.floor(rnd() * 8), 2, x, y);

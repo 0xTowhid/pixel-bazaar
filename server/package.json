@@ -6,13 +6,15 @@
   "scripts": {
     "start": "node index.mjs",
     "mock": "MOCK=1 node index.mjs",
-    "vendor": "esbuild node_modules/near-api-js/lib/index.js --bundle --format=esm --platform=browser --minify --define:process.env.NODE_DEBUG=false --define:global=globalThis --outfile=../vendor/near-api-js.mjs"
+    "vendor": "esbuild node_modules/near-api-js/lib/index.js --bundle --format=esm --platform=browser --minify --define:process.env.NODE_DEBUG=false --define:global=globalThis --outfile=../vendor/near-api-js.mjs",
+    "vendor_keys": "cp ../tools/keys-entry.js keys-entry.js && esbuild keys-entry.js --bundle --format=esm --platform=browser --minify --outfile=../vendor/keys.mjs && rm keys-entry.js"
   },
   "license": "MIT",
   "dependencies": {
     "near-api-js": "7.4.0"
   },
   "devDependencies": {
+    "@scure/bip39": "^2.4.0",
     "esbuild": "^0.25.0",
     "util": "^0.12.5"
   }

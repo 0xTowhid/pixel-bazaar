@@ -28,6 +28,7 @@ CHARS = {
     'farmer': M_BODY + [L('legs/pants/male', .09, .45, .55), L('torso/clothes/longsleeve/longsleeve/male', .2, .45, .85), 'head/heads/human/male', L('hair/plain/adult', .1, .5, .6), L('hat/cloth/leather_cap/adult', .11, .5, .8)],
     'hermit': M_BODY + [L('legs/pants/male', .55, .15, .6), L('torso/clothes/longsleeve/longsleeve/male', .55, .25, .7), 'head/heads/human/male', L('beards/beard/medium', 0, 0, 1.15), L('hat/cloth/hood/adult', .55, .3, .75)],
     'seer':   F_BODY + [L('legs/skirts/plain/thin', .78, .5, .5), L('torso/clothes/longsleeve/longsleeve/female', .78, .5, .55), 'head/heads/human/female', L('hair/long/adult', 0, 0, .3), L('hat/cloth/hood/adult', .8, .55, .5)],
+    'kaito':  M_BODY + [L('legs/pants/male', 0, 0, .3), L('torso/clothes/longsleeve/formal/male', .13, .75, .9), 'head/heads/human/male', L('hair/plain/adult', 0, 0, .25), L('hat/formal/tophat/adult', .13, .8, .7)],
     'master': M_BODY + [L('legs/pants/male', 0, 0, .35), L('torso/clothes/longsleeve/longsleeve/male', 0, 0, .4), 'head/heads/human/male', L('beards/beard/medium', .08, .2, .7), L('hat/formal/tophat/adult', 0, 0, .3)],
 }
 

@@ -89,7 +89,7 @@ pub struct Player {
 #[serde(tag = "t")]
 pub enum Action {
     Plant { plot: u8, crop: u8 }, Water { plot: u8 }, Harvest { plot: u8 }, Mine { rock: u8 }, Fish { ok: bool }, Cat,
-    Sell { good: u8, qty: u32 }, Gift { npc: u8, good: u8 }, Donate { project: u8 }, BuySeed { crop: u8, qty: u16 }, BuyPlot,
+    Sell { good: u8, qty: u32 }, Gift { npc: u8, good: u8 }, Donate { project: u8, coins: u64 }, BuySeed { crop: u8, qty: u16 }, BuyPlot,
 }
 
 #[near(serializers = [borsh, json])]
@@ -304,7 +304,7 @@ impl Contract {
                     p.friendship[n] = (p.friendship[n] as u16 + liked).min(100) as u8;
                     if before < 100 && p.friendship[n] >= 100 { badges.push("best_friend"); }
                 }
-                Action::Donate { project } => {
+                Action::Donate { project, coins: give_coins } => {
                     let j = project as usize; require!(j < PROJECTS.len() && !p.projects[j], "nothing to donate to");
                     let (need, coins) = PROJECTS[j];
                     for &(g, n) in need.iter() {
@@ -313,7 +313,8 @@ impl Contract {
                         if give > 0 { self.burn(GOODS[g], &id, give as u128); p.donated[j][g] += give; }
                     }
                     let cmissing = (coins * 100).saturating_sub(p.donated[j][NG] as u64);
-                    let cgive = p.coins.min(cmissing); p.coins -= cgive; p.donated[j][NG] += cgive as u32;
+                    let cgive = (give_coins * 100).min(cmissing); require!(p.coins >= cgive, "not enough coins");
+                    p.coins -= cgive; p.donated[j][NG] += cgive as u32;
                     if need.iter().all(|&(g, n)| p.donated[j][g] >= n) && p.donated[j][NG] as u64 >= coins * 100 { p.projects[j] = true; badges.push("restorer"); }
                 }
                 Action::BuySeed { crop, qty } => {
@@ -601,7 +602,7 @@ mod tests {
     fn gifts_build_friendship_and_projects_complete() {
         let mut c = setup(); commit(&mut c, 1, 2, "s");
         c.mint("tea", &pl(), 41); c.players.get_mut(&pl()).unwrap().coins = 1000 * 100;
-        c.act(vec![Action::Gift { npc: 0, good: 0 }, Action::Donate { project: 2 }]);
+        c.act(vec![Action::Gift { npc: 0, good: 0 }, Action::Donate { project: 2, coins: 600 }]);
         let p = c.get_player(pl()).unwrap();
         assert_eq!(p.friendship[0], 10); assert!(p.projects[2]);
         assert_eq!(c.mt_balance_of(pl(), "badge_restorer".into()).0, 1);

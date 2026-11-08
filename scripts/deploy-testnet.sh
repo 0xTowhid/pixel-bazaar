@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Deploy Pixel Bazaar to NEAR testnet from Linux (or WSL).
-# Needs: rustup, cargo-near and near-cli-rs (install commands are in README.md).
+# Needs (Arch: sudo pacman -S --needed base-devel jq nodejs npm):
+#   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && rustup target add wasm32-unknown-unknown
+#   curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/latest/download/cargo-near-installer.sh | sh
+#   curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/near-cli-rs/releases/latest/download/near-cli-rs-installer.sh | sh
+# A contract update that changes stored data needs a NEW account name (old state cannot be read by new code).
 # Usage:  ACCOUNT=pixelbazaar-yourname.testnet ./scripts/deploy-testnet.sh
 set -euo pipefail
 : "${ACCOUNT:?set ACCOUNT, e.g. ACCOUNT=pixelbazaar-yourname.testnet}"
@@ -17,8 +21,10 @@ near contract deploy "$ACCOUNT" use-file target/near/contract.wasm \
   with-init-call new json-args "{\"operator\":\"$ACCOUNT\"}" prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' \
   network-config testnet sign-with-legacy-keychain send
 
-echo "4/4 Creating Rita's on-chain account (rita.$ACCOUNT)"
+echo "4/4 Creating the NPC accounts rita.$ACCOUNT and kaito.$ACCOUNT"
 near contract call-function as-transaction "$ACCOUNT" create_npc json-args '{"name":"rita"}' \
+  prepaid-gas '50.0 Tgas' attached-deposit '0.1 NEAR' sign-as "$ACCOUNT" network-config testnet sign-with-legacy-keychain send
+near contract call-function as-transaction "$ACCOUNT" create_npc json-args '{"name":"kaito"}' \
   prepaid-gas '50.0 Tgas' attached-deposit '0.1 NEAR' sign-as "$ACCOUNT" network-config testnet sign-with-legacy-keychain send
 
 KEYFILE="$HOME/.near-credentials/testnet/$ACCOUNT.json"

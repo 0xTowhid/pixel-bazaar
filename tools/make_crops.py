@@ -7,7 +7,7 @@ import os
 OUT = os.path.join(os.path.dirname(__file__), '..', 'assets', 'crops'); os.makedirs(OUT, exist_ok=True)
 PAL = {'.': None, 'o': (42,30,23), 'g': (52,112,44), 'G': (96,178,58), 'l': (166,224,90), 'r': (200,40,50), 'R': (255,104,94),
        'y': (246,213,92), 'Y': (255,240,160), 'O': (226,120,40), 'P': (255,176,74), 'p': (100,58,150), 'q': (152,104,214),
-       'b': (122,74,42), 's': (88,58,36), 'S': (120,84,56), 'w': (255,255,255), 'k': (60,40,30)}
+       'b': (122,74,42), 's': (88,58,36), 'S': (120,84,56), 'w': (255,255,255), 'k': (60,40,30), 'L': (200,190,225)}
 def grid(rows):
     im = Image.new('RGBA', (16, 16))
     for y, row in enumerate(rows):
@@ -53,3 +53,16 @@ for (x, y) in [(7, 6), (14, 4), (21, 7), (10, 12), (18, 13), (24, 11), (5, 15), 
 out = Image.new('RGBA', (64, 32)); out.alpha_composite(tree, (0, 0)); out.alpha_composite(fruit, (32, 0))
 out.save(os.path.join(OUT, 'apple_tree.png'))
 print('crops:', names)
+
+# extra icons: jade, ore, seed bag, heart, empty heart (assets/crops/icons.png, 16px each)
+EXTRA = {
+ 'jade': [E, E, '.......oo.......', '......oGGo......', '.....oGllGo.....', '....oGllGGGo....', '...oGlGGGGGGo...', '..oGGGGGGGGgGo..', '..oGGGGGGGgGGo..', '...oGGGGGgGGo...', '....oGGGgGGo....', '.....oGgGGo.....', '......oGgo......', '.......oo.......', E, E],
+ 'ore': [E, E, E, '.....oooooo.....', '....okkSSkko....', '...okSkkkSkko...', '..okkkYkkkSkko..', '..okSkkkkYkkko..', '..okkkSkkkkSko..', '..okYkkkSkkkko..', '...okkkkkkYko...', '....oooooooo....', E, E, E, E],
+ 'seeds': [E, '......oooo......', '.....obbbbo.....', '......oyyo......', '.....oSSSSo.....', '....oSSSSSSo....', '...oSSSySSSSo...', '...oSSSSSSySo...', '...oSySSSSSSo...', '...oSSSSySSSo...', '...oSSSSSSSSo...', '....oSSSSSSo....', '.....oooooo.....', E, E, E],
+ 'heart': [E, E, E, '...oo....oo.....', '..oRRo..oRRo....', '.oRwRRooRRRRo...', '.oRwRRRRRRRRo...', '.oRRRRRRRRRRo...', '..oRRRRRRRRo....', '...oRRRRRRo.....', '....oRRRRo......', '.....oRRo.......', '......oo........', E, E, E],
+ 'heart0': [E, E, E, '...LL....LL.....', '..L..L..L..L....', '.L....LL....L...', '.L..........L...', '.L..........L...', '..L........L....', '...L......L.....', '....L....L......', '.....L..L.......', '......LL........', E, E, E],
+}
+icons = Image.new('RGBA', (16 * len(EXTRA), 16))
+for i, k in enumerate(EXTRA): icons.alpha_composite(grid(EXTRA[k]), (i * 16, 0))
+icons.save(os.path.join(OUT, 'icons.png'))
+print('icons:', list(EXTRA))

@@ -3,14 +3,16 @@
 //  - mock:  the operator server with its JavaScript copy of the contract (for testing without NEAR).
 //  - chain: real NEAR. The server creates your account and commits/reveals each day; your browser signs
 //           your own moves with a function-call key that can only call this game contract.
+// Login: your name + password (or your 12-word recovery code) rebuild the same game key on any device.
 'use strict';
 
 const Backend = (() => {
   const cfg = window.PB_CONFIG || { mode: 'local' };
   const mode = cfg.mode || 'local';
   const KEY = 'pb_account_' + (cfg.contractId || 'local');
-  const store = { get() { try { return JSON.parse(localStorage.getItem(KEY)); } catch (e) { return null; } }, set(v) { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) {} } };
-  let me = null, near = null, account = null, provider = null, local = null;
+  const store = { get() { try { return JSON.parse(localStorage.getItem(KEY)); } catch (e) { return null; } }, set(v) { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) {} }, clear() { try { localStorage.removeItem(KEY); } catch (e) {} } };
+  let me = null, near = null, keys = null, account = null, provider = null, local = null;
+  const url = f => new URL(f, document.baseURI).href;
 
   async function api(path, body) {
     const r = await fetch((cfg.api || '') + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) });
@@ -20,14 +22,23 @@ const Backend = (() => {
   }
   async function loadNear() {
     if (near) return near;
-    near = await import(new URL('vendor/near-api-js.mjs', document.baseURI).href);
+    near = await import(url('vendor/near-api-js.mjs'));
     provider = new near.JsonRpcProvider({ url: cfg.nodeUrl });
     return near;
   }
+  async function loadKeys() { if (!keys) keys = await import(url('vendor/keys.mjs')); return keys; }
+  /** name + password -> 12 words (PBKDF2, 210k rounds, salted with the account id) */
+  async function phraseFromPassword(accountId, password) {
+    await loadKeys();
+    if (!crypto.subtle) throw new Error('Login needs a secure page (https or localhost).');
+    const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: new TextEncoder().encode('pixel-bazaar|' + accountId), iterations: 210000 }, base, 128);
+    return keys.phraseFromEntropy(new Uint8Array(bits));
+  }
 
-  // ---------- local mode: a full copy of the contract rules in the tab ----------
   function localSetup() {
     local = { engine: new BazaarEngine.Engine('operator', 'local'), acc: null, plan: null };
+    local.engine.create_npc('operator', 'rita'); local.engine.create_npc('operator', 'kaito');
     local.engine.join('you.local');
     me = { accountId: 'you.local' };
   }
@@ -37,21 +48,35 @@ const Backend = (() => {
     get accountId() { return me && me.accountId; },
     explorerTx(h) { return h && cfg.explorer ? cfg.explorer + '/txns/' + h : null; },
     explorerAccount(a) { return cfg.explorer ? cfg.explorer + '/address/' + a : null; },
+    logout() { store.clear(); me = null; account = null; },
 
-    /** Make sure we have a player account. `askName` is called (once) in chain/mock mode. */
-    async ensurePlayer(askName) {
-      if (mode === 'local') { localSetup(); return me.accountId; }
+    /**
+     * Make sure we have a player. `ask()` shows the login card and resolves to
+     * { kind: 'new' | 'login' | 'code', name, password, phrase }. Returns { accountId, phrase? } (phrase only for new traders).
+     */
+    async ensurePlayer(ask) {
+      if (mode === 'local') { localSetup(); return { accountId: me.accountId }; }
       me = store.get();
-      if (me && await this.player()) return me.accountId;
+      if (me && await this.player().catch(() => null)) return { accountId: me.accountId };
       for (;;) {
-        const name = await askName();
+        const a = await ask();
         try {
-          let publicKey = 'ed25519:' + '1'.repeat(44), secretKey = null;
-          if (mode === 'chain') { await loadNear(); const kp = near.KeyPair.fromRandom('ed25519'); publicKey = kp.getPublicKey().toString(); secretKey = kp.toString(); }
-          const r = await api('/api/register', { name, publicKey });
-          me = { accountId: r.accountId, secretKey }; store.set(me);
-          return me.accountId;
-        } catch (e) { askName.error = e.message; }
+          const name = String(a.name || '').trim().toLowerCase();
+          if (!/^[a-z0-9][a-z0-9_-]{1,30}$/.test(name)) throw new Error('Names use 2-31 lowercase letters, numbers, - or _.');
+          const accountId = `${name}.${cfg.contractId}`;
+          let phrase;
+          if (a.kind === 'code') phrase = String(a.phrase || '').trim().toLowerCase().split(/\s+/).join(' ');
+          else {
+            if (String(a.password || '').length < 8) throw new Error('Passwords need at least 8 characters.');
+            phrase = await phraseFromPassword(accountId, a.password);
+          }
+          await loadKeys();
+          const kp = keys.keyFromPhrase(phrase);
+          if (a.kind === 'new') await api('/api/register', { name, publicKey: kp.publicKey });
+          else await api('/api/check-key', { accountId, publicKey: kp.publicKey });
+          me = { accountId, secretKey: kp.secretKey }; store.set(me); account = null;
+          return { accountId, phrase: a.kind === 'new' ? phrase : null };
+        } catch (e) { ask.error = e.message; }
       }
     },
     async player() {
@@ -59,11 +84,16 @@ const Backend = (() => {
       if (mode === 'mock') return api('/mock/view', { method: 'get_player', args: { account_id: me.accountId } });
       await loadNear(); return provider.callFunction({ contractId: cfg.contractId, method: 'get_player', args: { account_id: me.accountId } });
     },
-    async balances(ids) {
-      if (mode === 'local') return ids.map(t => local.engine.mt_balance_of(me.accountId, t));
-      if (mode === 'mock') return Promise.all(ids.map(t => api('/mock/view', { method: 'mt_balance_of', args: { account_id: me.accountId, token_id: t } })));
-      await loadNear(); const r = await provider.callFunction({ contractId: cfg.contractId, method: 'mt_batch_balance_of', args: { account_id: me.accountId, token_ids: ids } });
-      return r.map(Number);
+    /** [barn counts by good, owned items and badges] */
+    async inventory() {
+      if (mode === 'local') return local.engine.get_inventory(me.accountId);
+      if (mode === 'mock') return api('/mock/view', { method: 'get_inventory', args: { account_id: me.accountId } });
+      await loadNear(); return provider.callFunction({ contractId: cfg.contractId, method: 'get_inventory', args: { account_id: me.accountId } });
+    },
+    async npcs() {
+      if (mode === 'local') return local.engine.get_npcs();
+      if (mode === 'mock') return api('/mock/view', { method: 'get_npcs' });
+      await loadNear(); return provider.callFunction({ contractId: cfg.contractId, method: 'get_npcs', args: {} });
     },
     async leaderboard() {
       if (mode === 'local') return local.engine.get_leaderboard();
@@ -76,12 +106,12 @@ const Backend = (() => {
       if (mode === 'mock') { await api('/mock/call', { accountId: me.accountId, method, args }); return null; }
       await loadNear();
       if (!account) account = new near.Account(me.accountId, provider, me.secretKey);
-      const r = await account.callFunctionRaw({ contractId: cfg.contractId, methodName: method, args, gas: near.teraToGas('15'), deposit: 0n });
+      const r = await account.callFunctionRaw({ contractId: cfg.contractId, methodName: method, args, gas: near.teraToGas(method === 'act' ? '100' : '15'), deposit: 0n });
       const fail = r?.status?.Failure;
       if (fail) throw new Error(JSON.stringify(fail).replace(/.*panicked: ?/, '').replace(/["\\}]+$/g, '').slice(0, 160));
       return r?.transaction?.hash || null;
     },
-    /** Start or resume today: the event is committed before you can trade. */
+    /** Start or resume today: the event is committed before you can act. */
     async beginDay() {
       if (mode !== 'local') return api('/api/day', { accountId: me.accountId });
       const p = local.engine.get_player(me.accountId);
@@ -90,11 +120,12 @@ const Backend = (() => {
       if (!p.commitment || !local.plan || local.plan.day !== p.day) {
         const d = Rules.planDay(Math.random, local.acc);
         local.plan = { ...d, day: p.day };
-        const r = d.rumors.rita;
-        local.engine.commit_day('operator', { player: me.accountId, day: p.day, commitment: 'x'.repeat(64), weather: Rules.EVENTS[d.truth].weather || null,
-          npc_move: r.lying ? { npc: 'rita.local', good: Rules.GOODS.findIndex(g => g.id === Rules.EVENTS[r.ev].good), long: false } : null });
+        const r = d.rumors.rita, moves = [{ npc: 'kaito.local', good: d.kaito.good, long: d.kaito.long }];
+        if (r.lying) moves.push({ npc: 'rita.local', good: Rules.EVENTS[r.ev].fx[0][0], long: false });
+        local.engine.commit_day('operator', { player: me.accountId, day: p.day, commitment: 'x'.repeat(64), weather: Rules.EVENTS[d.truth].weather || null, npc_moves: moves });
       }
-      return { season: p.season, day: p.day, rumors: local.plan.rumors, weather: Rules.EVENTS[local.plan.truth].weather || null };
+      const lp = local.plan;
+      return { season: p.season, day: p.day, rumors: lp.rumors, weather: Rules.EVENTS[lp.truth].weather || null, kaito: lp.kaito, stormWarning: p.projects[1] ? lp.truth === 0 : null };
     },
     /** Reveal the night's event and settle. */
     async settle() {

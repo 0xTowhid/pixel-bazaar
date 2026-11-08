@@ -95,6 +95,25 @@ button{font:inherit;color:inherit}
 .txh{font-size:.8em;line-height:1.7}.txh a{color:#8fe0ff}
 #chainlog a{color:#8fe0ff}
 #nameIn{font:inherit;font-size:1.3em;background:var(--pan2);color:var(--ink);border:2px solid var(--ink);border-radius:5px;padding:.4em .6em;width:12em}
+#hotbar{left:50%;bottom:1.2%;transform:translateX(-50%);display:flex;gap:.3em}
+.slot{position:relative;width:3.2em;height:3.2em;background:var(--pan);border:2px solid var(--ink);border-radius:5px;padding:.2em;cursor:pointer}
+.slot img{width:100%;height:100%;image-rendering:pixelated}.slot b{position:absolute;right:.2em;bottom:0;font-weight:normal;font-size:.8em;color:var(--ink);text-shadow:1px 1px 0 #000}
+.slot i{position:absolute;left:.25em;top:0;font-style:normal;font-size:.65em;color:var(--mut)}.slot.sel{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold)}.slot.empty img{opacity:.35}
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:.4em;margin:.9em 0 .6em}.tab{background:var(--pan2);border:2px solid var(--mut);border-radius:6px;padding:.6em .2em;color:var(--mut);cursor:pointer}.tab.on{background:var(--gold);color:var(--pan);border-color:var(--gold)}
+.fl{display:block;margin:.7em 0 .3em;color:var(--mut);font-size:.85em}
+#card input,#card textarea{font:inherit;font-size:1.1em;width:100%;background:var(--pan2);color:var(--ink);border:2px solid var(--ink);border-radius:5px;padding:.5em .6em}
+.phrase{display:grid;grid-template-columns:repeat(3,1fr);gap:.4em;margin:1em 0}.phrase span{background:var(--pan2);border-radius:5px;padding:.5em;font-size:1.05em}.phrase i{color:var(--mut);font-style:normal;margin-right:.5em;font-size:.75em}
+.paper{background:#ece0c4;color:#2a1e17;margin:-1.1em -1.3em;padding:1.2em 1.5em;border-radius:6px}.pt{font-size:2.2em;text-align:center;border-bottom:3px solid #2a1e17;padding-bottom:.2em}.pm{font-size:.75em;text-align:center;border-bottom:1px solid #2a1e17;padding:.3em 0;margin-bottom:.6em}
+.ph{font-size:1.4em;margin:.3em 0}.pp{font-size:.9em;line-height:1.5;margin-bottom:.4em}.pk{color:#962b1e;margin-top:.7em;font-size:1em}.pcols{display:grid;grid-template-columns:1fr 1fr;gap:1.2em}
+.pr{display:flex;justify-content:space-between;font-size:.85em;padding:.1em 0}.pr img{width:1.2em;vertical-align:middle;margin-right:.3em;image-rendering:pixelated}.pu{color:#1e7a2e}.pd{color:#a8281e}.letter{font-size:.85em;line-height:1.5;margin:.2em 0}
+.btn.dark{background:#2a1e17;color:#ece0c4;border-color:#2a1e17}
+.srow{display:grid;grid-template-columns:2.2em 1fr 4em auto;gap:.6em;align-items:center;padding:.45em 0;border-top:2px dashed #3d3363;text-align:left}.srow img{width:2em;image-rendering:pixelated}
+.inv{display:flex;flex-wrap:wrap;gap:.6em;margin:.4em 0}.inv span{display:flex;align-items:center;gap:.3em}.inv img{width:1.5em;image-rendering:pixelated}.inv.big .btn{display:flex;align-items:center;gap:.4em}
+.badges{display:flex;flex-wrap:wrap;gap:.35em}.badges span{font-size:.7em;padding:.3em .5em;border:1px solid #4a3f72;border-radius:4px;color:#5d5280}.badges span.got{color:var(--pan);background:var(--gold);border-color:var(--gold)}
+.badgeNew{margin:.5em 0;padding:.5em;background:var(--gold);color:var(--pan);border-radius:5px;font-size:.9em}
+.proj{padding:.6em 0;border-top:2px dashed #3d3363;text-align:left}.needs{display:flex;flex-wrap:wrap;gap:.5em;align-items:center;margin:.3em 0;font-size:.9em}.needs img{width:1.3em;image-rendering:pixelated}
+.hrt{width:1em;image-rendering:pixelated;vertical-align:middle}.hearts{margin-left:.6em}
+#trade{max-height:90%}
 #rotate{display:none}
 @media (orientation:portrait) and (pointer:coarse){#rotate{display:flex;position:fixed;inset:0;z-index:9;background:#120e1f;align-items:center;justify-content:center;text-align:center;padding:2em;line-height:1.8;color:var(--gold)}}
 @media (max-width:700px){.ngrid{grid-template-columns:1fr}.chart{height:6em}}
@@ -107,6 +126,7 @@ button{font:inherit;color:inherit}
     <div class="box"><img src="assets/items/GoldCoin.png" alt=""><span id="coins">0</span></div>
     <div class="box"><span id="day">DAY 1</span><span id="clock">06:00</span></div>
     <div class="box"><span>DEBT</span><div class="debtbar"><div id="debtFill"></div></div></div>
+    <div class="box"><span>ENERGY</span><div class="debtbar"><div id="enFill" style="background:#78e678"></div></div></div>
   </div>
   <div id="objBox" class="ui box"><span id="obj"></span></div>
   <div id="topR" class="ui"><button class="box" id="jBtn">JOURNAL (J)</button><button class="box" id="mute">♪ ON</button></div>
@@ -118,6 +138,7 @@ button{font:inherit;color:inherit}
     <div style="flex:1;min-width:0"><div id="dlgName"></div><div id="dlgText"></div><div id="dlgChoices"></div></div>
   </div>
   <div id="busy" class="ui box"></div>
+  <div id="hotbar" class="ui"></div>
   <div id="chainlog" class="ui"></div>
   <div id="trade" class="ui box panel"></div>
   <div id="journal" class="ui box panel"></div>
@@ -137,5 +158,7 @@ button{font:inherit;color:inherit}
 <script src="backend.js"></script>
 <script src="world.js"></script>
 <script src="game.js"></script>
+<script src="life.js"></script>
+<script src="panels.js"></script>
 </body>
 </html>

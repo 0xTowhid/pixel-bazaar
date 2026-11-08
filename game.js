@@ -13,11 +13,12 @@ const goodIdx = id => GOODS.findIndex(g => g.id === id);
 const LICENSES = [{ lev: 5, cost: 250 }, { lev: 10, cost: 900 }];
 const BRIDGE_COST = 600, BOAT_COST = 300, CHEST_COINS = 400, FISH_GIFT = 30;
 const DAILY_TIPS = {
-  2: 'Tip: the Old Sailor on the harbor docks knows everything about the sea.',
-  3: 'Tip: the farms behind the broken bridge have their own expert. The bridge costs 600 to repair.',
-  4: 'Tip: a hermit lives in the Frost Camp, north-east past the woods.',
-  5: 'Tip: Madame Vey in the Whispering Woods sells visions. 40 coins, mostly true.',
-  6: 'Tip: sailors talk about a chest on the island east of the harbor.',
+  2: 'Tip: rocks in the Frost Camp and the woods hide jade. Mining costs energy, which comes back every night.',
+  3: 'Tip: the Old Sailor on the harbor docks knows everything about the sea. You can fish off the docks too.',
+  4: 'Tip: gifts make friends. At 4 hearts a local writes to you every morning with their rumor.',
+  5: 'Tip: the farms past the broken bridge have their own expert, and 6 more plots of land.',
+  6: 'Tip: the town board takes donations. A fixed lighthouse warns you about storms.',
+  7: 'Tip: sailors talk about a chest on the island east of the harbor.',
 };
 
 // ---------- assets ----------
@@ -25,10 +26,26 @@ const IMG = {};
 const IMG_SRC = {
   floor: 'assets/tiles/TilesetFloor.png', house: 'assets/tiles/TilesetHouse.png', nature: 'assets/tiles/TilesetNature.png',
   water: 'assets/tiles/TilesetWater.png', element: 'assets/tiles/TilesetElement.png', detail: 'assets/tiles/TilesetFloorDetail.png',
-  coin: 'assets/items/GoldCoin.png',
+  coin: 'assets/items/GoldCoin.png', crops: 'assets/crops/crops.png', appletree: 'assets/crops/apple_tree.png', appleicon: 'assets/crops/apple_icon.png',
+  icons: 'assets/crops/icons.png', cat: 'assets/chars/cat.png',
 };
-for (const n of ['player', 'mei', 'bram', 'rita', 'tomo', 'v1', 'v2', 'sailor', 'farmer', 'hermit', 'seer', 'master']) IMG_SRC[n] = 'assets/chars/' + n + '.png';
-GOODS.forEach(g => IMG_SRC[g.id] = 'assets/items/' + g.icon + '.png');
+for (const n of ['player', 'mei', 'bram', 'rita', 'tomo', 'v1', 'v2', 'sailor', 'farmer', 'hermit', 'seer', 'master', 'kaito']) IMG_SRC[n] = 'assets/chars/' + n + '.png';
+// little 16px icons as data URLs, for the HTML panels
+const ICON = { good: [], seed: [] };
+function cut(img, sx, sy, s = 16) { const c = document.createElement('canvas'); c.width = c.height = s; const x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.drawImage(img, sx, sy, s, s, 0, 0, s, s); return c.toDataURL(); }
+function buildIcons() {
+  ICON.good = GOODS.map(g => {
+    const [kind, v] = g.icon.split(':');
+    if (kind === 'item') return 'assets/items/' + v + '.png';
+    if (kind === 'crop') return cut(IMG.crops, 64, +v * 16);
+    if (v === 'apple') return 'assets/crops/apple_icon.png';
+    return cut(IMG.icons, (v === 'jade' ? 0 : 1) * 16, 0);
+  });
+  ICON.seed = Rules.CROPS.map(c => c.row !== undefined ? cut(IMG.crops, 48, c.row * 16) : c.id === 'apple' ? 'assets/crops/apple_icon.png' : cut(IMG.element, 16, 16));
+  ICON.heart = cut(IMG.icons, 48, 0); ICON.heart0 = cut(IMG.icons, 64, 0); ICON.seeds = cut(IMG.icons, 32, 0);
+}
+const goodIcon = i => ICON.good[typeof i === 'string' ? goodIdx(i) : i];
+const seedIcon = i => ICON.seed[i];
 const SND = {}, SND_SRC = { coin: 'Coin', ok: 'Accept', menu: 'Menu1', success: 'Success1', alert: 'Alert', voice: 'Voice1' };
 let music, musicOn = true, audioReady = false;
 function loadAll() {
@@ -84,7 +101,9 @@ function makeCast() {
     master: makeChar('master', P.master, { name: 'Harbor Master', color: '#ffd86b', wander: 0 }),
     fisher: makeChar('v2', P.fisher, { name: 'Fisherman', color: '#ffffff', wander: 0, dir: 'up' }),
     v1: makeChar('v1', P.v1, { name: 'Villager', wander: 5 }),
+    kaito: makeChar('kaito', P.kaito, { name: 'Kaito the Whale', color: '#ffd86b', wander: 1.5 }),
   };
+  makeCat();
   for (const n of Object.values(NPCS)) if (n.src) { n.name = SOURCES[n.src].name; n.color = SOURCES[n.src].color; }
 }
 
@@ -93,13 +112,14 @@ function makeCast() {
 let S;
 const EVN = id => EVENTS.find(e => e.id === id);
 async function boot() {
-  await Backend.ensurePlayer(askName);
+  const who = await Backend.ensurePlayer(askLogin);
+  if (who.phrase) await showRecovery(who.phrase);
   const p = await Backend.player();
   S = freshState(p);
   makeCast();
-  if (p.finished || p.day === 1 && !p.commitment && !p.history.length) await guarded('Starting a new season', () => Backend.call('start_season'), 'start_season');
+  if (p.finished) await guarded('Starting a new season', () => Backend.call('start_season'), 'start_season');
   await beginDay(true);
-  toast('You owe the Harbor Master 5,000 coins. You have ' + fmt(S.coins) + ' and ' + (SEASON_DAYS - S.day + 1) + ' days.', 6);
+  showPaper(() => toast('You owe the Harbor Master 5,000 coins. You have ' + fmt(S.coins) + ' and ' + (SEASON_DAYS - S.day + 1) + ' days.', 6));
 }
 function freshState(p) {
   return {
@@ -107,6 +127,7 @@ function freshState(p) {
     price: Object.fromEntries(GOODS.map(g => [g.id, g.base])), closes: Object.fromEntries(GOODS.map(g => [g.id, [g.base]])),
     rec: Object.fromEntries(Object.keys(SOURCES).map(k => [k, { ok: 0, tot: 0 }])), notes: [], step: 0, over: false, history: [],
     best: +(safeGet('pb2_best') || 0), sel: 1, dir: 1, mult: 2, stake: 100, warned: false, rumors: {}, heard: {}, weather: null,
+    seedSel: 0, barn: new Array(GOODS.length).fill(0), items: new Set(), kaito: null, stormWarning: null, letters: [], lastLog: null,
   };
 }
 async function newSeason() {
@@ -114,11 +135,13 @@ async function newSeason() {
   const p = await Backend.player();
   S = freshState(p); makeCast();
   await beginDay(true);
-  toast('New season. You owe 5,000 again. Who will lie to you this time?', 5);
+  showPaper(() => toast('New season. You owe 5,000 again. Your farm, seeds, friends and items are still yours.', 5));
 }
 async function sync() {
   const p = await Backend.player();
-  const [x5, x10, bridge, boat] = await Backend.balances(['license_x5', 'license_x10', 'bridge', 'boat']);
+  const [barn, owned] = await Backend.inventory();
+  const items = new Set(owned), x5 = items.has('license_x5'), x10 = items.has('license_x10'), bridge = items.has('bridge'), boat = items.has('boat');
+  S.barn = barn.map(Number); S.items = items;
   S.day = p.day; S.coins = p.coins / 100; S.chest = p.chest; S.fishDay = p.fish_day; S.seerDay = p.seer_day;
   GOODS.forEach((g, i) => S.price[g.id] = p.prices[i] / 1000);
   S.positions = p.positions.map(q => ({ good: GOODS[q.good].id, dir: q.long ? 1 : -1, lev: q.lev, stake: q.stake / 100, entry: q.entry / 1000 }));
@@ -127,21 +150,28 @@ async function sync() {
   S.bridge = !!bridge; S.boat = !!boat;
   if (S.chest) { World.P.chestProp.sx = 9; }
   S.player = p;
+  renderHotbar();
   return p;
 }
 async function beginDay(first) {
   const d = await guarded('Committing today to NEAR', () => Backend.beginDay(), 'commit_day');
   if (!d) return;
   if (d.finished) { await sync(); endSeason(S.player.won); return; }
-  S.t = 0; S.warned = false; S.heard = {}; S.weather = d.weather;
+  S.t = 0; S.warned = false; S.heard = {}; S.weather = d.weather; S.kaito = d.kaito; S.stormWarning = d.stormWarning;
   S.rumors = {};
-  for (const [k, r] of Object.entries(d.rumors)) S.rumors[k] = r.quiet ? { quiet: true } : { ev: EVENTS[r.ev], evIdx: r.ev, lying: !!r.lying };
+  for (const [k, r] of Object.entries(d.rumors)) S.rumors[k] = r.quiet ? { quiet: true, sure: r.sure } : { ev: EVENTS[r.ev], evIdx: r.ev, lying: !!r.lying, sure: r.sure };
+  NPCS.kaito.selling = d.kaito ? `${d.kaito.long ? 'LONG' : 'SHORT'} ${GOODS[d.kaito.good].name.toUpperCase()} x5` : null;
   const r = NPCS.rita, spot = S.rumors.rita.lying ? World.P.ritaMarket : World.P.ritaHome;
   r.x = r.home.x = spot.x * TW; r.y = r.home.y = spot.y * TW;
   r.selling = S.rumors.rita.lying ? GOOD(S.rumors.rita.ev.good).name : null;
   await sync();
+  // close friends write to you at dawn: their rumor arrives with the paper
+  S.letters = Object.keys(SOURCES).filter(k => SOURCES[k].kind !== 'seer' && Rules.hearts(S.player.friendship[SOURCES[k].npc]) >= 4);
+  S.letters.forEach(k => S.heard[k] = true);
   if (!first) { player.x = World.P.homeDoor.x * TW; player.y = (World.P.homeDoor.y + .6) * TW; player.dir = 'down'; }
 }
+const npcFriend = k => S.player ? S.player.friendship[SOURCES[k] ? SOURCES[k].npc : Rules.NPC_IDS.indexOf(k)] || 0 : 0;
+function heartsHTML(f) { const h = Rules.hearts(f); return Array.from({ length: 5 }, (_, i) => `<img class="hrt" src="${i < h ? ICON.heart : ICON.heart0}" alt="">`).join(''); }
 const worth = () => S.coins + S.positions.reduce((a, p) => a + p.stake, 0);
 
 // Run a contract call with a busy overlay, an on-screen chain log entry and error handling.
@@ -149,6 +179,7 @@ let busyN = 0, quietBusy = false;
 const wait = ms => new Promise(r => setTimeout(r, ms));
 function walkTo(x, y, dir) { return new Promise(done => { player.auto = { x, y, dir, done }; }); }
 async function guarded(label, fn, tag) {
+  if (typeof Q !== 'undefined' && (Q.list.length || Q.sending)) { while (Q.sending) await wait(100); await flush(); }
   busyN++; $('busy').textContent = label + '...'; if (!quietBusy) $('busy').style.display = 'block';
   try {
     const r = await fn();
@@ -171,16 +202,39 @@ function chainLog(what, ok, tx) {
   setTimeout(() => { row.classList.add('gone'); setTimeout(() => row.remove(), 600); }, 7000);
   txHistory.unshift(html); txHistory.length = Math.min(txHistory.length, 12);
 }
-function askName() {
+function askLogin() {
+  const tab = askLogin.tab || 'new', err = askLogin.error || ''; askLogin.error = '';
   return new Promise(res => {
-    openCard(`<div class="ntitle">WELCOME TO PIXEL BAZAAR</div>
-      <div class="sub" style="text-align:center;margin-bottom:.8em">Pick a trader name. We create a NEAR ${Backend.cfg.network || ''} account for you, no wallet needed.<br>Your game key stays in this browser and can only play this game.</div>
-      ${askName.error ? `<div class="dn" style="text-align:center">${askName.error}</div>` : ''}
-      <div style="display:flex;gap:.6em;justify-content:center;align-items:center;flex-wrap:wrap"><input id="nameIn" maxlength="31" autocomplete="off" placeholder="your-name" value="${(askName.last || '')}">
-      <span class="sub">.${Backend.cfg.contractId}</span></div>
-      <div style="text-align:center"><button class="btn big gold" id="cardBtn">CREATE MY ACCOUNT</button></div>`, () => {});
-    const go = () => { const v = $('nameIn').value.trim().toLowerCase(); askName.last = v; $('card').classList.remove('on'); res(v); };
-    $('cardBtn').onclick = go; $('nameIn').onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') go(); }; $('nameIn').focus();
+    const net = Backend.cfg.network || '', acct = '.' + Backend.cfg.contractId;
+    openCard(`<div class="ntitle" style="color:var(--gold);font-size:2em">PIXEL BAZAAR</div>
+      <div class="sub" style="text-align:center">Farm by day. Trade on rumors by night.<br>Your progress lives on NEAR ${net}. Log in from any device.</div>
+      <div class="tabs"><button class="tab ${tab === 'new' ? 'on' : ''}" data-t="new">NEW TRADER</button><button class="tab ${tab === 'login' ? 'on' : ''}" data-t="login">LOG IN</button><button class="tab ${tab === 'code' ? 'on' : ''}" data-t="code">RECOVERY CODE</button></div>
+      ${err ? `<div class="dn" style="text-align:center;margin:.4em 0">${err}</div>` : ''}
+      <label class="fl">NAME <span class="sub">${acct}</span></label><input id="nameIn" maxlength="31" autocomplete="username" placeholder="your-name" value="${askLogin.nm || ''}">
+      ${tab === 'code' ? `<label class="fl">12-WORD RECOVERY CODE</label><textarea id="codeIn" rows="2" autocomplete="off" placeholder="word word word ..."></textarea>`
+        : `<label class="fl">PASSWORD</label><input id="pwIn" type="password" autocomplete="${tab === 'new' ? 'new-password' : 'current-password'}" placeholder="8+ characters">`}
+      ${tab === 'new' ? `<label class="fl">REPEAT PASSWORD</label><input id="pw2In" type="password" autocomplete="new-password">` : ''}
+      <div style="text-align:center"><button class="btn big gold" id="cardBtn">${tab === 'new' ? 'CREATE MY TRADER' : 'LOG IN'}</button></div>
+      <div class="sub" style="text-align:center;margin-top:.6em">No wallet needed. Your game key can only play this game.</div>`, () => {});
+    $('card').querySelectorAll('.tab').forEach(b => b.onclick = () => { askLogin.tab = b.dataset.t; askLogin.nm = $('nameIn').value; $('card').classList.remove('on'); res(askLogin()); });
+    const go = () => {
+      const name = $('nameIn').value.trim().toLowerCase(); askLogin.nm = name;
+      if (tab === 'new' && $('pwIn').value !== $('pw2In').value) { askLogin.error = 'The two passwords are different.'; $('card').classList.remove('on'); res(askLogin()); return; }
+      $('card').classList.remove('on');
+      res({ kind: tab, name, password: $('pwIn') ? $('pwIn').value : '', phrase: $('codeIn') ? $('codeIn').value : '' });
+    };
+    $('cardBtn').onclick = go;
+    $('card').querySelectorAll('input,textarea').forEach(el => el.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter' && el.tagName === 'INPUT') go(); });
+    $('nameIn').focus();
+  }).then(r => { if (r && r.kind) $('busy').textContent = 'Opening your account...'; return r; });
+}
+function showRecovery(phrase) {
+  return new Promise(res => {
+    openCard(`<div class="ntitle">SAVE YOUR RECOVERY CODE</div>
+      <div class="sub" style="text-align:center">Your name and password open your trader on any device. If you forget the password, these 12 words are the only way back in. Write them down. Nobody can reset them.</div>
+      <div class="phrase">${phrase.split(' ').map((w, i) => `<span><i>${i + 1}</i>${w}</span>`).join('')}</div>
+      <div style="text-align:center"><button class="btn" id="copyPh">COPY</button> <button class="btn big gold" id="cardBtn">I SAVED IT</button></div>`, res);
+    $('copyPh').onclick = e => { e.stopPropagation(); try { navigator.clipboard.writeText(phrase).then(() => toast('Copied.', 1.5), () => toast('Select the words and copy them.', 2)); } catch (er) { toast('Select the words and copy them.', 2); } };
   });
 }
 
@@ -191,12 +245,13 @@ function previewOutcome(stake, lev) {
 }
 async function openPosition() {
   const g = GOODS[S.sel];
+  if (g.id === 'ore') { toast('Nobody speculates on ore. Pick another good.', 2); return; }
   if (S.mult > S.lev) { sfx('alert'); toast('You need a license for x' + S.mult + '.', 2); return; }
   if (S.stake > S.coins || S.stake <= 0) { sfx('alert'); toast('Not enough coins.', 2); return; }
   const ok = await guarded(`Opening ${S.dir > 0 ? 'long' : 'short'} ${g.name} x${S.mult}`, () => Backend.call('open_position', { good: S.sel, long: S.dir > 0, lev: S.mult, stake: Math.round(S.stake * 100) }), `open_position · ${S.dir > 0 ? 'LONG' : 'SHORT'} ${g.name.toUpperCase()} x${S.mult}`);
   if (ok === null && Backend.mode === 'chain') return;
   await sync(); sfx('coin');
-  if (S.step === 1) advance();
+  if (S.step === 2) advance();
   S.stake = Math.min(S.stake, Math.max(STAKE_STEP, Math.floor(S.coins / STAKE_STEP) * STAKE_STEP));
   renderTrade();
 }
@@ -220,7 +275,8 @@ async function sleep(passedOut) {
   S.sleeping = true;
   let ok = false;
   try {
-    closeTrade(); $('journal').classList.remove('on');
+    closeTrade(); $('journal').classList.remove('on'); S.fishing = null;
+    while (Q.sending) await wait(100); await flush();
     if (!passedOut) { await walkTo(World.P.homeDoor.x * TW, (World.P.homeDoor.y - .25) * TW, 'up'); S.inside = true; sfx('ok'); }
     S.night = { start: performance.now(), dawn: 0, out: !!passedOut };
     quietBusy = true;
@@ -245,12 +301,20 @@ async function sleep(passedOut) {
     const notes = [];
     if (S.heard.rita && S.rumors.rita.lying && !S.notes.includes('rita')) { S.notes.push('rita'); notes.push('Rita lies on days she is selling at the market.'); }
     for (const k of ['sailor', 'farmer', 'hermit']) if (S.heard[k] && !S.notes.includes(k)) { S.notes.push(k); notes.push(noteFor(k)); }
-    S.history.push({ day: log.day, ev: ev.id });
+    S.history.push({ day: log.day, ev: ev.id }); S.lastLog = log;
     showNight(ev, prev, results, truths, notes, before, worth(), log.passed_out_loss / 100, S.player.finished, S.player.won);
   } finally {
     S.sleeping = false; quietBusy = false;
     if (!ok) { S.night = null; S.inside = false; }
   }
+}
+function farmLine(ev) {
+  const l = S.lastLog; if (!l) return '';
+  const bits = [];
+  if (l.grew) bits.push(`${l.grew} crop${l.grew > 1 ? 's' : ''} grew${ev.id === 'storm' ? ' (the rain watered them)' : ''}`);
+  if (l.killed) bits.push(`<span class="dn">${l.killed} died: ${ev.farm || ''}</span>`);
+  if (l.stall_sold) bits.push(`your stall sold goods for ${fmt(l.stall_sold / 100)}`);
+  return bits.length ? `<div class="note" style="color:#b9f08a">Farm: ${bits.join(' · ')}</div>` : '';
 }
 const noteFor = k => SOURCES[k].name + ' only knows ' + SOURCES[k].domain.map(d => EVN(d).title.toLowerCase()).join(', ') + '.';
 function showNight(ev, prev, results, truths, notes, before, after, lost, finished, won) {
@@ -272,12 +336,14 @@ function showNight(ev, prev, results, truths, notes, before, after, lost, finish
   openCard(`<div class="night">
     <div class="ntitle">NIGHT ${S.history.length} · ${ev.title.toUpperCase()}</div>
     <div class="ngrid">
-      <div class="nbox"><div class="nh"><img src="assets/items/${g.icon}.png"> ${g.name.toUpperCase()} ${fmt(prev[g.id])} → ${fmt(S.price[g.id])} <span class="${chg >= 0 ? 'up' : 'dn'}">${chg >= 0 ? '+' : ''}${chg}%</span></div><div class="chart">${bars}</div>
+      <div class="nbox"><div class="nh"><img src="${goodIcon(g.id)}"> ${g.name.toUpperCase()} ${fmt(prev[g.id])} → ${fmt(S.price[g.id])} <span class="${chg >= 0 ? 'up' : 'dn'}">${chg >= 0 ? '+' : ''}${chg}%</span></div><div class="chart">${bars}</div>
         ${Backend.mode !== 'local' ? '<div class="sub" style="margin-top:.5em">Event was committed this morning and checked on reveal.</div>' : ''}</div>
       <div class="nbox">${lost ? `<div class="dn" style="margin-bottom:.5em">You passed out in the street. Pickpockets took ${fmt(lost)}.</div>` : ''}
         ${pos}
         <div class="who">${who}</div>
         ${notes.map(n => `<div class="note">Journal: ${n}</div>`).join('')}
+        ${farmLine(ev)}
+        ${S.lastLog && S.lastLog.badges && S.lastLog.badges.length ? `<div class="badgeNew">NEW BADGE${S.lastLog.badges.length > 1 ? 'S' : ''}: ${S.lastLog.badges.map(b => Rules.BADGES[b]).join(' · ')}</div>` : ''}
         <div class="debt"><span>DEBT ${fmt(Math.min(S.coins, DEBT))} / ${fmt(DEBT)}</span><span>${finished ? 'season over' : (SEASON_DAYS - S.day + 1) + ' days left'}</span></div>
         <div class="bar"><div style="width:${Math.min(100, (finished && won ? DEBT : S.coins) / DEBT * 100)}%"></div></div>
       </div>
@@ -287,10 +353,12 @@ function showNight(ev, prev, results, truths, notes, before, after, lost, finish
       S.night = null;
       if (finished) { S.inside = false; endSeason(won); return; }
       await beginDay(false);
-      S.inside = false; player.x = World.P.homeDoor.x * TW; player.y = (World.P.homeDoor.y - .25) * TW;
-      walkTo(player.x, player.y + 26, 'down');
-      if (S.step === 2) advance();
-      if (DAILY_TIPS[S.day]) toast(DAILY_TIPS[S.day], 6);
+      showPaper(() => {
+        S.inside = false; player.x = World.P.homeDoor.x * TW; player.y = (World.P.homeDoor.y - .25) * TW;
+        walkTo(player.x, player.y + 26, 'down');
+        if (S.step === 3) advance();
+        if (DAILY_TIPS[S.day]) toast(DAILY_TIPS[S.day], 6);
+      });
     });
 }
 async function endSeason(won, early) {
@@ -307,7 +375,8 @@ async function endSeason(won, early) {
     ${Backend.mode !== 'local' ? `<br>Season result recorded for ${link ? `<a href="${link}" target="_blank" rel="noopener">${acct}</a>` : acct}.` : ''}</div>
     ${board.length ? '<div class="gname" style="font-size:1em;margin-top:.4em">LEADERBOARD</div>' + board.map((e, i) => `<div class="tr"><span>${i + 1}. ${e.account}</span><span class="${e.won ? 'up' : 'dn'}">${fmt(e.score / 100)}${e.won ? ' · paid day ' + e.day : ''}</span></div>`).join('') : ''}
     <div class="sub" style="margin-top:.8em">${share}</div>
-    <button class="btn big" id="copyBtn">COPY SHARE TEXT</button> <button class="btn big gold" id="cardBtn">NEW SEASON</button>`, () => newSeason());
+    <button class="btn big" id="imgBtn">SAVE SHARE IMAGE</button> <button class="btn big" id="copyBtn">COPY TEXT</button> <button class="btn big gold" id="cardBtn">NEW SEASON</button>`, () => newSeason());
+  $('imgBtn').onclick = e => { e.stopPropagation(); shareImage(won, score); };
   $('copyBtn').onclick = e => { e.stopPropagation(); const ok = () => toast('Copied.', 1.5), fail = () => toast('Copy failed. Select the text instead.', 2.5); try { navigator.clipboard.writeText(share).then(ok, fail); } catch (er) { fail(); } };
   sfx(won ? 'success' : 'alert');
 }
@@ -315,15 +384,16 @@ async function endSeason(won, early) {
 // ---------- tutorial / objectives ----------
 const STEPS = [
   { text: 'Talk to Mei by the market', target: () => NPCS.mei },
+  { text: 'Plant a seed behind your house and water it', target: () => at({ x: World.P.plots[0].x + .5, y: World.P.plots[0].y + .8 }) },
   { text: "Open a trade at Tomo's stall", target: () => NPCS.tomo },
-  { text: 'Go home and sleep', target: () => at(World.P.homeDoor) },
+  { text: 'Go home and sleep after 18:00', target: () => at(World.P.homeDoor) },
   { text: 'Reach 5,000 coins, then see the Harbor Master', target: () => S.coins >= DEBT ? NPCS.master : null },
 ];
 function advance() { S.step = Math.min(S.step + 1, STEPS.length - 1); sfx('ok'); }
 
 // ---------- UI ----------
 let dlg = null, cardCb = null;
-const uiOpen = () => !!dlg || ['trade', 'card', 'journal'].some(id => $(id).classList.contains('on'));
+const uiOpen = () => !!dlg || (S && S.fishing) || ['trade', 'card', 'journal'].some(id => $(id).classList.contains('on'));
 function toast(t, sec = 2.5) { const el = $('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => el.style.display = 'none', sec * 1000); }
 function hideToast() { $('toast').style.display = 'none'; }
 function openCard(html, cb) { hideToast(); $('card').innerHTML = html; $('card').classList.add('on'); cardCb = cb; $('cardBtn').onclick = closeCard; }
@@ -335,7 +405,9 @@ function portrait(sheet, canvas) {
 function say(who, text, choices) {
   portrait(who.sheet, $('portrait'));
   const rec = who.src && S.rec[who.src].tot ? `  ·  right ${S.rec[who.src].ok} of ${S.rec[who.src].tot}` : '';
-  $('dlgName').textContent = who.name + rec; $('dlgName').style.color = who.color || '#fff';
+  const fk = who.src || (who === NPCS.tomo ? 'tomo' : null);
+  $('dlgName').innerHTML = ''; $('dlgName').textContent = who.name + rec; $('dlgName').style.color = who.color || '#fff';
+  if (fk) $('dlgName').insertAdjacentHTML('beforeend', ' <span class="hearts">' + heartsHTML(npcFriend(fk)) + '</span>');
   $('dlgText').textContent = text;
   dlg = { choices: choices || [{ t: 'OK', fn: closeDlg }], sel: 0 };
   renderChoices(); $('dialog').classList.add('on'); sfx('voice');
@@ -350,11 +422,12 @@ function closeDlg() { dlg = null; $('dialog').classList.remove('on'); }
 function rumorText(k) {
   const r = S.rumors[k], s = SOURCES[k];
   if (r.quiet) return s.quiet;
-  return (s.voice ? pick(s.voice) + ' ' : '') + r.ev.rumor;
+  const sure = Rules.hearts(npcFriend(k)) >= 2 ? (r.sure ? ' I am sure of it.' : ' But honestly, I am not sure.') : '';
+  return (s.voice ? pick(s.voice) + ' ' : '') + r.ev.rumor + sure;
 }
 function hear(k) {
   const first = !S.heard[k]; S.heard[k] = true;
-  say(NPCS[k], '"' + rumorText(k) + '"');
+  say(NPCS[k], '"' + rumorText(k) + '"', [{ t: 'THANKS', fn: closeDlg }, { t: 'GIVE A GIFT', fn: () => giftMenu(k) }]);
   if (k === 'mei' && S.step === 0) advance();
 }
 function talkTo(n) {
@@ -367,7 +440,8 @@ function talkTo(n) {
     return;
   }
   if (n.src) { hear(n.src); return; }
-  if (n === NPCS.tomo) { say(n, 'Welcome to the trading post. Bet on tomorrow. Positions settle overnight.', [{ t: 'TRADE', fn: () => { closeDlg(); openTrade(); } }, { t: 'LEAVE', fn: closeDlg }]); return; }
+  if (n === NPCS.tomo) { say(n, 'Welcome! Bet on tomorrow, sell your harvest, or stock up on seeds.', [{ t: 'TRADE', fn: () => { closeDlg(); openTrade(); } }, { t: 'SELL', fn: () => { closeDlg(); openSell(); } }, { t: 'SEEDS', fn: () => { closeDlg(); openSeeds(); } }, { t: 'GIFT', fn: () => giftMenu('tomo') }, { t: 'LEAVE', fn: closeDlg }]); return; }
+  if (n === NPCS.kaito) { const k = S.kaito; say(n, k ? `I went ${k.long ? 'long' : 'short'} ${GOODS[k.good].name.toLowerCase()} at dawn, five times over. Follow me if you dare. I'm right more often than not.` : 'Busy, busy.'); return; }
   if (n === NPCS.master) {
     if (S.coins >= DEBT) { say(n, `${fmt(S.coins)} coins? Well, well. Pay the 5,000 and the stall is yours for good.`, [{ t: 'PAY 5,000', fn: async () => { closeDlg(); const r = await guarded('Paying the Harbor Master', () => Backend.call('pay_debt'), 'pay_debt'); if (r === null && Backend.mode === 'chain') return; await sync(); endSeason(true, true); } }, { t: 'NOT YET', fn: closeDlg }]); return; }
     say(n, `You owe me 5,000 by the end of day ${SEASON_DAYS}. You have ${fmt(S.coins)}. Tick tock.`);
@@ -386,35 +460,41 @@ function openTrade() { hideToast(); renderTrade(); $('trade').classList.add('on'
 function closeTrade() { $('trade').classList.remove('on'); }
 function renderTrade() {
   const g = GOODS[S.sel], price = S.price[g.id];
+  const gi = goodIdx(g.id);
   const chips = Object.keys(S.heard).map(k => {
-    const r = S.rumors[k]; if (r.quiet || r.ev.good !== g.id) return '';
-    return `<span class="chip"><canvas data-face="${SOURCES[k].sheet}" width="40" height="40"></canvas><span class="${r.ev.up ? 'up' : 'dn'}">${r.ev.up ? '▲ UP' : '▼ DOWN'}</span></span>`;
-  }).join('');
+    const r = S.rumors[k]; if (r.quiet) return '';
+    const fx = r.ev.fx.find(([x]) => x === gi); if (!fx) return '';
+    const up = fx[1] > 1;
+    return `<span class="chip"><canvas data-face="${SOURCES[k].sheet}" width="40" height="40"></canvas><span class="${up ? 'up' : 'dn'}">${up ? '▲ UP' : '▼ DOWN'}</span></span>`;
+  }).join('') + (S.kaito && S.kaito.good === gi ? `<span class="chip"><canvas data-face="kaito" width="40" height="40"></canvas><span class="${S.kaito.long ? 'up' : 'dn'}">${S.kaito.long ? '▲ LONG' : '▼ SHORT'}</span></span>` : '');
   const o = previewOutcome(S.stake, S.mult);
   const open = S.positions.map(p => `${p.dir > 0 ? '▲' : '▼'} ${GOOD(p.good).name} x${p.lev} · ${p.stake}`).join('   ');
   $('trade').innerHTML = `
-    <div class="tg"><button class="arrow" id="tPrev">◀</button><img src="assets/items/${g.icon}.png"><div><div class="gname">${g.name.toUpperCase()}</div><div class="gprice">${fmt(price)}</div></div><button class="arrow" id="tNext">▶</button></div>
+    <div class="tg"><button class="arrow" id="tPrev">◀</button><img src="${goodIcon(gi)}"><div><div class="gname">${g.name.toUpperCase()}</div><div class="gprice">${fmt(price)}</div></div><button class="arrow" id="tNext">▶</button></div>
     <div class="chips">${chips || '<span class="sub">No rumors about ' + g.name.toLowerCase() + ' yet</span>'}</div>
     <div class="ls"><button class="dirb ${S.dir > 0 ? 'on long' : ''}" id="tLong">LONG</button><button class="dirb ${S.dir < 0 ? 'on short' : ''}" id="tShort">SHORT</button></div>
     <div class="mults">${[1, 2, 5, 10].map(m => `<button class="pill ${S.mult === m ? 'on' : ''} ${m > S.lev ? 'lock' : ''}" data-m="${m}">x${m}</button>`).join('')}</div>
     <div class="stake"><button class="arrow" id="tMinus">−</button><span>${S.stake}</span><img src="assets/items/GoldCoin.png"><button class="arrow" id="tPlus">+</button></div>
     <div class="out"><span class="up">▲ +${fmt(o.win)}</span><span class="dn">▼ ${o.lose === null ? 'REKT' : fmt(o.lose)}</span></div>
     <button class="btn big gold wide" id="tOpen">OPEN</button>
-    <div class="tfoot"><span>${open || 'Coins ' + fmt(S.coins)}</span><span><button class="link" id="tLic">LICENSES</button> · <button class="link" id="tClose">CLOSE</button></span></div>`;
+    <div class="tfoot"><span>${open || 'Coins ' + fmt(S.coins)}</span><span><button class="link" id="tLic">UPGRADES</button> · <button class="link" id="tClose">CLOSE</button></span></div>`;
   $('trade').querySelectorAll('canvas[data-face]').forEach(c => portrait(c.dataset.face, c));
-  $('tPrev').onclick = () => { S.sel = (S.sel + 3) % 4; sfx('menu'); renderTrade(); };
-  $('tNext').onclick = () => { S.sel = (S.sel + 1) % 4; sfx('menu'); renderTrade(); };
+  const N = GOODS.length - 1; // ore is not traded
+  $('tPrev').onclick = () => { S.sel = (S.sel + N - 1) % N; sfx('menu'); renderTrade(); };
+  $('tNext').onclick = () => { S.sel = (S.sel + 1) % N; sfx('menu'); renderTrade(); };
   $('tLong').onclick = () => { S.dir = 1; renderTrade(); }; $('tShort').onclick = () => { S.dir = -1; renderTrade(); };
   $('trade').querySelectorAll('[data-m]').forEach(b => b.onclick = () => { const m = +b.dataset.m; if (m > S.lev) { toast('x' + m + ' needs a Leverage License (see LICENSES).', 2.5); sfx('alert'); return; } S.mult = m; renderTrade(); });
   $('tMinus').onclick = () => { S.stake = Math.max(STAKE_STEP, S.stake - STAKE_STEP); renderTrade(); };
   $('tPlus').onclick = () => { S.stake = Math.min(Math.max(STAKE_STEP, Math.floor(S.coins / STAKE_STEP) * STAKE_STEP), S.stake + STAKE_STEP); renderTrade(); };
   $('tOpen').onclick = openPosition; $('tClose').onclick = closeTrade;
   $('tLic').onclick = () => {
-    $('trade').innerHTML = `<div class="gname" style="margin-bottom:.6em">LEVERAGE LICENSES</div>
-      ${LICENSES.map(l => `<div class="tr"><span>x${l.lev} license</span><span>${S.lev >= l.lev ? '<span class="up">OWNED</span>' : `<button class="btn" data-l="${l.lev}">${l.cost} coins</button>`}</span></div>`).join('')}
-      <div class="sub" style="margin-top:.6em">Licenses are items you keep. Higher leverage, faster liquidation.</div>
+    $('trade').innerHTML = `<div class="gname" style="margin-bottom:.6em">UPGRADES</div>
+      ${LICENSES.map(l => `<div class="tr"><span>x${l.lev} leverage license</span><span>${S.lev >= l.lev ? '<span class="up">OWNED</span>' : `<button class="btn" data-l="${l.lev}">${l.cost} coins</button>`}</span></div>`).join('')}
+      <div class="tr"><span>Your own market stall<br><span class="sub">sells 3 of your best goods every night at +10%</span></span><span>${S.items.has('stall') ? '<span class="up">OWNED</span>' : `<button class="btn" id="bStall">${Rules.ITEMS.stall} coins</button>`}</span></div>
+      <div class="sub" style="margin-top:.6em">Upgrades are NEP-245 items you keep between seasons.</div>
       <button class="btn big" id="tBack">BACK</button>`;
     $('trade').querySelectorAll('[data-l]').forEach(b => b.onclick = () => buyLicense(LICENSES.find(l => l.lev === +b.dataset.l)));
+    if ($('bStall')) $('bStall').onclick = async () => { if (await buyItem('stall', 'Your stall')) renderTrade(); };
     $('tBack').onclick = renderTrade;
   };
   hud();
@@ -435,7 +515,11 @@ function openJournal() { hideToast();
     <div class="jh">TODAY'S RUMORS</div>${today}
     <div class="jh">TRACK RECORDS</div>${rows}
     <div style="margin-top:.7em">${notes.length ? notes.map(n => `<div class="note">${n}</div>`).join('') : '<div class="sub">Catch someone in a lie and it goes here.</div>'}</div>
-    <div class="tr" style="margin-top:.6em"><span>Items</span><span>x${S.lev} license${S.bridge ? ' · bridge' : ''}${S.boat ? ' · boat pass' : ''}</span></div>
+    <div class="jh">FRIENDS</div>${Rules.NPC_IDS.map(k => `<div class="tr"><span style="color:${(SOURCES[k] || { color: '#ffd86b' }).color}">${(SOURCES[k] || { name: 'Tomo' }).name}</span><span>${heartsHTML(npcFriend(k))}</span></div>`).join('')}
+    <div class="sub">2 hearts: they tell you how sure they are. 4 hearts: they write to you every morning.</div>
+    <div class="jh">BARN (${S.barn.reduce((a, b) => a + b, 0)}/40)</div><div class="inv">${GOODS.map((g, i) => S.barn[i] ? `<span><img src="${goodIcon(i)}">${S.barn[i]}</span>` : '').join('') || '<span class="sub">empty</span>'}</div>
+    <div class="jh">BADGES (NEP-245)</div><div class="badges">${Object.entries(Rules.BADGES).map(([k, n]) => `<span class="${S.items.has('badge_' + k) ? 'got' : ''}">${n}</span>`).join('')}</div>
+    <div class="tr" style="margin-top:.6em"><span>Items</span><span>x${S.lev} license${S.bridge ? ' · bridge' : ''}${S.boat ? ' · boat pass' : ''}${S.items.has('stall') ? ' · stall' : ''}</span></div>
     ${txHistory.length ? '<div class="jh">ON NEAR</div><div class="txh">' + txHistory.map(h => '<div>' + h + '</div>').join('') + '</div>' : ''}
     <button class="btn big" id="jClose">CLOSE (J)</button>`;
   $('journal').classList.add('on'); $('jClose').onclick = () => $('journal').classList.remove('on'); sfx('menu');
@@ -448,6 +532,7 @@ function hud() {
   $('clock').textContent = String(Math.floor(mins / 60)).padStart(2, '0') + ':' + String(mins % 60).padStart(2, '0');
   $('clock').style.color = mins >= 22 * 60 ? 'var(--bad)' : 'var(--gold)';
   $('debtFill').style.width = Math.min(100, worth() / DEBT * 100) + '%';
+  if (S.player) { $('enFill').style.width = (S.player.energy / Rules.ENERGY.max * 100) + '%'; $('enFill').style.background = S.player.energy < 20 ? 'var(--bad)' : '#78e678'; }
   $('obj').textContent = STEPS[S.step].text;
   const z = World.zone(Math.floor(player.x / TW), Math.floor(player.y / TW));
   $('zone').textContent = World.ZONE_NAME[z] || '';
@@ -459,7 +544,8 @@ function nearest() {
   const P = World.P, d2 = p => Math.hypot(player.x - p.x * TW, player.y - p.y * TW);
   let best = null, bd = 58;
   for (const n of Object.values(NPCS)) { const d = Math.hypot(n.x - player.x, n.y - player.y); if (d < bd) { bd = d; best = { kind: 'npc', n, label: 'TALK TO ' + n.name.toUpperCase() }; } }
-  if (d2(P.board) < 44) best = { kind: 'board', label: 'READ NOTICE BOARD' };
+  for (const t of [farmTarget(), rockTarget(), fishTarget(), catTarget()]) if (t) { best = t; break; }
+  if (d2(P.board) < 44) best = { kind: 'board', label: 'TOWN BOARD: PROJECTS AND RECORDS' };
   if (d2(P.homeDoor) < 44) best = { kind: 'home', label: 'SLEEP (END DAY)' };
   if (!S.bridge && d2(P.bridge) < 56) best = { kind: 'bridge', label: 'REPAIR BRIDGE (' + BRIDGE_COST + ')' };
   if (d2(P.boatDock) < 50) best = { kind: 'boat', label: S.boat ? 'SAIL TO THE ISLAND' : 'RENT A BOAT (' + BOAT_COST + ')' };
@@ -469,17 +555,21 @@ function nearest() {
 }
 function interact() {
   initAudio();
+  if (S && S.fishing) { stopFishing(); return; }
   if ($('card').classList.contains('on')) { closeCard(); return; }
   if (dlg) { chooseDlg(); return; }
   if ($('trade').classList.contains('on') || $('journal').classList.contains('on') || S.over) return;
   const t = nearest(); if (!t) return;
   const P = World.P, me = { name: 'You', sheet: 'player', color: '#ffd86b' };
   if (busyN) return;
+  if (t.none) return;
   if (t.kind === 'npc') talkTo(t.n);
-  else if (t.kind === 'board') {
-    const rows = Object.keys(SOURCES).filter(k => S.rec[k].tot).map(k => `${SOURCES[k].name} ${S.rec[k].ok}/${S.rec[k].tot}`).join(' · ') || 'No records yet.';
-    say({ name: 'Notice board', color: '#ffd86b' }, 'Rumor records: ' + rows + '  Recent: ' + (S.history.slice(-3).map(h => EVN(h.ev).title).join(', ') || 'nothing yet.'));
-  } else if (t.kind === 'home') {
+  else if (['plant', 'water', 'harvest', 'plot'].includes(t.kind)) { farmAct(t); if (t.kind === 'water' && S.step === 1) advance(); }
+  else if (t.kind === 'rock') mine(t.i);
+  else if (t.kind === 'fish') startFishing();
+  else if (t.kind === 'cat') petCat(t);
+  else if (t.kind === 'board') openTown();
+  else if (t.kind === 'home') {
     const hour = 6 + S.t / DAY_SECONDS * 18;
     if (hour < 18) {
       say(me, `It's only ${clockText()}. The market is open until evening. You can sleep after 18:00.`, [
@@ -515,6 +605,7 @@ addEventListener('keydown', e => {
   if (k === 'Escape') { closeTrade(); $('journal').classList.remove('on'); if (dlg) closeDlg(); }
   if (k === 'j' && !dlg && !$('card').classList.contains('on')) $('journal').classList.contains('on') ? $('journal').classList.remove('on') : openJournal();
   if (k === 'm') toggleMusic();
+  if (S && /^[1-9]$/.test(k) && !dlg && !uiOpen()) { S.seedSel = +k - 1; renderHotbar(); sfx('menu'); }
   if (dlg && ['ArrowLeft', 'ArrowRight', 'a', 'd'].includes(k)) { dlg.sel = (dlg.sel + (k === 'ArrowRight' || k === 'd' ? 1 : dlg.choices.length - 1)) % dlg.choices.length; renderChoices(); sfx('menu'); }
 });
 addEventListener('keyup', e => { keys[e.key.length === 1 ? e.key.toLowerCase() : e.key] = false; });
@@ -564,6 +655,7 @@ function update(dt) {
     if (n.x === ox && n.y === oy) { n.target = null; n.pause = 1; }
     n.moving = true; n.anim += dt * 9; n.dir = Math.abs(vx) > Math.abs(vy) ? (vx > 0 ? 'right' : 'left') : (vy > 0 ? 'down' : 'up');
   }
+  updateCat(dt);
   if (!busy) {
     S.t += dt;
     if (S.t > DAY_SECONDS * (16 / 18) && !S.warned) { S.warned = true; toast("It's 22:00. Head home before midnight.", 3); sfx('alert'); }
@@ -577,21 +669,26 @@ function draw() {
   const camX = Math.max(0, Math.min(MWp - VW, player.x - VW / 2)), camY = Math.max(0, Math.min(MHp - VH, player.y - VH / 2));
   ctx.fillStyle = '#5ec6e6'; ctx.fillRect(0, 0, VW, VH);
   ctx.drawImage(MAP.ground, camX, camY, VW, VH, 0, 0, VW, VH);
+  drawFarm(camX, camY);
   const vis = (x, y, w, h) => x + w > camX - 64 && x < camX + VW + 64 && y + h > camY - 64 && y < camY + VH + 96;
   const list = [];
   for (const p of MAP.props) { const x = p.x * TW, y = p.y * TW; if (vis(x, y, p.w * TW, p.h * TW)) list.push({ base: p.flat ? -1 : (p.y + p.h) * TW, p }); }
   for (const c of Object.values(NPCS).concat(S.inside ? [] : player)) if (vis(c.x - 32, c.y - 60, 64, 64)) list.push({ base: c.y, c });
+  if (cat) list.push({ base: cat.y, cat: true });
   list.sort((a, b) => a.base - b.base);
   for (const o of list) {
+    if (o.cat) { drawCat(camX, camY); continue; }
+    if (o.p && o.p.rock !== undefined && rockMined(o.p.rock)) ctx.globalAlpha = .45;
     if (o.p) { const p = o.p; ctx.drawImage(IMG[p.img], p.sx * TS, p.sy * TS, p.w * TS, p.h * TS, p.x * TW - camX, p.y * TW - camY, p.w * TW, p.h * TW); }
     else drawChar(ctx, o.c, camX, camY);
+    ctx.globalAlpha = 1;
   }
   ctx.font = '10px Joy, monospace'; ctx.textAlign = 'center';
   for (const n of Object.values(NPCS)) {
     if (!n.color || !vis(n.x - 32, n.y - 60, 64, 64)) continue;
     const w = ctx.measureText(n.name).width + 8; ctx.fillStyle = '#000a'; ctx.fillRect(n.x - camX - w / 2, n.y - camY - 74, w, 13);
     ctx.fillStyle = n.color; ctx.fillText(n.name, n.x - camX, n.y - camY - 64);
-    if (n.selling) { const t = 'SELLING ' + n.selling.toUpperCase() + '!'; const w2 = ctx.measureText(t).width + 10; ctx.fillStyle = '#fff3d6'; ctx.fillRect(n.x - camX - w2 / 2, n.y - camY - 92, w2, 15); ctx.fillStyle = '#1c1630'; ctx.fillText(t, n.x - camX, n.y - camY - 81); }
+    if (n.selling) { const t = n === NPCS.kaito ? n.selling : 'SELLING ' + n.selling.toUpperCase() + '!'; const w2 = ctx.measureText(t).width + 10; ctx.fillStyle = '#fff3d6'; ctx.fillRect(n.x - camX - w2 / 2, n.y - camY - 92, w2, 15); ctx.fillStyle = '#1c1630'; ctx.fillText(t, n.x - camX, n.y - camY - 81); }
   }
   // evening, night and the weather clue
   const f = S.t / DAY_SECONDS;
@@ -605,7 +702,9 @@ function draw() {
       if (d.y > VH) { d.y = -20; d.x = Math.random() * (VW + 100); }
     }
   }
+  drawPopups(camX, camY, 1 / 60);
   drawNight(camX, camY);
+  drawFishing();
   // objective marker / edge arrow
   const tgt = STEPS[S.step].target();
   if (tgt && !uiOpen() && !S.night) {
@@ -665,7 +764,7 @@ function drawNight(camX, camY) {
 }
 function loop(now) { const dt = Math.min(.05, (now - last) / 1000); last = now; update(dt); draw(); requestAnimationFrame(loop); }
 
-loadAll().then(async () => { MAP = World.build(IMG); MINI = World.minimap(176, 102); requestAnimationFrame(loop); await boot(); })
+loadAll().then(async () => { buildIcons(); MAP = World.build(IMG); MINI = World.minimap(176, 102); requestAnimationFrame(loop); await boot(); })
   .catch(err => { document.body.innerHTML = '<p style="padding:2em;font-family:monospace;color:#fff">Could not load game files: ' + err.message + '</p>'; });
 
-window.PB = { get S() { return S; }, get NPCS() { return NPCS; }, get player() { return player; }, sleep, interact, openTrade, openPosition, talkTo, sync, Backend, World };
+window.PB = { get flush() { return flush; }, get Q() { return Q; }, get S() { return S; }, get NPCS() { return NPCS; }, get player() { return player; }, sleep, interact, openTrade, openPosition, talkTo, sync, Backend, World };
