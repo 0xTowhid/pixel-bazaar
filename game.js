@@ -3,7 +3,7 @@
 'use strict';
 
 const { TS, TW } = World;
-const VW = 960, VH = 540;
+let VW = 960; const VH = 540; // logical canvas size; width follows the screen shape
 const SEASON_DAYS = 10, DAY_SECONDS = 240, START_COINS = 300, DEBT = 5000;
 const STAKE_STEP = 50;
 
@@ -145,9 +145,11 @@ async function beginDay(first) {
 const worth = () => S.coins + S.positions.reduce((a, p) => a + p.stake, 0);
 
 // Run a contract call with a busy overlay, an on-screen chain log entry and error handling.
-let busyN = 0;
+let busyN = 0, quietBusy = false;
+const wait = ms => new Promise(r => setTimeout(r, ms));
+function walkTo(x, y, dir) { return new Promise(done => { player.auto = { x, y, dir, done }; }); }
 async function guarded(label, fn, tag) {
-  busyN++; $('busy').textContent = label + '...'; $('busy').style.display = 'block';
+  busyN++; $('busy').textContent = label + '...'; if (!quietBusy) $('busy').style.display = 'block';
   try {
     const r = await fn();
     const tx = typeof r === 'string' ? r : r && r.tx;
@@ -158,12 +160,16 @@ async function guarded(label, fn, tag) {
     return null;
   } finally { if (--busyN === 0) $('busy').style.display = 'none'; }
 }
+const txHistory = [];
 function chainLog(what, ok, tx) {
   if (Backend.mode === 'local') return;
   const el = $('chainlog'), url = Backend.explorerTx(tx);
   const row = document.createElement('div');
-  row.innerHTML = `<span class="${ok ? 'up' : 'dn'}">${ok ? '✓' : '✗'}</span> ${what}${url ? ` <a href="${url}" target="_blank" rel="noopener">tx ↗</a>` : ''}`;
+  const html = `<span class="${ok ? 'up' : 'dn'}">${ok ? '✓' : '✗'}</span> ${what}${url ? ` <a href="${url}" target="_blank" rel="noopener">tx ↗</a>` : ''}`;
+  row.innerHTML = html;
   el.prepend(row); while (el.children.length > 4) el.lastChild.remove();
+  setTimeout(() => { row.classList.add('gone'); setTimeout(() => row.remove(), 600); }, 7000);
+  txHistory.unshift(html); txHistory.length = Math.min(txHistory.length, 12);
 }
 function askName() {
   return new Promise(res => {
@@ -212,12 +218,22 @@ async function claim(kind, label) {
 async function sleep(passedOut) {
   if (S.over || S.sleeping) return;
   S.sleeping = true;
+  let ok = false;
   try {
+    closeTrade(); $('journal').classList.remove('on');
+    if (!passedOut) { await walkTo(World.P.homeDoor.x * TW, (World.P.homeDoor.y - .25) * TW, 'up'); S.inside = true; sfx('ok'); }
+    S.night = { start: performance.now(), dawn: 0, out: !!passedOut };
+    quietBusy = true;
+    const minNight = wait(2800);
     const before = worth(), prev = { ...S.price };
     const a = await guarded('Going to sleep', () => Backend.call('sleep', { passed_out: !!passedOut }), 'sleep');
     if (a === null && Backend.mode === 'chain') return;
     const r = await guarded('Revealing the night', () => Backend.settle(), 'settle_day · reveal checked against commitment');
     if (!r) return;
+    await minNight;
+    S.night.dawn = performance.now(); quietBusy = false;
+    await wait(1800);
+    ok = true;
     const log = r.log, ev = EVENTS[log.event];
     await sync();
     for (const g of GOODS) S.closes[g.id].push(S.price[g.id]);
@@ -231,7 +247,10 @@ async function sleep(passedOut) {
     for (const k of ['sailor', 'farmer', 'hermit']) if (S.heard[k] && !S.notes.includes(k)) { S.notes.push(k); notes.push(noteFor(k)); }
     S.history.push({ day: log.day, ev: ev.id });
     showNight(ev, prev, results, truths, notes, before, worth(), log.passed_out_loss / 100, S.player.finished, S.player.won);
-  } finally { S.sleeping = false; }
+  } finally {
+    S.sleeping = false; quietBusy = false;
+    if (!ok) { S.night = null; S.inside = false; }
+  }
 }
 const noteFor = k => SOURCES[k].name + ' only knows ' + SOURCES[k].domain.map(d => EVN(d).title.toLowerCase()).join(', ') + '.';
 function showNight(ev, prev, results, truths, notes, before, after, lost, finished, won) {
@@ -265,8 +284,11 @@ function showNight(ev, prev, results, truths, notes, before, after, lost, finish
     </div>
     <button class="btn big gold" id="cardBtn">${finished ? 'FACE THE HARBOR MASTER' : 'WAKE UP · DAY ' + S.day}</button></div>`,
     async () => {
-      if (finished) { endSeason(won); return; }
+      S.night = null;
+      if (finished) { S.inside = false; endSeason(won); return; }
       await beginDay(false);
+      S.inside = false; player.x = World.P.homeDoor.x * TW; player.y = (World.P.homeDoor.y - .25) * TW;
+      walkTo(player.x, player.y + 26, 'down');
       if (S.step === 2) advance();
       if (DAILY_TIPS[S.day]) toast(DAILY_TIPS[S.day], 6);
     });
@@ -403,12 +425,22 @@ function openJournal() { hideToast();
     return `<div class="tr"><span style="color:${s.color}">${s.name}</span><span>${r.tot ? `right ${r.ok} of ${r.tot}` : '<span class="sub">not met</span>'}</span></div>`;
   }).join('');
   const notes = S.notes.map(n => n === 'rita' ? 'Rita lies on days she is selling at the market.' : noteFor(n));
-  $('journal').innerHTML = `<div class="gname">JOURNAL</div>${rows}
+  const today = Object.keys(S.heard).map(k => {
+    const r = S.rumors[k], s = SOURCES[k];
+    if (r.quiet) return `<div class="tr"><span style="color:${s.color}">${s.name}</span><span class="sub">nothing in their area</span></div>`;
+    const g = GOOD(r.ev.good);
+    return `<div class="tr"><span style="color:${s.color}">${s.name}</span><span>${r.ev.title} · <span class="${r.ev.up ? 'up' : 'dn'}">${g.name.toUpperCase()} ${r.ev.up ? '▲' : '▼'}</span></span></div>`;
+  }).join('') || '<div class="sub">Nobody has told you anything today.</div>';
+  $('journal').innerHTML = `<div class="gname">JOURNAL · DAY ${S.day}</div>
+    <div class="jh">TODAY'S RUMORS</div>${today}
+    <div class="jh">TRACK RECORDS</div>${rows}
     <div style="margin-top:.7em">${notes.length ? notes.map(n => `<div class="note">${n}</div>`).join('') : '<div class="sub">Catch someone in a lie and it goes here.</div>'}</div>
     <div class="tr" style="margin-top:.6em"><span>Items</span><span>x${S.lev} license${S.bridge ? ' · bridge' : ''}${S.boat ? ' · boat pass' : ''}</span></div>
+    ${txHistory.length ? '<div class="jh">ON NEAR</div><div class="txh">' + txHistory.map(h => '<div>' + h + '</div>').join('') + '</div>' : ''}
     <button class="btn big" id="jClose">CLOSE (J)</button>`;
   $('journal').classList.add('on'); $('jClose').onclick = () => $('journal').classList.remove('on'); sfx('menu');
 }
+function clockText() { const m = 6 * 60 + Math.floor(S.t / DAY_SECONDS * 18 * 60); return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
 function hud() {
   $('coins').textContent = fmt(S.coins);
   $('day').textContent = 'DAY ' + S.day + '/' + SEASON_DAYS;
@@ -448,6 +480,13 @@ function interact() {
     const rows = Object.keys(SOURCES).filter(k => S.rec[k].tot).map(k => `${SOURCES[k].name} ${S.rec[k].ok}/${S.rec[k].tot}`).join(' · ') || 'No records yet.';
     say({ name: 'Notice board', color: '#ffd86b' }, 'Rumor records: ' + rows + '  Recent: ' + (S.history.slice(-3).map(h => EVN(h.ev).title).join(', ') || 'nothing yet.'));
   } else if (t.kind === 'home') {
+    const hour = 6 + S.t / DAY_SECONDS * 18;
+    if (hour < 18) {
+      say(me, `It's only ${clockText()}. The market is open until evening. You can sleep after 18:00.`, [
+        { t: 'REST UNTIL 18:00', fn: () => { closeDlg(); S.t = DAY_SECONDS * 12 / 18; toast('You rest at home. The sun is setting.', 2.5); } },
+        { t: 'GO BACK OUT', fn: closeDlg }]);
+      return;
+    }
     const open = S.positions.length;
     say(me, open ? `Sleep now? ${open} position${open > 1 ? 's' : ''} will settle overnight.` : 'Sleep now? You have no open positions.', [{ t: 'SLEEP', fn: () => { closeDlg(); sleep(false); } }, { t: 'NOT YET', fn: closeDlg }]);
   } else if (t.kind === 'bridge') {
@@ -488,7 +527,14 @@ $('mute').onclick = toggleMusic; $('jBtn').onclick = () => { initAudio(); if (S)
 function toggleMusic() { musicOn = !musicOn; $('mute').textContent = musicOn ? '♪ ON' : '♪ OFF'; if (music) musicOn ? music.play().catch(() => {}) : music.pause(); }
 
 // ---------- loop ----------
-const cv = $('cv'), ctx = cv.getContext('2d'); ctx.imageSmoothingEnabled = false;
+const cv = $('cv'), ctx = cv.getContext('2d');
+function fit() {
+  const r = cv.getBoundingClientRect(); const aspect = r.width && r.height ? r.width / r.height : 16 / 9;
+  VW = Math.round(Math.max(600, Math.min(1500, VH * aspect)));
+  if (cv.width !== VW) cv.width = VW;
+  cv.height = VH; ctx.imageSmoothingEnabled = false;
+}
+addEventListener('resize', fit); fit();
 let MINI, last = performance.now(), wx = [];
 for (let i = 0; i < 160; i++) wx.push({ x: Math.random() * VW, y: Math.random() * VH, s: .6 + Math.random() * .8 });
 function update(dt) {
@@ -500,8 +546,13 @@ function update(dt) {
     if (keys.ArrowUp || keys.w) dy -= sp; if (keys.ArrowDown || keys.s) dy += sp;
     if (dx && dy) { dx *= .707; dy *= .707; }
   }
-  player.moving = !!(dx || dy);
-  if (player.moving) { player.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'); moveChar(player, dx, dy); player.anim += dt * 12; }
+  if (player.auto) {
+    const a = player.auto, vx = a.x - player.x, vy = a.y - player.y, d = Math.hypot(vx, vy), st = 120 * dt;
+    if (d <= st) { player.x = a.x; player.y = a.y; player.moving = false; player.auto = null; a.done(); }
+    else { player.x += vx / d * st; player.y += vy / d * st; player.moving = true; player.dir = a.dir; player.anim += dt * 10; }
+    dx = dy = 0;
+  } else player.moving = !!(dx || dy);
+  if (player.moving && !player.auto) { player.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'); moveChar(player, dx, dy); player.anim += dt * 12; }
   for (const n of Object.values(NPCS)) {
     if (busy || !n.wander) { n.moving = false; if (Math.hypot(n.x - player.x, n.y - player.y) < 70) n.dir = faceToward(n, player); continue; }
     if (Math.hypot(n.x - player.x, n.y - player.y) < 70) { n.moving = false; n.dir = faceToward(n, player); continue; }
@@ -529,7 +580,7 @@ function draw() {
   const vis = (x, y, w, h) => x + w > camX - 64 && x < camX + VW + 64 && y + h > camY - 64 && y < camY + VH + 96;
   const list = [];
   for (const p of MAP.props) { const x = p.x * TW, y = p.y * TW; if (vis(x, y, p.w * TW, p.h * TW)) list.push({ base: p.flat ? -1 : (p.y + p.h) * TW, p }); }
-  for (const c of Object.values(NPCS).concat(player)) if (vis(c.x - 32, c.y - 60, 64, 64)) list.push({ base: c.y, c });
+  for (const c of Object.values(NPCS).concat(S.inside ? [] : player)) if (vis(c.x - 32, c.y - 60, 64, 64)) list.push({ base: c.y, c });
   list.sort((a, b) => a.base - b.base);
   for (const o of list) {
     if (o.p) { const p = o.p; ctx.drawImage(IMG[p.img], p.sx * TS, p.sy * TS, p.w * TS, p.h * TS, p.x * TW - camX, p.y * TW - camY, p.w * TW, p.h * TW); }
@@ -554,9 +605,10 @@ function draw() {
       if (d.y > VH) { d.y = -20; d.x = Math.random() * (VW + 100); }
     }
   }
+  drawNight(camX, camY);
   // objective marker / edge arrow
   const tgt = STEPS[S.step].target();
-  if (tgt && !uiOpen()) {
+  if (tgt && !uiOpen() && !S.night) {
     const tx = tgt.x - camX, ty = tgt.y - camY - 70;
     ctx.fillStyle = '#ffd86b';
     if (tx > 20 && tx < VW - 20 && ty > 20 && ty < VH - 20) {
@@ -575,8 +627,41 @@ function draw() {
   ctx.strokeStyle = '#ffffff88'; ctx.lineWidth = 1; ctx.strokeRect(mx + camX * sx, my + camY * sy, VW * sx, VH * sy);
   if (tgt) { ctx.fillStyle = '#ffd86b'; ctx.fillRect(mx + tgt.x * sx - 2, my + tgt.y * sy - 2, 5, 5); }
   ctx.fillStyle = '#ff4d6d'; ctx.fillRect(mx + player.x * sx - 2, my + player.y * sy - 3, 5, 5);
-  const t = !uiOpen() && !S.over && nearest();
+  const t = !uiOpen() && !S.over && !S.night && nearest();
   $('hint').style.display = t ? 'block' : 'none'; if (t) $('hint').textContent = (matchMedia('(pointer:coarse)').matches ? 'A: ' : 'E: ') + t.label;
+}
+const STARS = Array.from({ length: 90 }, () => [Math.random(), Math.random() * .55, Math.random()]);
+function drawNight(camX, camY) {
+  const n = S.night; if (!n) return;
+  const now = performance.now(), k = Math.min(1, (now - n.start) / 1500);
+  let dark = .78 * k, warm = 0;
+  if (n.dawn) { const d = Math.min(1, (now - n.dawn) / 1800); dark = .78 * (1 - d); warm = Math.sin(Math.PI * d) * .32; }
+  ctx.fillStyle = `rgba(10,8,40,${dark})`; ctx.fillRect(0, 0, VW, VH);
+  if (warm) { ctx.fillStyle = `rgba(255,150,70,${warm})`; ctx.fillRect(0, 0, VW, VH); }
+  // stars and moon
+  ctx.fillStyle = `rgba(255,255,230,${dark})`;
+  for (const [x, y, t] of STARS) { const tw = .5 + .5 * Math.sin(now / 400 + t * 9); ctx.globalAlpha = dark * tw; ctx.fillRect(x * VW, y * VH, 2, 2); }
+  if (dark > .05) {
+    const mg = ctx.createRadialGradient(VW - 240, 70, 10, VW - 240, 70, 60);
+    mg.addColorStop(0, `rgba(255,246,200,${.35 * dark})`); mg.addColorStop(1, 'rgba(255,246,200,0)');
+    ctx.fillStyle = mg; ctx.fillRect(VW - 300, 10, 120, 120);
+    ctx.globalAlpha = dark; ctx.fillStyle = '#fff6c8'; ctx.beginPath(); ctx.arc(VW - 240, 70, 18, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+  }
+  if (!n.out) {
+    // warm light from the doorway and sleepy z's over the house
+    const hx = World.P.homeDoor.x * TW - camX, hy = (World.P.homeDoor.y - .7) * TW - camY;
+    const g = ctx.createRadialGradient(hx, hy, 4, hx, hy, 70);
+    g.addColorStop(0, `rgba(255,210,120,${.75 * dark})`); g.addColorStop(1, 'rgba(255,210,120,0)');
+    ctx.fillStyle = g; ctx.fillRect(hx - 80, hy - 80, 160, 160);
+    ctx.font = '16px Joy, monospace'; ctx.textAlign = 'left';
+    for (let i = 0; i < 3; i++) {
+      const p = ((now / 1400) + i / 3) % 1;
+      ctx.fillStyle = `rgba(255,255,255,${dark * (1 - p)})`;
+      ctx.fillText('z', hx + 20 + p * 30 + Math.sin(p * 6) * 6, hy - 60 - p * 60);
+    }
+  }
+  ctx.font = '13px Joy, monospace'; ctx.textAlign = 'center'; ctx.fillStyle = `rgba(255,243,214,${Math.max(dark, .0)})`;
+  ctx.fillText(n.dawn ? 'Morning comes...' : n.out ? 'You collapse in the street...' : (Backend.mode === 'local' ? 'The night passes...' : 'The night passes... settling on NEAR'), VW / 2, VH - 40);
 }
 function loop(now) { const dt = Math.min(.05, (now - last) / 1000); last = now; update(dt); draw(); requestAnimationFrame(loop); }
 
