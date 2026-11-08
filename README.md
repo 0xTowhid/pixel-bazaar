@@ -55,8 +55,9 @@ npm install --prefix server && MOCK=1 node server/index.mjs
 | Town board (by the market) | Donate fish, jade, ore, tea and coins to rebuild the pier (double fish), the lighthouse (storm warnings in the paper) and the tea house (tea +15%). |
 | Reach 5,000 coins, talk to the Harbor Master | `✓ pay_debt`, badges, leaderboard, and a share image of your season. Your farm, seeds, friends and items carry into the next season. |
 | Open the game in another browser, LOG IN with the same name and password | Same trader, same farm. |
+| Press P (PROFILE) | Your account with an explorer link, rank, best season, seasons won, crops, jade and fish, all 11 badges (locked ones show what earns them), items, best friends, SHARE PROFILE image, LOG OUT. |
 
-Controls: arrows or WASD to move, E or Space to interact, 1-9 seeds, J Journal, M music. On phones (landscape), the on-screen pad.
+Controls: arrows or WASD to move, E or Space to interact, 1-9 seeds, J Journal, P Profile, M music. On phones (landscape), the on-screen pad.
 
 ## Tests
 ```

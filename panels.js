@@ -126,16 +126,45 @@ function openTown() {
 }
 
 // ---------- share image ----------
-function shareImage(won, score) {
+function shareImage(won, score, kind) {
   const c = document.createElement('canvas'); c.width = 1200; c.height = 675; const x = c.getContext('2d'); x.imageSmoothingEnabled = false;
   x.drawImage(MAP.ground, World.P.homeDoor.x * TW - 600, World.P.homeDoor.y * TW - 400, 1200, 675, 0, 0, 1200, 675);
   x.fillStyle = 'rgba(18,14,31,.78)'; x.fillRect(0, 0, 1200, 675);
   x.drawImage(IMG.player, 0, 128, 64, 64, 80, 220, 256, 256);
   x.fillStyle = '#ffd86b'; x.font = '56px Joy, monospace'; x.fillText('PIXEL BAZAAR', 380, 140);
-  x.fillStyle = won ? '#8ee68a' : '#ff7a6e'; x.font = '34px Joy, monospace'; x.fillText(won ? 'DEBT PAID ON DAY ' + S.day : 'THE HARBOR MASTER WON', 380, 210);
+  x.fillStyle = won ? '#8ee68a' : '#ff7a6e'; x.font = '34px Joy, monospace'; x.fillText(kind === 'profile' ? Backend.accountId.split('.')[0].toUpperCase() + ' · SEASON ' + S.player.season : won ? 'DEBT PAID ON DAY ' + S.day : 'THE HARBOR MASTER WON', 380, 210);
   x.fillStyle = '#fff3d6'; x.font = '26px Joy, monospace';
-  const lines = [`Fortune: ${fmt(score)} coins`, `Harvested: ${S.player.harvested} crops`, `Badges: ${[...S.items].filter(t => t.startsWith('badge_')).length} of ${Object.keys(Rules.BADGES).length}`, `Rita lied to me ${S.rec.rita.tot - S.rec.rita.ok} times`, Backend.accountId];
+  const lines = kind === 'profile' ? [`Best season: ${fmt(Math.floor((S.player.best_score || 0) / 100))} coins · won ${S.player.seasons_won || 0}`, `Harvested ${S.player.harvested} · jade ${S.player.jade_found} · fish ${S.player.fish_caught}`, `Badges: ${[...S.items].filter(t => t.startsWith('badge_')).length} of ${Object.keys(Rules.BADGES).length}`, `Coins now: ${fmt(S.coins)}`, Backend.accountId] : [`Fortune: ${fmt(score)} coins`, `Harvested: ${S.player.harvested} crops`, `Badges: ${[...S.items].filter(t => t.startsWith('badge_')).length} of ${Object.keys(Rules.BADGES).length}`, `Rita lied to me ${S.rec.rita.tot - S.rec.rita.ok} times`, Backend.accountId];
   lines.forEach((t, i) => x.fillText(t, 380, 280 + i * 52));
   x.fillStyle = '#a79cc9'; x.font = '20px Joy, monospace'; x.fillText('Farm by day. Trade on rumors by night. On NEAR. #NEARHackathon', 80, 630);
-  c.toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'pixel-bazaar-season.png'; document.body.appendChild(a); a.click(); a.remove(); toast('Saved pixel-bazaar-season.png', 2.5); });
+  c.toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = kind === 'profile' ? 'pixel-bazaar-profile.png' : 'pixel-bazaar-season.png'; document.body.appendChild(a); a.click(); a.remove(); toast('Saved ' + a.download, 2.5); });
+}
+
+// ---------- profile ----------
+async function openProfile() { hideToast();
+  const p = S.player, el = $('profile');
+  const nm = Backend.accountId.split('.')[0], ex = Backend.explorerAccount(Backend.accountId);
+  let rank = '—';
+  try { const lb = await Backend.leaderboard(); const i = lb.findIndex(e => e.account === Backend.accountId); if (i >= 0) rank = '#' + (i + 1); } catch (e) {}
+  const earned = Object.keys(Rules.BADGES).filter(k => S.items.has('badge_' + k)).length;
+  const tile = (v, l) => `<div class="ptile"><b>${v}</b><span>${l}</span></div>`;
+  const friends = Rules.NPC_IDS.map(k => ({ k, f: npcFriend(k) })).filter(o => o.f > 0).sort((a, b) => b.f - a.f).slice(0, 3);
+  const items = [`x${S.lev} license`, S.bridge && 'Bridge', S.boat && 'Boat pass', S.items.has('stall') && 'Your stall'].filter(Boolean);
+  el.innerHTML = `<div class="phead"><canvas id="pPort" width="64" height="64"></canvas><div>
+      <div class="gname">${nm.toUpperCase()}</div>
+      <div class="sub">${ex ? `<a href="${ex}" target="_blank" rel="noopener">${Backend.accountId} ↗</a>` : Backend.accountId}</div>
+      <div class="sub">Season ${p.season} · Day ${S.day}/${SEASON_DAYS} · Rank ${rank}</div></div></div>
+    <div class="ptiles">${tile(fmt(S.coins), 'COINS')}${tile(fmt(Math.floor((p.best_score || 0) / 100)), 'BEST SEASON')}${tile(p.seasons_won || 0, 'SEASONS WON')}
+      ${tile(p.harvested, 'CROPS')}${tile(p.jade_found, 'JADE')}${tile(p.fish_caught, 'FISH')}</div>
+    <div class="jh">ACHIEVEMENTS · ${earned} OF ${Object.keys(Rules.BADGES).length} (NEP-245 BADGES)</div>
+    <div class="medals">${Object.entries(Rules.BADGES).map(([k, n]) => S.items.has('badge_' + k)
+      ? `<div class="medal got"><i>★</i><span>${n}</span></div>` : `<div class="medal"><i>?</i><span>${n}</span></div>`).join('')}</div>
+    <div class="jh">ITEMS</div><div class="sub">${items.join(' · ')}</div>
+    <div class="jh">BEST FRIENDS</div>${friends.length ? friends.map(o => `<div class="tr"><span style="color:${(SOURCES[o.k] || { color: '#ffd86b' }).color}">${(SOURCES[o.k] || { name: 'Tomo' }).name}</span><span>${heartsHTML(o.f)}</span></div>`).join('') : '<div class="sub">Give gifts to make friends.</div>'}
+    <div class="prow"><button class="btn" id="pShare">SHARE PROFILE</button><button class="btn" id="pOut">LOG OUT</button><button class="btn" id="pClose">CLOSE (P)</button></div>`;
+  const port = $('pPort'); port.getContext('2d').imageSmoothingEnabled = false; portrait('player', port);
+  $('pClose').onclick = () => el.classList.remove('on');
+  $('pShare').onclick = () => shareImage(!!p.won, p.won ? p.coins + DEBT : S.coins, 'profile');
+  $('pOut').onclick = () => { if ($('pOut').dataset.sure) { Backend.logout(); location.reload(); } else { $('pOut').dataset.sure = 1; $('pOut').textContent = 'SURE? CLICK AGAIN'; } };
+  el.classList.add('on'); sfx('menu');
 }

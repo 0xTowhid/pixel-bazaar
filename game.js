@@ -393,7 +393,7 @@ function advance() { S.step = Math.min(S.step + 1, STEPS.length - 1); sfx('ok');
 
 // ---------- UI ----------
 let dlg = null, cardCb = null;
-const uiOpen = () => !!dlg || (S && S.fishing) || ['trade', 'card', 'journal'].some(id => $(id).classList.contains('on'));
+const uiOpen = () => !!dlg || (S && S.fishing) || ['trade', 'card', 'journal', 'profile'].some(id => $(id)?.classList.contains('on'));
 function toast(t, sec = 2.5) { const el = $('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => el.style.display = 'none', sec * 1000); }
 function hideToast() { $('toast').style.display = 'none'; }
 function openCard(html, cb) { hideToast(); $('card').innerHTML = html; $('card').classList.add('on'); cardCb = cb; $('cardBtn').onclick = closeCard; }
@@ -602,8 +602,9 @@ addEventListener('keydown', e => {
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; keys[k] = true;
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
   if (k === 'e' || k === ' ' || k === 'Enter') interact();
-  if (k === 'Escape') { closeTrade(); $('journal').classList.remove('on'); if (dlg) closeDlg(); }
+  if (k === 'Escape') { closeTrade(); $('journal').classList.remove('on'); $('profile').classList.remove('on'); if (dlg) closeDlg(); }
   if (k === 'j' && !dlg && !$('card').classList.contains('on')) $('journal').classList.contains('on') ? $('journal').classList.remove('on') : openJournal();
+  if (k === 'p' && S && !dlg && !(e.target && e.target.tagName === 'INPUT') && !$('card').classList.contains('on')) $('profile').classList.contains('on') ? $('profile').classList.remove('on') : openProfile();
   if (k === 'm') toggleMusic();
   if (S && /^[1-9]$/.test(k) && !dlg && !uiOpen()) { S.seedSel = +k - 1; renderHotbar(); sfx('menu'); }
   if (dlg && ['ArrowLeft', 'ArrowRight', 'a', 'd'].includes(k)) { dlg.sel = (dlg.sel + (k === 'ArrowRight' || k === 'd' ? 1 : dlg.choices.length - 1)) % dlg.choices.length; renderChoices(); sfx('menu'); }
@@ -615,6 +616,7 @@ document.querySelectorAll('#pad button').forEach(b => {
   for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, () => keys[k] = false);
 });
 $('mute').onclick = toggleMusic; $('jBtn').onclick = () => { initAudio(); if (S) openJournal(); };
+$('pBtn').onclick = () => { initAudio(); if (S) openProfile(); };
 function toggleMusic() { musicOn = !musicOn; $('mute').textContent = musicOn ? '♪ ON' : '♪ OFF'; if (music) musicOn ? music.play().catch(() => {}) : music.pause(); }
 
 // ---------- loop ----------

@@ -1,3 +1,5 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
 <title>Pixel Bazaar</title>
 <style>
 @font-face{font-family:Joy;src:url(assets/fonts/joystix.ttf)}
@@ -60,6 +62,15 @@ button{font:inherit;color:inherit}
 .sub{color:var(--mut);font-size:.9em;line-height:1.5}
 .tr{display:flex;justify-content:space-between;gap:1em;padding:.4em 0;border-top:2px dashed #3d3363}
 #journal{width:min(92%,30em)}
+#profile{width:min(94%,34em)}
+.phead{display:flex;gap:.9em;align-items:center}.phead canvas{width:4em;height:4em;image-rendering:pixelated;border:2px solid var(--gold);border-radius:6px;background:#2a2346}
+.phead a{color:var(--gold)}
+.ptiles{display:grid;grid-template-columns:repeat(3,1fr);gap:.4em;margin-top:.8em}
+.ptile{border:1px solid #4a3f72;border-radius:5px;padding:.4em;text-align:center}.ptile b{display:block;color:var(--gold);font-size:1.15em}.ptile span{font-size:.65em;color:var(--mut)}
+.medals{display:grid;grid-template-columns:repeat(auto-fill,minmax(6.2em,1fr));gap:.4em}
+.medal{text-align:center;font-size:.65em;color:#8a7fb3}.medal i{display:block;margin:0 auto .2em;width:2.6em;height:2.6em;line-height:2.6em;border-radius:50%;border:2px dashed #4a3f72;font-style:normal;font-size:1.3em}
+.medal.got{color:var(--ink,#fff3d6)}.medal.got i{background:var(--gold);color:var(--pan);border:2px solid #fff3d6}
+.prow{display:flex;gap:.5em;margin-top:1em;flex-wrap:wrap}.prow .btn{flex:1}
 #card{width:min(96%,52em)}
 .ntitle{font-size:1.6em;text-align:center;margin-bottom:.6em}
 .ngrid{display:grid;grid-template-columns:1fr 1.4fr;gap:1em}
@@ -122,7 +133,7 @@ button{font:inherit;color:inherit}
     <div class="box"><span>ENERGY</span><div class="debtbar"><div id="enFill" style="background:#78e678"></div></div></div>
   </div>
   <div id="objBox" class="ui box"><span id="obj"></span></div>
-  <div id="topR" class="ui"><button class="box" id="jBtn">JOURNAL (J)</button><button class="box" id="mute">♪ ON</button></div>
+  <div id="topR" class="ui"><button class="box" id="pBtn">PROFILE (P)</button><button class="box" id="jBtn">JOURNAL (J)</button><button class="box" id="mute">♪ ON</button></div>
   <div id="zone" class="ui"></div>
   <div id="hint" class="ui box"></div>
   <div id="toast" class="ui box"></div>
@@ -135,6 +146,7 @@ button{font:inherit;color:inherit}
   <div id="chainlog" class="ui"></div>
   <div id="trade" class="ui box panel"></div>
   <div id="journal" class="ui box panel"></div>
+  <div id="profile" class="ui box panel"></div>
   <div id="card" class="ui box panel"></div>
 </div>
 <div id="rotate">Turn your phone sideways to play.</div>

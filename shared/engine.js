@@ -23,7 +23,7 @@
       asleep: false, passed_out: false, fish_day: 0, seer_day: 0, chest: false, finished: false, won: false, history: [],
       energy: ENERGY_MAX, plots: Array.from({ length: START_PLOTS }, emptyPlot), seeds, friendship: new Array(NPCS).fill(0), gift_day: new Array(NPCS).fill(0),
       projects: PROJECTS.map(() => false), donated: PROJECTS.map(() => new Array(NG + 1).fill(0)), mined_day: 0, mined: 0, catches_today: 0, cat_day: 0,
-      harvested: 0, jade_found: 0, fish_caught: 0, kaito_start: 0, start_coins: START_COINS };
+      harvested: 0, jade_found: 0, fish_caught: 0, kaito_start: 0, start_coins: START_COINS, seasons_won: 0, best_score: 0 };
   };
   const preimage = (player, season, day, event, rumors, salt) => `${player}|${season}|${day}|${event}|${rumors}|${salt}`;
   function settle(pos, price) { const mv = Math.trunc((price - pos.entry) * 1e6 / pos.entry); return Math.trunc(pos.stake * pos.lev * mv * (pos.long ? 1 : -1) / 1e6); }
@@ -55,6 +55,7 @@
       const old = this._p(c), p = newPlayer(old.season + 1);
       p.plots = old.plots.map(pl => ({ ...pl, watered_day: 0 })); p.seeds = old.seeds; p.friendship = old.friendship; p.projects = old.projects; p.donated = old.donated;
       p.harvested = old.harvested; p.jade_found = old.jade_found; p.fish_caught = old.fish_caught; p.kaito_start = this._kaito();
+      p.seasons_won = old.seasons_won; p.best_score = old.best_score;
       this.players[c] = p;
     }
     open_position(c, { good, long, lev, stake }) {
@@ -148,7 +149,7 @@
     sleep(c, { passed_out }) { const p = this._p(c); req(!p.finished && !p.asleep, 'already asleep'); req(p.commitment, 'the day has not started yet'); p.asleep = true; p.passed_out = !!passed_out; }
     pay_debt(c) {
       const k = this._kaito(), p = this._p(c); req(!p.finished && p.coins >= DEBT, 'not enough coins');
-      p.coins -= DEBT; p.finished = true; p.won = true;
+      p.coins -= DEBT; p.finished = true; p.won = true; p.seasons_won++; p.best_score = Math.max(p.best_score, p.coins + DEBT);
       this._badge('debt_free', c); if (p.day <= 6) this._badge('early_bird', c);
       if (p.coins + DEBT - p.start_coins > k - p.kaito_start) this._badge('beat_kaito', c);
       this._rank({ account: c, season: p.season, score: p.coins + DEBT, day: p.day, won: true });
@@ -198,6 +199,7 @@
       if (day >= SEASON_DAYS) {
         p.finished = true; p.won = p.coins >= DEBT; if (p.won) { p.coins -= DEBT; badges.push('debt_free'); }
         const score = p.won ? p.coins + DEBT : p.coins;
+        if (p.won) p.seasons_won++; p.best_score = Math.max(p.best_score, score);
         if (score - p.start_coins > this._kaito() - p.kaito_start) badges.push('beat_kaito');
         this._rank({ account: player, season: p.season, score, day, won: p.won });
       } else p.day += 1;

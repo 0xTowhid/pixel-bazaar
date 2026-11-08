@@ -82,6 +82,7 @@ pub struct Player {
     pub energy: u16, pub plots: Vec<Plot>, pub seeds: Vec<u16>, pub friendship: Vec<u8>, pub gift_day: Vec<u8>,
     pub projects: Vec<bool>, pub donated: Vec<Vec<u32>>, pub mined_day: u8, pub mined: u32, pub catches_today: u8, pub cat_day: u8,
     pub harvested: u32, pub jade_found: u32, pub fish_caught: u32, pub kaito_start: i64, pub start_coins: u64,
+    pub seasons_won: u32, pub best_score: u64,
 }
 
 #[near(serializers = [json])]
@@ -116,6 +117,7 @@ fn new_player(season: u32) -> Player {
         },
         friendship: vec![0; NPCS], gift_day: vec![0; NPCS], projects: vec![false; PROJECTS.len()], donated: vec![vec![0; NG + 1]; PROJECTS.len()],
         mined_day: 0, mined: 0, catches_today: 0, cat_day: 0, harvested: 0, jade_found: 0, fish_caught: 0, kaito_start: 0, start_coins: START_COINS,
+        seasons_won: 0, best_score: 0,
     }
 }
 /// Commitment string the operator hashes on day start and reveals at settlement.
@@ -178,6 +180,7 @@ impl Contract {
         p.plots = old.plots.into_iter().map(|mut pl| { pl.watered_day = 0; pl }).collect();
         p.seeds = old.seeds; p.friendship = old.friendship; p.projects = old.projects; p.donated = old.donated;
         p.harvested = old.harvested; p.jade_found = old.jade_found; p.fish_caught = old.fish_caught; p.kaito_start = k;
+        p.seasons_won = old.seasons_won; p.best_score = old.best_score;
         self.players.insert(id, p);
     }
 
@@ -345,7 +348,7 @@ impl Contract {
         let k = self.kaito_ledger();
         let p = self.player_mut(&id);
         require!(!p.finished && p.coins >= DEBT, "not enough coins");
-        p.coins -= DEBT; p.finished = true; p.won = true;
+        p.coins -= DEBT; p.finished = true; p.won = true; p.seasons_won += 1; p.best_score = p.best_score.max(p.coins + DEBT);
         let (season, coins, day, beat) = (p.season, p.coins, p.day, (p.coins + DEBT) as i64 - p.start_coins as i64 > k - p.kaito_start);
         self.badge("debt_free", &id);
         if day <= 6 { self.badge("early_bird", &id); }
@@ -431,6 +434,8 @@ impl Contract {
             p.finished = true; p.won = p.coins >= DEBT;
             if p.won { p.coins -= DEBT; badges.push("debt_free"); }
             let score = if p.won { p.coins + DEBT } else { p.coins };
+            if p.won { p.seasons_won += 1; }
+            p.best_score = p.best_score.max(score);
             if score as i64 - p.start_coins as i64 > self.kaito_ledger() - p.kaito_start { badges.push("beat_kaito"); }
             self.rank(Entry { account: player.clone(), season: p.season, score, day, won: p.won });
         } else { p.day += 1; }
@@ -629,6 +634,8 @@ mod tests {
         let mut c = setup(); c.players.get_mut(&pl()).unwrap().coins = 6000 * 100;
         c.pay_debt();
         let p = c.get_player(pl()).unwrap(); assert!(p.won); assert_eq!(p.coins, 1000 * 100);
+        assert_eq!(p.seasons_won, 1); assert_eq!(p.best_score, 6000 * 100);
+        c.start_season(); assert_eq!(c.get_player(pl()).unwrap().seasons_won, 1);
         assert_eq!(c.mt_balance_of(pl(), "badge_early_bird".into()).0, 1);
     }
 }
