@@ -111,7 +111,7 @@ impl Contract {
         let id: AccountId = format!("{name}.{}", env::current_account_id()).parse().unwrap_or_else(|_| env::panic_str("bad name"));
         require!(!self.players.contains_key(&id), "name taken");
         let deposit = env::attached_deposit();
-        let allowance = Allowance::limited(NearToken::from_millinear(250)).unwrap();
+        let allowance = Allowance::Unlimited; // the key can only call this contract; gas comes from the account balance
         Promise::new(id.clone())
             .create_account()
             .transfer(deposit)

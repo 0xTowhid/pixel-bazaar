@@ -1,0 +1,19 @@
+{
+  "name": "pixel-bazaar-server",
+  "version": "1.0.0",
+  "description": "Operator server for Pixel Bazaar",
+  "main": "index.mjs",
+  "scripts": {
+    "start": "node index.mjs",
+    "mock": "MOCK=1 node index.mjs",
+    "vendor": "esbuild node_modules/near-api-js/lib/index.js --bundle --format=esm --platform=browser --minify --define:process.env.NODE_DEBUG=false --define:global=globalThis --outfile=../vendor/near-api-js.mjs"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "near-api-js": "7.4.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "util": "^0.12.5"
+  }
+}

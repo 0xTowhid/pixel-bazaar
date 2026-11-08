@@ -82,6 +82,11 @@ button{font:inherit;color:inherit}
 @media (pointer:coarse){#pad{display:block}}
 #topR{right:1.2%;top:2%;display:flex;gap:.5em}
 #topR button{padding:.35em .6em;cursor:pointer}
+#busy{left:50%;top:45%;transform:translate(-50%,-50%);padding:.7em 1.2em;display:none;color:var(--gold);z-index:5}
+#chainlog{left:1.2%;bottom:3%;font-size:clamp(7px,1vw,11px);display:flex;flex-direction:column-reverse;gap:.25em;max-width:40%;pointer-events:auto}
+#chainlog div{background:#1c1630cc;padding:.25em .5em;border-radius:4px}
+#chainlog a{color:#8fe0ff}
+#nameIn{font:inherit;font-size:1.3em;background:var(--pan2);color:var(--ink);border:2px solid var(--ink);border-radius:5px;padding:.4em .6em;width:12em}
 #rotate{display:none}
 @media (orientation:portrait) and (pointer:coarse){#rotate{display:flex;position:fixed;inset:0;z-index:9;background:#120e1f;align-items:center;justify-content:center;text-align:center;padding:2em;line-height:1.8;color:var(--gold)}}
 @media (max-width:700px){.ngrid{grid-template-columns:1fr}.chart{height:6em}}
@@ -102,6 +107,8 @@ button{font:inherit;color:inherit}
     <canvas id="portrait" width="64" height="64"></canvas>
     <div style="flex:1;min-width:0"><div id="dlgName"></div><div id="dlgText"></div><div id="dlgChoices"></div></div>
   </div>
+  <div id="busy" class="ui box"></div>
+  <div id="chainlog" class="ui"></div>
   <div id="trade" class="ui box panel"></div>
   <div id="journal" class="ui box panel"></div>
   <div id="card" class="ui box panel"></div>
@@ -114,5 +121,9 @@ button{font:inherit;color:inherit}
   <button data-k="ArrowDown" style="left:76px;bottom:22px">&#9660;</button>
   <button data-k="e" style="right:24px;bottom:56px;width:78px;height:78px">A</button>
 </div>
+<script src="config.js"></script>
+<script src="shared/rules.js"></script>
+<script src="shared/engine.js"></script>
+<script src="backend.js"></script>
 <script src="world.js"></script>
 <script src="game.js"></script>
