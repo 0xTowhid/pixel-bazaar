@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Pixel Bazaar</title>
+<style>
+@font-face{font-family:Joy;src:url(assets/fonts/joystix.ttf)}
+:root{--ink:#fff3d6;--gold:#ffd86b;--pan:#1c1630;--pan2:#2b2247;--mut:#a79cc9;--good:#8ee68a;--bad:#ff7a6e;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#120e1f;color:var(--ink);font-family:Joy,"Courier New",monospace;overflow:hidden;user-select:none;-webkit-user-select:none}
+#stage{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(100vw,calc(100vh*16/9));aspect-ratio:16/9;max-width:100%}
+canvas#cv{width:100%;height:100%;display:block;image-rendering:pixelated}
+.ui{position:absolute;font-size:clamp(8px,1.4vw,15px);letter-spacing:.5px}
+.box{background:var(--pan);border:3px solid var(--ink);border-radius:6px;box-shadow:0 4px 0 #0008}
+button{font:inherit;color:inherit}
+#hudL{left:1.2%;top:2%;display:flex;flex-direction:column;gap:.5em;pointer-events:none}
+#hudL .box{padding:.45em .8em;display:flex;gap:.6em;align-items:center}
+#hudL img{width:1.3em;image-rendering:pixelated}
+#clock{color:var(--gold)}
+.debtbar{width:9em;height:.7em;border:2px solid var(--ink);border-radius:3px;overflow:hidden}
+#debtFill{height:100%;background:var(--gold);width:0}
+#objBox{left:50%;top:2%;transform:translateX(-50%);padding:.45em 1em;color:var(--gold);pointer-events:none;white-space:nowrap}
+#objBox:before{content:"► "}
+#zone{right:1.4%;top:31%;color:var(--mut);font-size:clamp(7px,1.1vw,12px);pointer-events:none}
+#hint{left:50%;bottom:4%;transform:translateX(-50%);padding:.45em .9em;display:none;pointer-events:none;color:var(--gold)}
+#toast{left:50%;top:13%;transform:translateX(-50%);padding:.55em 1em;display:none;pointer-events:none;max-width:80%;text-align:center;line-height:1.5}
+#dialog{left:2.5%;right:2.5%;bottom:3%;display:none;padding:1em;gap:1em}
+#dialog.on{display:flex}
+#portrait{width:6.5em;height:6.5em;flex:none;background:var(--pan2);border:3px solid var(--ink);border-radius:4px;image-rendering:pixelated}
+#dlgName{margin-bottom:.5em}
+#dlgText{line-height:1.6;font-size:1.08em;min-height:2.6em}
+#dlgChoices{margin-top:.7em;display:flex;gap:1.4em;flex-wrap:wrap}
+.choice{color:var(--gold);cursor:pointer}.choice:hover,.choice.sel{color:#fff}.choice.sel:before{content:"> "}
+.panel{left:50%;top:50%;transform:translate(-50%,-50%);padding:1.1em 1.3em;display:none;max-height:94%;overflow:auto}
+.panel.on{display:block}
+#trade{width:min(94%,31em);text-align:center}
+.tg{display:flex;align-items:center;justify-content:center;gap:1em}
+.tg img{width:4.5em;image-rendering:pixelated}
+.gname{font-size:1.6em}.gprice{font-size:2em;color:var(--gold)}
+.arrow{background:none;border:0;color:var(--mut);font-size:1.8em;cursor:pointer;padding:0 .3em}
+.arrow:hover{color:#fff}
+.chips{display:flex;gap:.6em;justify-content:center;flex-wrap:wrap;min-height:2.7em;margin:.6em 0}
+.chip{display:flex;align-items:center;gap:.4em;background:var(--pan2);border-radius:2em;padding:.25em .9em .25em .3em}
+.chip canvas{width:2.2em;height:2.2em;image-rendering:pixelated;border-radius:50%;background:#3a2f5f}
+.ls{display:grid;grid-template-columns:1fr 1fr;gap:.7em}
+.dirb{background:var(--pan2);border:3px solid var(--mut);border-radius:8px;padding:.6em;font-size:1.6em;color:var(--mut);cursor:pointer}
+.dirb.on.long{background:#2e7842;border-color:var(--good);color:#fff}
+.dirb.on.short{background:#8a2f2b;border-color:var(--bad);color:#fff}
+.mults{display:grid;grid-template-columns:repeat(4,1fr);gap:.6em;margin:.8em 0}
+.pill{background:var(--pan2);border:2px solid var(--ink);border-radius:2em;padding:.45em 0;font-size:1.2em;cursor:pointer}
+.pill.on{background:var(--gold);color:var(--pan)}
+.pill.lock{opacity:.35}
+.stake{display:flex;align-items:center;justify-content:center;gap:.6em;font-size:1.8em}
+.stake img{width:1em;image-rendering:pixelated}
+.out{display:flex;justify-content:space-around;font-size:1.4em;margin:.5em 0 .7em}
+.btn{background:var(--pan2);border:2px solid var(--ink);border-radius:5px;padding:.35em .6em;cursor:pointer}
+.btn:hover{background:var(--gold);color:var(--pan)}
+.btn.big{padding:.6em 1.2em;margin-top:.8em;font-size:1.1em}
+.btn.gold{background:var(--gold);color:var(--pan)}
+.btn.wide{width:100%;margin-top:0;font-size:1.4em}
+.tfoot{display:flex;justify-content:space-between;gap:1em;margin-top:.8em;color:var(--mut);font-size:.85em;flex-wrap:wrap}
+.link{background:none;border:0;color:var(--gold);cursor:pointer;padding:0}
+.up{color:var(--good)}.dn{color:var(--bad)}
+.sub{color:var(--mut);font-size:.9em;line-height:1.5}
+.tr{display:flex;justify-content:space-between;gap:1em;padding:.4em 0;border-top:2px dashed #3d3363}
+#journal{width:min(92%,30em)}
+#card{width:min(96%,52em)}
+.ntitle{font-size:1.6em;text-align:center;margin-bottom:.6em}
+.ngrid{display:grid;grid-template-columns:1fr 1.4fr;gap:1em}
+.nbox{background:#140f26;border:2px solid #4a3f72;border-radius:8px;padding:.8em;position:relative}
+.nh{display:flex;align-items:center;gap:.4em;flex-wrap:wrap}.nh img{width:1.6em;image-rendering:pixelated}
+.chart{position:relative;height:10em;margin-top:.6em}
+.cnd{position:absolute;width:10%}.cnd.g{background:var(--good)}.cnd.r{background:var(--bad)}
+.pos{display:flex;justify-content:space-between;align-items:center;gap:.6em;padding:.6em;border-radius:6px;margin-bottom:.5em;position:relative;overflow:hidden}
+.pos.win{background:#24502f;border:2px solid var(--good)}.pos.loss,.pos.liq{background:#4f2229;border:2px solid var(--bad)}
+.pos b{font-weight:normal;font-size:1.3em}
+.stamp{position:absolute;right:10%;top:50%;transform:translateY(-50%) rotate(-8deg);border:3px solid #ff4b3e;color:#ff4b3e;padding:.1em .5em;font-style:normal;font-size:1.3em;animation:stamp .4s ease-out}
+@keyframes stamp{from{transform:translateY(-50%) rotate(-8deg) scale(2.5);opacity:0}}
+@media (prefers-reduced-motion:reduce){.stamp{animation:none}}
+.who{margin:.6em 0;line-height:1.7}
+.note{color:var(--gold);font-size:.85em;margin:.3em 0}
+.debt{display:flex;justify-content:space-between;margin-top:.7em;font-size:.9em}
+.bar{height:.8em;border:2px solid var(--ink);border-radius:3px;margin-top:.3em}.bar div{height:100%;background:var(--gold)}
+#pad{position:absolute;inset:auto 0 0 0;height:0;display:none}
+#pad button{position:absolute;width:60px;height:60px;border-radius:50%;background:#0006;color:#fff;border:2px solid #fff8;font:18px monospace}
+@media (pointer:coarse){#pad{display:block}}
+#topR{right:1.2%;top:2%;display:flex;gap:.5em}
+#topR button{padding:.35em .6em;cursor:pointer}
+#rotate{display:none}
+@media (orientation:portrait) and (pointer:coarse){#rotate{display:flex;position:fixed;inset:0;z-index:9;background:#120e1f;align-items:center;justify-content:center;text-align:center;padding:2em;line-height:1.8;color:var(--gold)}}
+@media (max-width:700px){.ngrid{grid-template-columns:1fr}.chart{height:6em}}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="cv" width="960" height="540"></canvas>
+  <div id="hudL" class="ui">
+    <div class="box"><img src="assets/items/GoldCoin.png" alt=""><span id="coins">0</span></div>
+    <div class="box"><span id="day">DAY 1</span><span id="clock">06:00</span></div>
+    <div class="box"><span>DEBT</span><div class="debtbar"><div id="debtFill"></div></div></div>
+  </div>
+  <div id="objBox" class="ui box"><span id="obj"></span></div>
+  <div id="topR" class="ui"><button class="box" id="jBtn">JOURNAL (J)</button><button class="box" id="mute">♪ ON</button></div>
+  <div id="zone" class="ui"></div>
+  <div id="hint" class="ui box"></div>
+  <div id="toast" class="ui box"></div>
+  <div id="dialog" class="ui box">
+    <canvas id="portrait" width="64" height="64"></canvas>
+    <div style="flex:1;min-width:0"><div id="dlgName"></div><div id="dlgText"></div><div id="dlgChoices"></div></div>
+  </div>
+  <div id="trade" class="ui box panel"></div>
+  <div id="journal" class="ui box panel"></div>
+  <div id="card" class="ui box panel"></div>
+</div>
+<div id="rotate">Turn your phone sideways to play.</div>
+<div id="pad">
+  <button data-k="ArrowUp" style="left:76px;bottom:146px">&#9650;</button>
+  <button data-k="ArrowLeft" style="left:14px;bottom:84px">&#9664;</button>
+  <button data-k="ArrowRight" style="left:138px;bottom:84px">&#9654;</button>
+  <button data-k="ArrowDown" style="left:76px;bottom:22px">&#9660;</button>
+  <button data-k="e" style="right:24px;bottom:56px;width:78px;height:78px">A</button>
+</div>
+<script src="world.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
