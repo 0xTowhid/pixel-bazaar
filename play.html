@@ -1,5 +1,12 @@
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#120e1f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="assets/manifest.json">
+<link rel="apple-touch-icon" href="assets/app-icon-192.png">
+<link rel="icon" href="assets/app-icon-192.png">
 <title>Pixel Bazaar</title>
 <style>
 @font-face{font-family:Joy;src:url(assets/fonts/joystix.ttf)}
@@ -96,7 +103,7 @@ body:not(.ingame) #hudL,body:not(.ingame) #objBox,body:not(.ingame) #topR,body:n
 .bar{height:.8em;border:2px solid var(--ink);border-radius:3px;margin-top:.3em}.bar div{height:100%;background:var(--gold)}
 #pad{position:absolute;inset:auto 0 0 0;height:0;display:none}
 #pad button{position:absolute;width:60px;height:60px;border-radius:50%;background:#0006;color:#fff;border:2px solid #fff8;font:18px monospace}
-@media (pointer:coarse){#pad{display:block}body.panelOn #pad,body.dlgOn #pad{display:none}}
+@media (pointer:coarse){.kh{display:none}#pad{display:block}body.panelOn #pad,body.dlgOn #pad{display:none}}
 #topR{right:1.2%;top:2%;display:flex;gap:.5em}
 #topR button{padding:.35em .6em;cursor:pointer}
 #busy{left:50%;top:45%;transform:translate(-50%,-50%);padding:.7em 1.2em;display:none;color:var(--gold);z-index:5}
@@ -141,7 +148,7 @@ body.dlgOn #hotbar,body.dlgOn #chainlog{display:none}
     <div class="box"><span>ENERGY</span><div class="debtbar"><div id="enFill" style="background:#78e678"></div></div></div>
   </div>
   <div id="objBox" class="ui box"><span id="obj"></span></div>
-  <div id="topR" class="ui"><button class="box" id="pBtn">PROFILE (P)</button><button class="box" id="jBtn">JOURNAL (J)</button><button class="box" id="mute">♪ ON</button></div>
+  <div id="topR" class="ui"><button class="box" id="pBtn">PROFILE<span class="kh"> (P)</span></button><button class="box" id="jBtn">JOURNAL<span class="kh"> (J)</span></button><button class="box" id="fsBtn">FULL SCREEN</button><button class="box" id="mute">♪ ON</button></div>
   <div id="zone" class="ui"></div>
   <div id="hint" class="ui box"></div>
   <div id="toast" class="ui box"></div>

@@ -647,6 +647,7 @@ function sail(p) { player.x = p.x * TW; player.y = p.y * TW; S.t += DAY_SECONDS 
 const keys = {};
 addEventListener('keydown', e => {
   initAudio();
+  if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; keys[k] = true;
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
   if (k === 'e' || k === ' ' || k === 'Enter') interact();
@@ -654,6 +655,7 @@ addEventListener('keydown', e => {
   if (k === 'j' && !dlg && !$('card').classList.contains('on')) $('journal').classList.contains('on') ? $('journal').classList.remove('on') : openJournal();
   if (k === 'p' && S && !dlg && !(e.target && e.target.tagName === 'INPUT') && !$('card').classList.contains('on')) $('profile').classList.contains('on') ? $('profile').classList.remove('on') : openProfile();
   if (k === 'm') toggleMusic();
+  if (k === 'f' && !(e.target && e.target.tagName === 'INPUT')) toggleFull();
   if (S && /^[1-9]$/.test(k) && !dlg && !uiOpen()) { S.seedSel = +k - 1; renderHotbar(); sfx('menu'); }
   if (dlg && ['ArrowLeft', 'ArrowRight', 'a', 'd'].includes(k)) { dlg.sel = (dlg.sel + (k === 'ArrowRight' || k === 'd' ? 1 : dlg.choices.length - 1)) % dlg.choices.length; renderChoices(); sfx('menu'); }
 });
@@ -665,6 +667,24 @@ document.querySelectorAll('#pad button').forEach(b => {
 });
 $('mute').onclick = toggleMusic; $('jBtn').onclick = () => { initAudio(); if (S) openJournal(); };
 $('pBtn').onclick = () => { initAudio(); if (S) openProfile(); };
+// Full screen: the Fullscreen API where the browser has it (Android, desktop); on iPhone, add to the home screen.
+const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+const standalone = () => matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone;
+function fsLabel() { $('fsBtn').textContent = fsEl() ? 'EXIT FULL' : 'FULL SCREEN'; $('fsBtn').style.display = !fsEl() && standalone() ? 'none' : ''; }
+async function toggleFull() {
+  const d = document.documentElement;
+  try {
+    if (fsEl()) { await (document.exitFullscreen || document.webkitExitFullscreen).call(document); return; }
+    const req = d.requestFullscreen || d.webkitRequestFullscreen;
+    if (!req) { toast('On iPhone: tap Share, then Add to Home Screen, and open Pixel Bazaar from there to play full screen.', 6); return; }
+    await req.call(d, { navigationUI: 'hide' });
+    try { await screen.orientation.lock('landscape'); } catch (e) {}
+  } catch (e) { toast('This browser would not go full screen.', 3); }
+}
+$('fsBtn').onclick = () => { initAudio(); toggleFull(); };
+document.addEventListener('fullscreenchange', () => { fsLabel(); setTimeout(() => { fit(); layoutTop(); }, 100); });
+document.addEventListener('webkitfullscreenchange', fsLabel);
+fsLabel();
 function toggleMusic() { musicOn = !musicOn; $('mute').textContent = musicOn ? '♪ ON' : '♪ OFF'; if (music) musicOn ? music.play().catch(() => {}) : music.pause(); }
 
 // ---------- loop ----------
