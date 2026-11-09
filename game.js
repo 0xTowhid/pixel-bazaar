@@ -117,11 +117,23 @@ async function boot() {
   const p = await Backend.player();
   S = freshState(p);
   makeCast();
-  if (p.finished) await guarded('Starting a new season', () => Backend.call('start_season'), 'start_season');
+  document.body.classList.add('ingame'); layoutTop();
+  if (p.finished) await mustDo('Starting a new season', () => Backend.call('start_season'), 'start_season');
+  else if (p.asleep) { await mustDo('Finishing last night', () => Backend.settle(p.day), 'settle_day'); toast('You slept through the night.', 3); }
   await beginDay(true);
   showPaper(() => toast('You owe the Harbor Master 5,000 coins. You have ' + fmt(S.coins) + ' and ' + (SEASON_DAYS - S.day + 1) + ' days.', 6));
 }
+// What the chain does not keep (your notes on who lies, the tutorial step, price history) lives in this browser.
+const memKey = p => 'pb_mem|' + Backend.accountId + '|' + p.season;
+function saveMem() { if (S && S.player) safeSet(memKey(S.player), JSON.stringify({ rec: S.rec, notes: S.notes, history: S.history, step: S.step, closes: S.closes })); }
 function freshState(p) {
+  let mem = null; try { mem = JSON.parse(safeGet(memKey(p))); } catch (e) {}
+  const st = baseState(p);
+  if (mem) Object.assign(st, mem);
+  else if (p.day > 1 || p.season > 1) st.step = STEPS.length - 1;
+  return st;
+}
+function baseState(p) {
   return {
     day: p.day, t: 0, coins: 0, positions: [], lev: 2, bridge: false, boat: false, chest: false, fishDay: 0,
     price: Object.fromEntries(GOODS.map(g => [g.id, g.base])), closes: Object.fromEntries(GOODS.map(g => [g.id, [g.base]])),
@@ -131,7 +143,7 @@ function freshState(p) {
   };
 }
 async function newSeason() {
-  await guarded('Starting a new season', () => Backend.call('start_season'), 'start_season');
+  await mustDo('Starting a new season', () => Backend.call('start_season'), 'start_season');
   const p = await Backend.player();
   S = freshState(p); makeCast();
   await beginDay(true);
@@ -154,8 +166,7 @@ async function sync() {
   return p;
 }
 async function beginDay(first) {
-  const d = await guarded('Committing today to NEAR', () => Backend.beginDay(), 'commit_day');
-  if (!d) return;
+  const d = await mustDo('Committing today to NEAR', () => Backend.beginDay(), 'commit_day');
   if (d.finished) { await sync(); endSeason(S.player.won); return; }
   S.t = 0; S.warned = false; S.heard = {}; S.weather = d.weather; S.kaito = d.kaito; S.stormWarning = d.stormWarning;
   S.rumors = {};
@@ -187,9 +198,41 @@ async function guarded(label, fn, tag) {
     chainLog(tag || label, true, tx);
     return r;
   } catch (e) {
-    chainLog(tag || label, false); sfx('alert'); toast(e.message || String(e), 3.5);
+    chainLog(tag || label, false); sfx('alert');
+    const m = String(e.message || e).replace(/^.*panicked:\s*/is, '').replace(/^Error:\s*/, '');
+    if (/has not started/.test(m)) { toast('Today was not on NEAR yet. Fixing that, try again in a moment.', 3.5); recoverDay(); }
+    else toast(m, 3.5);
     return null;
   } finally { if (--busyN === 0) $('busy').style.display = 'none'; }
+}
+// For steps the day cannot go on without: retry quietly, then ask the player to retry.
+async function mustDo(label, fn, tag) {
+  for (let i = 0; ; i++) {
+    busyN++; $('busy').textContent = label + '...'; if (!quietBusy) $('busy').style.display = 'block';
+    try {
+      const r = await fn();
+      if (tag !== false) chainLog(tag || label, true, typeof r === 'string' ? r : r && r.tx);
+      return r;
+    } catch (e) {
+      if (i < 2) { await wait(1200 * (i + 1)); continue; }
+      if (tag !== false) chainLog(tag || label, false);
+      await netRetry(String(e.message || e).replace(/^.*panicked:\s*/is, '')); i = -1;
+    } finally { if (--busyN === 0) $('busy').style.display = 'none'; }
+  }
+}
+function netRetry(msg) {
+  return new Promise(res => {
+    const el = $('netErr');
+    el.innerHTML = `<div class="gname">NEAR DID NOT ANSWER</div><div class="sub" style="margin:.6em 0 1em">${String(msg).replace(/</g, '&lt;').slice(0, 160)}</div><button class="btn big" id="netBtn">TRY AGAIN</button>`;
+    el.classList.add('on'); sfx('alert');
+    $('netBtn').onclick = () => { el.classList.remove('on'); res(); };
+  });
+}
+// If a move is refused because today was never committed, commit it now.
+let recovering = false;
+async function recoverDay() {
+  if (recovering || !S || S.sleeping) return; recovering = true;
+  try { await mustDo('Committing today to NEAR', () => Backend.beginDay(), 'commit_day'); await sync(); } finally { recovering = false; }
 }
 const txHistory = [];
 function chainLog(what, ok, tx) {
@@ -282,10 +325,14 @@ async function sleep(passedOut) {
     quietBusy = true;
     const minNight = wait(2800);
     const before = worth(), prev = { ...S.price };
-    const a = await guarded('Going to sleep', () => Backend.call('sleep', { passed_out: !!passedOut }), 'sleep');
-    if (a === null && Backend.mode === 'chain') return;
-    const r = await guarded('Revealing the night', () => Backend.settle(), 'settle_day · reveal checked against commitment');
-    if (!r) return;
+    let p = await mustDo('Checking your day', () => Backend.player(), false);
+    if (!p.commitment && !p.asleep) { await mustDo('Committing today to NEAR', () => Backend.beginDay(), 'commit_day'); }
+    if (!p.asleep) await mustDo('Going to sleep', async () => {
+      try { return await Backend.call('sleep', { passed_out: !!passedOut }); }
+      catch (e) { if (/already asleep/.test(e.message)) return null; throw e; }
+    }, 'sleep');
+    const day = p.day;
+    const r = await mustDo('Revealing the night', () => Backend.settle(day), 'settle_day · reveal checked against commitment');
     await minNight;
     S.night.dawn = performance.now(); quietBusy = false;
     await wait(1800);
@@ -301,7 +348,7 @@ async function sleep(passedOut) {
     const notes = [];
     if (S.heard.rita && S.rumors.rita.lying && !S.notes.includes('rita')) { S.notes.push('rita'); notes.push('Rita lies on days she is selling at the market.'); }
     for (const k of ['sailor', 'farmer', 'hermit']) if (S.heard[k] && !S.notes.includes(k)) { S.notes.push(k); notes.push(noteFor(k)); }
-    S.history.push({ day: log.day, ev: ev.id }); S.lastLog = log;
+    S.history.push({ day: log.day, ev: ev.id }); S.lastLog = log; saveMem();
     showNight(ev, prev, results, truths, notes, before, worth(), log.passed_out_loss / 100, S.player.finished, S.player.won);
   } finally {
     S.sleeping = false; quietBusy = false;
@@ -334,7 +381,7 @@ function showNight(ev, prev, results, truths, notes, before, after, lost, finish
     : '<div class="sub">No positions tonight.</div>';
   const who = truths.length ? truths.map(t => `<span style="color:${SOURCES[t.k].color}">${SOURCES[t.k].name}</span> <span class="${t.right ? 'up' : 'dn'}">${t.right ? 'right' : 'wrong'}</span>`).join(' &nbsp; ') : 'You heard no rumors today.';
   openCard(`<div class="night">
-    <div class="ntitle">NIGHT ${S.history.length} · ${ev.title.toUpperCase()}</div>
+    <div class="ntitle">NIGHT ${S.lastLog ? S.lastLog.day : S.history.length} · ${ev.title.toUpperCase()}</div>
     <div class="ngrid">
       <div class="nbox"><div class="nh"><img src="${goodIcon(g.id)}"> ${g.name.toUpperCase()} ${fmt(prev[g.id])} → ${fmt(S.price[g.id])} <span class="${chg >= 0 ? 'up' : 'dn'}">${chg >= 0 ? '+' : ''}${chg}%</span></div><div class="chart">${bars}</div>
         ${Backend.mode !== 'local' ? '<div class="sub" style="margin-top:.5em">Event was committed this morning and checked on reveal.</div>' : ''}</div>
@@ -389,11 +436,11 @@ const STEPS = [
   { text: 'Go home and sleep after 18:00', target: () => at(World.P.homeDoor) },
   { text: 'Reach 5,000 coins, then see the Harbor Master', target: () => S.coins >= DEBT ? NPCS.master : null },
 ];
-function advance() { S.step = Math.min(S.step + 1, STEPS.length - 1); sfx('ok'); }
+function advance() { S.step = Math.min(S.step + 1, STEPS.length - 1); sfx('ok'); saveMem(); }
 
 // ---------- UI ----------
 let dlg = null, cardCb = null;
-const uiOpen = () => !!dlg || (S && S.fishing) || ['trade', 'card', 'journal', 'profile'].some(id => $(id)?.classList.contains('on'));
+const uiOpen = () => !!dlg || (S && S.fishing) || ['trade', 'card', 'journal', 'profile', 'netErr'].some(id => $(id)?.classList.contains('on'));
 function toast(t, sec = 2.5) { const el = $('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => el.style.display = 'none', sec * 1000); }
 function hideToast() { $('toast').style.display = 'none'; }
 function openCard(html, cb) { hideToast(); $('card').innerHTML = html; $('card').classList.add('on'); cardCb = cb; $('cardBtn').onclick = closeCard; }
@@ -544,7 +591,8 @@ function nearest() {
   const P = World.P, d2 = p => Math.hypot(player.x - p.x * TW, player.y - p.y * TW);
   let best = null, bd = 58;
   for (const n of Object.values(NPCS)) { const d = Math.hypot(n.x - player.x, n.y - player.y); if (d < bd) { bd = d; best = { kind: 'npc', n, label: 'TALK TO ' + n.name.toUpperCase() }; } }
-  for (const t of [farmTarget(), rockTarget(), fishTarget(), catTarget()]) if (t) { best = t; break; }
+  for (const t of [farmTarget(), rockTarget(), fishTarget()]) if (t) { best = t; break; }
+  if (!best) best = catTarget(); // Mochi follows you around, so people come first
   if (d2(P.board) < 44) best = { kind: 'board', label: 'TOWN BOARD: PROJECTS AND RECORDS' };
   if (d2(P.homeDoor) < 44) best = { kind: 'home', label: 'SLEEP (END DAY)' };
   if (!S.bridge && d2(P.bridge) < 56) best = { kind: 'bridge', label: 'REPAIR BRIDGE (' + BRIDGE_COST + ')' };
@@ -627,10 +675,21 @@ function fit() {
   if (cv.width !== VW) cv.width = VW;
   cv.height = VH; ctx.imageSmoothingEnabled = false;
 }
-addEventListener('resize', fit); fit();
+// Keep the goal banner between the left HUD and the top-right buttons so they never overlap on small screens.
+function layoutTop() {
+  const ob = $('objBox'); if (!ob || !$('stage') || !$('hudL') || !$('topR')) return;
+  const st = $('stage').getBoundingClientRect();
+  const l = $('hudL').getBoundingClientRect().right - st.left, r = $('topR').getBoundingClientRect().left - st.left;
+  ob.style.left = ((l + r) / 2) + 'px'; ob.style.maxWidth = Math.max(120, r - l - 16) + 'px';
+}
+addEventListener('resize', () => { fit(); layoutTop(); }); fit(); setTimeout(layoutTop, 50); if (document.fonts) document.fonts.ready.then(layoutTop);
 let MINI, last = performance.now(), wx = [];
 for (let i = 0; i < 160; i++) wx.push({ x: Math.random() * VW, y: Math.random() * VH, s: .6 + Math.random() * .8 });
 function update(dt) {
+  const pOn = ['trade', 'card', 'journal', 'profile', 'netErr'].some(id => $(id)?.classList.contains('on'));
+  document.body.classList.toggle('dlgOn', !!dlg);
+  if ((layoutTop.n = (layoutTop.n || 0) + 1) % 20 === 0) layoutTop();
+  if (pOn !== document.body.classList.contains('panelOn')) { document.body.classList.toggle('panelOn', pOn); if (pOn) for (const k in keys) keys[k] = false; }
   if (!S) return;
   const busy = uiOpen() || S.over || busyN > 0 || S.sleeping;
   let dx = 0, dy = 0; const sp = 170 * dt;
@@ -764,9 +823,12 @@ function drawNight(camX, camY) {
   ctx.font = '13px Joy, monospace'; ctx.textAlign = 'center'; ctx.fillStyle = `rgba(255,243,214,${Math.max(dark, .0)})`;
   ctx.fillText(n.dawn ? 'Morning comes...' : n.out ? 'You collapse in the street...' : (Backend.mode === 'local' ? 'The night passes...' : 'The night passes... settling on NEAR'), VW / 2, VH - 40);
 }
-function loop(now) { const dt = Math.min(.05, (now - last) / 1000); last = now; update(dt); draw(); requestAnimationFrame(loop); }
+let leaving = false; addEventListener('pagehide', () => { leaving = true; }); addEventListener('beforeunload', () => { leaving = true; });
+function loop(now) { if (leaving) return; const dt = Math.min(.05, (now - last) / 1000); last = now; update(dt); draw(); requestAnimationFrame(loop); }
 
-loadAll().then(async () => { buildIcons(); MAP = World.build(IMG); MINI = World.minimap(176, 102); requestAnimationFrame(loop); await boot(); })
+// life.js and panels.js load after this file: start only once every script is in.
+const start = () => loadAll().then(async () => { buildIcons(); MAP = World.build(IMG); MINI = World.minimap(176, 102); requestAnimationFrame(loop); await boot(); })
   .catch(err => { document.body.innerHTML = '<p style="padding:2em;font-family:monospace;color:#fff">Could not load game files: ' + err.message + '</p>'; });
+if (document.readyState === 'loading') addEventListener('DOMContentLoaded', start); else start();
 
 window.PB = { get flush() { return flush; }, get Q() { return Q; }, get S() { return S; }, get NPCS() { return NPCS; }, get player() { return player; }, sleep, interact, openTrade, openPosition, talkTo, sync, Backend, World };

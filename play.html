@@ -17,11 +17,11 @@ button{font:inherit;color:inherit}
 #clock{color:var(--gold)}
 .debtbar{width:9em;height:.7em;border:2px solid var(--ink);border-radius:3px;overflow:hidden}
 #debtFill{height:100%;background:var(--gold);width:0}
-#objBox{left:50%;top:2%;transform:translateX(-50%);padding:.45em 1em;color:var(--gold);pointer-events:none;white-space:nowrap}
+#objBox{left:50%;top:2%;transform:translateX(-50%);padding:.45em 1em;color:var(--gold);pointer-events:none;text-align:center;line-height:1.4}
 #objBox:before{content:"► "}
 #zone{right:1.4%;top:31%;color:var(--mut);font-size:clamp(7px,1.1vw,12px);pointer-events:none}
 #hint{left:50%;bottom:4%;transform:translateX(-50%);padding:.45em .9em;display:none;pointer-events:none;color:var(--gold)}
-#toast{left:50%;top:13%;transform:translateX(-50%);padding:.55em 1em;display:none;pointer-events:none;max-width:80%;text-align:center;line-height:1.5}
+#toast{left:50%;top:19%;transform:translateX(-50%);padding:.55em 1em;display:none;pointer-events:none;max-width:80%;text-align:center;line-height:1.5}
 #dialog{left:2.5%;right:2.5%;bottom:3%;display:none;padding:1em;gap:1em}
 #dialog.on{display:flex}
 #portrait{width:6.5em;height:6.5em;flex:none;background:var(--pan2);border:3px solid var(--ink);border-radius:4px;image-rendering:pixelated}
@@ -63,6 +63,8 @@ button{font:inherit;color:inherit}
 .tr{display:flex;justify-content:space-between;gap:1em;padding:.4em 0;border-top:2px dashed #3d3363}
 #journal{width:min(92%,30em)}
 #profile{width:min(94%,34em)}
+body:not(.ingame) #hudL,body:not(.ingame) #objBox,body:not(.ingame) #topR,body:not(.ingame) #hotbar,body:not(.ingame) #pad{display:none!important}
+#netErr{width:min(90%,26em);text-align:center;z-index:60}
 .phead{display:flex;gap:.9em;align-items:center}.phead canvas{width:4em;height:4em;image-rendering:pixelated;border:2px solid var(--gold);border-radius:6px;background:#2a2346}
 .phead a{color:var(--gold)}
 .ptiles{display:grid;grid-template-columns:repeat(3,1fr);gap:.4em;margin-top:.8em}
@@ -94,7 +96,7 @@ button{font:inherit;color:inherit}
 .bar{height:.8em;border:2px solid var(--ink);border-radius:3px;margin-top:.3em}.bar div{height:100%;background:var(--gold)}
 #pad{position:absolute;inset:auto 0 0 0;height:0;display:none}
 #pad button{position:absolute;width:60px;height:60px;border-radius:50%;background:#0006;color:#fff;border:2px solid #fff8;font:18px monospace}
-@media (pointer:coarse){#pad{display:block}}
+@media (pointer:coarse){#pad{display:block}body.panelOn #pad,body.dlgOn #pad{display:none}}
 #topR{right:1.2%;top:2%;display:flex;gap:.5em}
 #topR button{padding:.35em .6em;cursor:pointer}
 #busy{left:50%;top:45%;transform:translate(-50%,-50%);padding:.7em 1.2em;display:none;color:var(--gold);z-index:5}
@@ -106,6 +108,8 @@ button{font:inherit;color:inherit}
 #chainlog a{color:#8fe0ff}
 #nameIn{font:inherit;font-size:1.3em;background:var(--pan2);color:var(--ink);border:2px solid var(--ink);border-radius:5px;padding:.4em .6em;width:12em}
 #hotbar{left:50%;bottom:1.2%;transform:translateX(-50%);display:flex;gap:.3em}
+body.dlgOn #hotbar,body.dlgOn #chainlog{display:none}
+@media (pointer:coarse){#chainlog{left:auto;right:1.2%;bottom:150px;align-items:flex-end;max-width:45%}.choice{padding:.5em .8em;display:inline-block}}
 .slot{position:relative;width:3.2em;height:3.2em;background:var(--pan);border:2px solid var(--ink);border-radius:5px;padding:.2em;cursor:pointer}
 .slot img{width:100%;height:100%;image-rendering:pixelated}.slot b{position:absolute;right:.2em;bottom:0;font-weight:normal;font-size:.8em;color:var(--ink);text-shadow:1px 1px 0 #000}
 .slot i{position:absolute;left:.25em;top:0;font-style:normal;font-size:.65em;color:var(--mut)}.slot.sel{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold)}.slot.empty img{opacity:.35}
@@ -151,6 +155,7 @@ button{font:inherit;color:inherit}
   <div id="trade" class="ui box panel"></div>
   <div id="journal" class="ui box panel"></div>
   <div id="profile" class="ui box panel"></div>
+  <div id="netErr" class="ui box panel"></div>
   <div id="card" class="ui box panel"></div>
 </div>
 <div id="rotate">Turn your phone sideways to play.</div>

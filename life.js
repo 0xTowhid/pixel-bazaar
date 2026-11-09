@@ -69,6 +69,9 @@ function farmAct(t) {
   const P = World.P, pl = plotAt(t.i), at = P.plots[t.i], wx = (at.x + .5) * TW, wy = at.y * TW;
   if (t.kind === 'plot') {
     if (S.coins < Rules.ITEMS.plot) { toast('A plot costs ' + Rules.ITEMS.plot + ' coins.', 2); sfx('alert'); return; }
+    const now = performance.now(), c = farmAct.confirm;
+    if (!c || c.i !== t.i || now - c.at > 3000) { farmAct.confirm = { i: t.i, at: now }; toast('Press again to buy this plot for ' + Rules.ITEMS.plot + ' coins.', 2.5); sfx('menu'); return; }
+    farmAct.confirm = null;
     S.coins -= Rules.ITEMS.plot; S.player.plots.push({ crop: null, grown: 0, watered_day: 0 });
     queue({ t: 'BuyPlot' }, 'buy plot'); sfx('coin'); popup(wx, wy, 'NEW PLOT'); return;
   }

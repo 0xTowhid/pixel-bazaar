@@ -55,7 +55,30 @@ if (MOCK) {
   const operator = new Account(OPERATOR, provider, OPERATOR_KEY);
   view = (method, args = {}) => provider.callFunction({ contractId: CONTRACT, method, args });
   hasKey = async (account, pk) => { try { await provider.viewAccessKey({ accountId: account, publicKey: pk }); return true; } catch { return false; } };
-  operatorCall = (method, args, deposit = '0') => operator.callFunction({ contractId: CONTRACT, methodName: method, args, gas: teraToGas('100'), deposit: nearToYocto(deposit) });
+  const raw = (method, args, deposit) => operator.callFunction({ contractId: CONTRACT, methodName: method, args, gas: teraToGas('100'), deposit: nearToYocto(deposit) });
+  // One operator key signs everything, so calls go out one at a time (no nonce clashes) and retry on network trouble.
+  let chain = Promise.resolve();
+  operatorCall = (method, args, deposit = '0') => {
+    const run = async () => {
+      for (let i = 0; ; i++) {
+        try { return await raw(method, args, deposit); }
+        catch (e) {
+          const m = String(e && (e.message || e)) + ' ' + (e && e.type || '');
+          if (i >= 2 || /panicked|Smart contract|ExecutionError|FunctionCallError|ActionError/i.test(m)) throw e;
+          console.warn('retrying', method, m.slice(0, 200)); await new Promise(r => setTimeout(r, 800 * (i + 1)));
+        }
+      }
+    };
+    const p = chain.then(run, run); chain = p.catch(() => {}); return p;
+  };
+}
+// One request at a time per player, so a double tap cannot commit or settle twice.
+const locks = new Map();
+function withLock(key, fn) {
+  const prev = locks.get(key) || Promise.resolve();
+  const p = prev.then(fn, fn); const tail = p.catch(() => {}); locks.set(key, tail);
+  tail.then(() => { if (locks.get(key) === tail) locks.delete(key); });
+  return p;
 }
 
 // ---------- the daily plan ----------
@@ -77,7 +100,13 @@ function plan(account, season, day) {
 // ---------- http ----------
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.png': 'image/png', '.ttf': 'font/ttf', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.json': 'application/json', '.css': 'text/css' };
 const recent = new Map(); // ip -> registrations in the last hour
-function limited(ip) { const now = Date.now(), list = (recent.get(ip) || []).filter(t => now - t < 3600e3); recent.set(ip, list); if (list.length >= 5) return true; list.push(now); return false; }
+// Behind a local reverse proxy (Caddy) every request comes from 127.0.0.1, so use the address it forwards.
+function clientIp(req) {
+  const a = req.socket.remoteAddress || '';
+  const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return (/^(::1|127\.|::ffff:127\.)/.test(a) && fwd) ? fwd : a;
+}
+function limited(ip) { const now = Date.now(), list = (recent.get(ip) || []).filter(t => now - t < 3600e3); recent.set(ip, list); if (list.length >= 10) return true; list.push(now); return false; }
 const json = (res, code, body) => { res.writeHead(code, { 'content-type': 'application/json', 'access-control-allow-origin': ALLOW_ORIGIN, 'access-control-allow-headers': 'content-type' }); res.end(JSON.stringify(body)); };
 const readBody = req => new Promise((ok, bad) => { let b = ''; req.on('data', c => { b += c; if (b.length > 1e5) req.destroy(); }); req.on('end', () => { try { ok(b ? JSON.parse(b) : {}); } catch (e) { bad(e); } }); });
 const errText = e => String(e && (e.message || e)).replace(/^.*Smart contract panicked: /s, '').slice(0, 300);
@@ -87,7 +116,7 @@ const routes = {
     const name = String(body.name || '').toLowerCase();
     if (!/^[a-z0-9](?:[a-z0-9_-]{1,30})$/.test(name)) throw new Error('Names use 2-31 lowercase letters, numbers, - or _.');
     if (!/^ed25519:[1-9A-HJ-NP-Za-km-z]{40,50}$/.test(body.publicKey || '')) throw new Error('bad public key');
-    if (limited(req.socket.remoteAddress)) throw new Error('Too many new players from your network. Try again in an hour.');
+    if (!MOCK && limited(clientIp(req))) throw new Error('Too many new players from your network. Try again in an hour.');
     const accountId = `${name}.${CONTRACT}`;
     if (await view('get_player', { account_id: accountId })) throw new Error('That name is taken.');
     await operatorCall('register_player', { name, public_key: body.publicKey }, PLAYER_FUNDING);
@@ -101,27 +130,35 @@ const routes = {
     return { ok: true };
   },
   // Start (or resume) the player's current day: commit it on chain, return the rumors.
-  'POST /api/day': async body => {
-    const p = await view('get_player', { account_id: body.accountId });
+  'POST /api/day': body => withLock(body.accountId, async () => {
+    let p = await view('get_player', { account_id: body.accountId });
     if (!p) throw new Error('not a player');
     if (p.finished) return { finished: true };
     const d = plan(body.accountId, p.season, p.day);
     let tx = null;
-    if (!p.commitment) tx = await operatorCall('commit_day', { player: body.accountId, day: p.day, commitment: d.commitment, weather: d.weather, npc_moves: d.npc_moves });
-    else if (p.commitment !== d.commitment) throw new Error('commitment mismatch');
+    if (!p.commitment) {
+      try { tx = await operatorCall('commit_day', { player: body.accountId, day: p.day, commitment: d.commitment, weather: d.weather, npc_moves: d.npc_moves }); }
+      catch (e) { p = await view('get_player', { account_id: body.accountId }); if (p.commitment !== d.commitment) throw e; }
+    } else if (p.commitment !== d.commitment) throw new Error('commitment mismatch');
     // the restored lighthouse tells the truth about storms
     const stormWarning = p.projects && p.projects[1] ? d.truth === 0 : null;
-    return { season: p.season, day: p.day, rumors: d.rumors, weather: d.weather, kaito: d.kaito, stormWarning, commitment: d.commitment, tx: txHash(tx) };
-  },
+    return { season: p.season, day: p.day, asleep: !!p.asleep, rumors: d.rumors, weather: d.weather, kaito: d.kaito, stormWarning, commitment: d.commitment, tx: txHash(tx) };
+  }),
   // Reveal the event after the player has gone to sleep.
-  'POST /api/settle': async body => {
+  'POST /api/settle': body => withLock(body.accountId, async () => {
     const p = await view('get_player', { account_id: body.accountId });
-    if (!p || !p.asleep) throw new Error('The player is not asleep yet.');
+    if (!p) throw new Error('not a player');
+    const already = () => body.day && (p.history || []).find(h => h.day === body.day && p.season === (body.season || p.season));
+    // this night was already settled (a retry after a dropped connection): hand back its log
+    if (!p.asleep && body.day && p.day !== body.day && already()) return { log: already(), tx: null };
+    if (!p.asleep) throw new Error('The player is not asleep yet.');
     const d = plan(body.accountId, p.season, p.day);
-    const res = await operatorCall('settle_day', { player: body.accountId, day: p.day, event: d.truth, rumors: d.rumorText, salt: d.salt });
+    let res = null;
+    try { res = await operatorCall('settle_day', { player: body.accountId, day: p.day, event: d.truth, rumors: d.rumorText, salt: d.salt }); }
+    catch (e) { const q = await view('get_player', { account_id: body.accountId }); if (q.asleep || q.day === p.day && !q.finished) throw e; }
     const after = await view('get_player', { account_id: body.accountId });
-    return { log: after.history[after.history.length - 1], salt: d.salt, tx: txHash(res) };
-  },
+    return { log: after.history.find(h => h.day === p.day) || after.history[after.history.length - 1], salt: d.salt, tx: txHash(res) };
+  }),
 };
 function txHash(r) { return r && typeof r === 'object' ? (r.transaction?.hash || r.transaction_outcome?.id || null) : null; }
 if (MOCK) {

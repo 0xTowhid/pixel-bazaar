@@ -128,8 +128,8 @@ const Backend = (() => {
       return { season: p.season, day: p.day, rumors: lp.rumors, weather: Rules.EVENTS[lp.truth].weather || null, kaito: lp.kaito, stormWarning: p.projects[1] ? lp.truth === 0 : null };
     },
     /** Reveal the night's event and settle. */
-    async settle() {
-      if (mode !== 'local') return api('/api/settle', { accountId: me.accountId });
+    async settle(day) {
+      if (mode !== 'local') return api('/api/settle', { accountId: me.accountId, day });
       const p = local.engine.get_player(me.accountId);
       const log = local.engine.settle_day('operator', { player: me.accountId, day: p.day, event: local.plan.truth, rumors: Rules.encodeRumors(local.plan.rumors), salt: '' });
       return { log };
