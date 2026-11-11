@@ -8,7 +8,7 @@ Built for NEAR HACKATHON 2026, **Games With Real Economies** track.
 
 | | |
 |---|---|
-| **Play it** | **https://213.165.39.157.sslip.io** (desktop or phone held sideways; no wallet needed) |
+| **Play it** | **https://213.165.39.157.sslip.io** | **https://pixel-bazaar.arculate.markets** | (desktop or phone held sideways; no wallet needed) |
 | **Contract** | [`pixelbazaar2-tow69.testnet`](https://testnet.nearblocks.io/address/pixelbazaar2-tow69.testnet) on NEAR testnet |
 | **NPC accounts** | [`kaito.pixelbazaar2-tow69.testnet`](https://testnet.nearblocks.io/address/kaito.pixelbazaar2-tow69.testnet), [`rita.pixelbazaar2-tow69.testnet`](https://testnet.nearblocks.io/address/rita.pixelbazaar2-tow69.testnet) |
 | **Code** | this repository (MIT) |
