@@ -11,11 +11,11 @@
   const CROPS = [[4, 2, 6, 2, 0, true], [5, 3, 10, 3, 0, true], [6, 4, 22, 2, 0, true], [7, 3, 8, 3, 0, true], [8, 2, 6, 2, 0, true], [9, 3, 12, 2, 0, true], [0, 2, 5, 3, 0, true], [10, 4, 80, 3, 2, true], [2, 2, 60, 2, 2, false]];
   const ITEMS = { license_x5: 250, license_x10: 900, bridge: 600, boat: 300, stall: 1500 };
   const PROJECTS = [[[[1, 30], [11, 5]], 400], [[[12, 10], [11, 8]], 0], [[[0, 40]], 600]];
-  const BADGES = ['first_harvest', 'green_thumb', 'jade_hunter', 'angler', 'x10_survivor', 'faded_rita', 'beat_kaito', 'debt_free', 'early_bird', 'restorer', 'best_friend', 'first_spirit', 'spirit_tamer', 'shiny_hunter', 'legend_tamer', 'wallet_linked'];
+  const BADGES = ['first_harvest', 'green_thumb', 'jade_hunter', 'angler', 'x10_survivor', 'faded_rita', 'beat_kaito', 'debt_free', 'early_bird', 'restorer', 'best_friend', 'first_spirit', 'spirit_tamer', 'shiny_hunter', 'legend_tamer', 'wallet_linked', 'lantern_seeker'];
   const PLOT_COST = 120, MAX_PLOTS = 18, START_PLOTS = 6, BARN_CAP = 40, NPCS = 8, ROCKS = 8, ENERGY_MAX = 100;
 
   const R = (typeof module !== 'undefined' && module.exports) ? require('./rules.js') : root.Rules;
-  const SP = R.SPECIES, SPAWN = R.SPAWN, WATER = 1, WIND = 2, EARTH = 3;
+  const SP = R.SPECIES, SPAWN = R.SPAWN, WATER = 1, WIND = 2, EARTH = 3, PUZZLES = [4, 3, 4];
   const fail = m => { throw new Error(m); };
   const req = (c, m) => { if (!c) fail(m); };
   const emptyPlot = () => ({ crop: null, grown: 0, watered_day: 0 });
@@ -26,7 +26,7 @@
       energy: ENERGY_MAX, plots: Array.from({ length: START_PLOTS }, emptyPlot), seeds, friendship: new Array(NPCS).fill(0), gift_day: new Array(NPCS).fill(0),
       projects: PROJECTS.map(() => false), donated: PROJECTS.map(() => new Array(NG + 1).fill(0)), mined_day: 0, mined: 0, catches_today: 0, cat_day: 0,
       harvested: 0, jade_found: 0, fish_caught: 0, kaito_pnl: 0, start_coins: START_COINS, seasons_won: 0, best_score: 0,
-      lead: null, enc_today: 0, fed_today: 0, wild: null, wallet: null, book: 0, shards: 0 };
+      lead: null, enc_today: 0, fed_today: 0, wild: null, wallet: null, book: 0, shards: 0, clues: 0, solved_day: [0, 0, 0] };
   };
   const preimage = (player, season, day, event, rumors, salt) => `${player}|${season}|${day}|${event}|${rumors}|${salt}`;
   function settle(pos, price) { const e = Math.max(1, pos.entry); const mv = Math.trunc((price - e) * 1e6 / e); return Math.trunc(pos.stake * pos.lev * mv * (pos.long ? 1 : -1) / 1e6); }
@@ -60,6 +60,7 @@
     _ownsEl(c, el) { return (this.byOwner[c] || []).some(id => { const t = this.tokens[id]; return t && t.type === 'Spirit' && SP[t.species].el === el; }); }
     _bookAdd(book, sp) { return Number(BigInt(book || 0) | (1n << BigInt(sp))); }
     _bookCount(book) { let n = 0, b = BigInt(book || 0); while (b) { n += Number(b & 1n); b >>= 1n; } return n; }
+    puzzle_order(commit, who, k) { const n = PUZZLES[k], v = [...Array(n).keys()]; for (let i = n - 1; i >= 1; i--) { const j = this._roll(commit, who, 'puzzle' + k, i) % (i + 1); [v[i], v[j]] = [v[j], v[i]]; } return v; }
     link_wallet(c, { game_account }) { req(this.players[game_account], 'no trader with that name'); this.links[game_account] = c; }
     get_link_request(game_account) { return this.links[game_account] || null; }
     nft_transfer(c, { receiver_id, token_id }) { req(this.owners[token_id] === c, 'not the owner'); this._move(token_id, c, receiver_id); }
@@ -88,7 +89,7 @@
       p.plots = old.plots.map(pl => ({ ...pl, watered_day: 0 })); p.seeds = old.seeds; p.friendship = old.friendship; p.projects = old.projects; p.donated = old.donated;
       p.harvested = old.harvested; p.jade_found = old.jade_found; p.fish_caught = old.fish_caught;
       p.seasons_won = old.seasons_won; p.best_score = old.best_score;
-      p.lead = old.lead; p.wallet = old.wallet; p.book = old.book; p.shards = old.shards;
+      p.lead = old.lead; p.wallet = old.wallet; p.book = old.book; p.shards = old.shards; p.clues = old.clues;
       this.players[c] = p;
     }
     open_position(c, { good, long, lev, stake }) {
@@ -218,6 +219,17 @@
           }
           case 'ConfirmWallet': req(this.links[c] === a.wallet, 'ask from your wallet first'); delete this.links[c]; p.wallet = a.wallet; badges.push('wallet_linked'); break;
           case 'UnlinkWallet': p.wallet = null; break;
+          case 'Solve': {
+            req(a.puzzle >= 0 && a.puzzle < PUZZLES.length, 'no such puzzle');
+            if (a.puzzle === 1) req(this._ownsEl(c, WATER), 'the shrine is under water');
+            if (a.puzzle === 2) req(this._ownsEl(c, WIND), 'the sky is out of reach');
+            req(p.solved_day[a.puzzle] !== p.day, 'already solved today');
+            req(JSON.stringify(a.answer) === JSON.stringify(this.puzzle_order(commit, c, a.puzzle)), 'that is not the right order');
+            p.solved_day[a.puzzle] = p.day; p.shards++;
+            const first = !(p.clues & (1 << a.puzzle)); p.clues |= 1 << a.puzzle;
+            if (first && (p.clues & 7) === 7) badges.push('lantern_seeker');
+            break;
+          }
           case 'SendToWallet': {
             const to = p.wallet || fail('link a wallet first'); req(this.owners[a.token] === c, 'not yours');
             if (p.lead === a.token) p.lead = null; this._move(a.token, c, to); break;

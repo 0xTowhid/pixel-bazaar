@@ -10,10 +10,9 @@ const DIRI = { down: 0, up: 1, left: 2, right: 3 };
 
 // Which spirit zone the player is standing in (the new worlds come in stage 3).
 function spiritZone() {
+  if (WD.id !== 'town') return Worlds.SPECS[WD.id].zone;
   const z = World.zone(Math.floor(player.x / TW), Math.floor(player.y / TW));
-  const night = S.t / DAY_SECONDS > 12 / 18;
   if (z === 'woods') return 1;
-  if (night && (z === 'town' || z === 'harbor')) return 4; // the Moon Market comes out at night
   if (z === 'farm' || z === 'town' || z === 'harbor') return 0;
   return -1;
 }

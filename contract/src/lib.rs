@@ -79,6 +79,14 @@ pub const CATCH_CHANCE: [u16; 4] = [205, 154, 102, 38]; // out of 256: 80%, 60%,
 pub const ENCOUNTERS_A_DAY: u8 = 12;
 pub const FEEDS_A_DAY: u8 = 5;
 pub fn spirit_level(xp: u32) -> u8 { (1 + xp / 20).min(40) as u8 }
+/// World puzzles: how many pieces each one has (Woods braziers, Shrine bells, Sky gears). The order changes every day.
+pub const PUZZLES: [u8; 3] = [4, 3, 4];
+/// The order for puzzle `k` today: a shuffle driven by the day's commitment (same for a retry, different tomorrow).
+pub fn puzzle_order(commit: &str, who: &AccountId, k: u8) -> Vec<u8> {
+    let n = PUZZLES[k as usize]; let mut v: Vec<u8> = (0..n).collect();
+    for i in (1..n as usize).rev() { let j = roll(commit, who, &format!("puzzle{k}"), i as u32) as usize % (i + 1); v.swap(i, j); }
+    v
+}
 pub const NFT_BASE: &str = "https://raw.githubusercontent.com/0xTowhid/pixel-bazaar/main/nft";
 
 #[derive(BorshStorageKey)]
@@ -123,6 +131,7 @@ pub struct Player {
     // spirits and wallet (kept between seasons)
     pub lead: Option<String>, pub enc_today: u8, pub fed_today: u8, pub wild: Option<Wild>, pub wallet: Option<AccountId>,
     pub book: u64, pub shards: u16,
+    pub clues: u32, pub solved_day: Vec<u8>,
 }
 
 /// An NFT: a spirit, a badge or a legendary catch.
@@ -155,6 +164,8 @@ pub enum Action {
     Encounter { zone: u8 }, Catch { ok: bool }, SetLead { token: String }, Feed { token: String, good: u8 }, Evolve { token: String },
     // your NEAR wallet
     ConfirmWallet { wallet: AccountId }, UnlinkWallet, SendToWallet { token: String },
+    // world puzzles
+    Solve { puzzle: u8, answer: Vec<u8> },
 }
 
 #[near(serializers = [borsh, json])]
@@ -188,6 +199,7 @@ fn new_player(season: u32) -> Player {
         mined_day: 0, mined: 0, catches_today: 0, cat_day: 0, harvested: 0, jade_found: 0, fish_caught: 0, kaito_pnl: 0, start_coins: START_COINS,
         seasons_won: 0, best_score: 0,
         lead: None, enc_today: 0, fed_today: 0, wild: None, wallet: None, book: 0, shards: 0,
+        clues: 0, solved_day: vec![0; PUZZLES.len()],
     }
 }
 /// Commitment string the operator hashes on day start and reveals at settlement.
@@ -250,7 +262,7 @@ impl Contract {
         p.seeds = old.seeds; p.friendship = old.friendship; p.projects = old.projects; p.donated = old.donated;
         p.harvested = old.harvested; p.jade_found = old.jade_found; p.fish_caught = old.fish_caught;
         p.seasons_won = old.seasons_won; p.best_score = old.best_score;
-        p.lead = old.lead; p.wallet = old.wallet; p.book = old.book; p.shards = old.shards;
+        p.lead = old.lead; p.wallet = old.wallet; p.book = old.book; p.shards = old.shards; p.clues = old.clues;
         self.players.insert(id, p);
     }
 
@@ -462,6 +474,16 @@ impl Contract {
                     self.links.remove(&id); p.wallet = Some(wallet); badges.push("wallet_linked");
                 }
                 Action::UnlinkWallet => { p.wallet = None; }
+                Action::Solve { puzzle, answer } => {
+                    require!((puzzle as usize) < PUZZLES.len(), "no such puzzle");
+                    if puzzle == 1 { require!(self.owns_element(&id, WATER), "the shrine is under water"); }
+                    if puzzle == 2 { require!(self.owns_element(&id, WIND), "the sky is out of reach"); }
+                    require!(p.solved_day[puzzle as usize] != p.day, "already solved today");
+                    require!(answer == puzzle_order(&commit, &id, puzzle), "that is not the right order");
+                    p.solved_day[puzzle as usize] = p.day; p.shards += 1;
+                    let first = p.clues & (1 << puzzle) == 0; p.clues |= 1 << puzzle;
+                    if first && p.clues & 0b111 == 0b111 { badges.push("lantern_seeker"); }
+                }
                 Action::SendToWallet { token } => {
                     let to = p.wallet.clone().unwrap_or_else(|| env::panic_str("link a wallet first"));
                     require!(self.owners.get(&token) == Some(&id), "not yours");
@@ -803,8 +825,8 @@ impl Contract {
     }
 }
 
-pub const BADGES: [&str; 16] = ["first_harvest", "green_thumb", "jade_hunter", "angler", "x10_survivor", "faded_rita", "beat_kaito", "debt_free", "early_bird", "restorer", "best_friend",
-    "first_spirit", "spirit_tamer", "shiny_hunter", "legend_tamer", "wallet_linked"];
+pub const BADGES: [&str; 17] = ["first_harvest", "green_thumb", "jade_hunter", "angler", "x10_survivor", "faded_rita", "beat_kaito", "debt_free", "early_bird", "restorer", "best_friend",
+    "first_spirit", "spirit_tamer", "shiny_hunter", "legend_tamer", "wallet_linked", "lantern_seeker"];
 fn use_energy(p: &mut Player, n: u16) { require!(p.energy >= n, "you are too tired"); p.energy -= n; }
 
 #[cfg(test)]
@@ -1121,4 +1143,23 @@ mod tests {
         night(&mut c, 1, 2); commit(&mut c, 2, 2, "s");
         c.act(vec![Action::Encounter { zone: 0 }]);
     }
+
+    #[test]
+    fn puzzles_need_the_days_order_and_pay_a_shard_once_a_day() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        let commitment = c.get_player(pl()).unwrap().commitment.unwrap();
+        let right = puzzle_order(&commitment, &pl(), 0);
+        let mut wrong = right.clone(); wrong.swap(0, 1);
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::Solve { puzzle: 0, answer: wrong.clone() }]))).is_err());
+        c.act(vec![Action::Solve { puzzle: 0, answer: right.clone() }]);
+        let p = c.get_player(pl()).unwrap(); assert_eq!(p.shards, 1); assert_eq!(p.clues, 1);
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::Solve { puzzle: 0, answer: right.clone() }]))).is_err(), "once a day");
+        night(&mut c, 1, 2); commit(&mut c, 2, 2, "s");
+        let c2 = c.get_player(pl()).unwrap().commitment.unwrap();
+        c.act(vec![Action::Solve { puzzle: 0, answer: puzzle_order(&c2, &pl(), 0) }]);
+        assert_eq!(c.get_player(pl()).unwrap().shards, 2);
+    }
+    #[test]
+    #[should_panic(expected = "under water")]
+    fn shrine_puzzle_needs_a_water_spirit() { let mut c = setup(); commit(&mut c, 1, 2, "s"); c.act(vec![Action::Solve { puzzle: 1, answer: vec![0, 1, 2] }]); }
 }

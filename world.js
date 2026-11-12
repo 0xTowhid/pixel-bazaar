@@ -18,7 +18,7 @@ const World = (() => {
     if (x >= 76) return 'harbor';
     return 'town';
   }
-  const ZONE_NAME = { farm: 'Hill Farms', woods: 'Whispering Woods', snow: 'Frost Camp', town: 'Town', harbor: 'Harbor', island: 'Secret Island', sea: 'Sea' };
+  const ZONE_NAME = { farm: 'Hill Farms', woods: 'Forest Edge', snow: 'Frost Camp', town: 'Town', harbor: 'Harbor', island: 'Secret Island', sea: 'Sea' };
   const BASE = {
     farm: [[0, 12], [1, 12], [3, 12]], town: [[0, 12], [1, 12], [2, 12], [3, 12], [4, 12]],
     woods: [[11, 12], [12, 12], [13, 12], [14, 12]], snow: [[0, 19], [1, 19], [2, 19]],
@@ -61,6 +61,13 @@ const World = (() => {
     plots: [...[18, 19].flatMap(y => [42, 43, 44, 45, 46, 47].map(x => ({ x, y }))), ...[18, 19, 20, 21, 22, 23].map(x => ({ x, y: 27 }))],
     rocks: [[41, 11], [52, 12], [80, 5], [79, 9], [83, 12], [73, 15], [81, 14], [86, 10]].map(([x, y]) => ({ x, y })),
     fishSpots: [{ x: 54.5, y: 49.9 }, { x: 92.5, y: 30.7 }],
+    // doors to the other worlds
+    gates: [
+      { to: 'woods', x: 46.5, y: 2.4, label: 'INTO THE WHISPERING WOODS' },
+      { to: 'moon', x: 55.5, y: 27.9, label: 'THROUGH THE MOON GATE', night: true },
+      { to: 'shrine', x: 106.5, y: 30.6, label: 'DIVE TO THE SUNKEN SHRINE' },
+      { to: 'sky', x: 83.5, y: 3.4, label: 'RIDE THE WIND TO THE CLOCKWORK SKY' },
+    ],
   };
 
   function build(images) {
@@ -70,7 +77,7 @@ const World = (() => {
     for (let x = ISLAND.x0; x <= ISLAND.x1; x++) for (let y = ISLAND.y0; y <= ISLAND.y1; y++) water.delete(key(x, y));
     // ---- roads ----
     road(0, 30, 75, 31); road(55, 10, 56, 48); road(40, 35, 68, 41); road(6, 12, 7, 29); road(6, 12, 26, 13); road(56, 15, 71, 16);
-    road(39, 28, 40, 29); road(66, 29, 67, 29);
+    road(39, 28, 40, 29); road(66, 29, 67, 29); road(46, 1, 47, 9);
     // ---- walkable planks over water: harbor docks, lake pier ----
     for (let x = 88; x <= 97; x++) for (const y of [30, 31]) walkable.add(key(x, y));
     for (let y = 32; y <= 39; y++) { walkable.add(key(96, y)); walkable.add(key(97, y)); }
@@ -113,7 +120,7 @@ const World = (() => {
 
     // ---- trees ----
     const broad = [[0, 0], [2, 0], [6, 0], [14, 0]], woods = [[0, 0], [2, 0], [4, 0], [6, 0]], snow = [[8, 0], [10, 0]];
-    const keepClear = (x, y) => (x >= 42 && x <= 48 && y >= 4 && y <= 11) || (x >= 56 && x <= 67 && y >= 2 && y <= 12) || (x >= 38 && x <= 57 && y >= 9 && y <= 14);
+    const keepClear = (x, y) => (x >= 43 && x <= 50 && y >= 0 && y <= 11) || (x >= 81 && x <= 86 && y >= 1 && y <= 5) || (x >= 56 && x <= 67 && y >= 2 && y <= 12) || (x >= 38 && x <= 57 && y >= 9 && y <= 14);
     for (let x = 34; x < 72; x += 2) for (let y = 0; y < 18; y += 2)
       if (rnd() < .6 && free2(x, y) && !keepClear(x, y)) prop('nature', ...choice(woods), 2, 2, x, y, 1);
     for (const [x, y] of [[72, 0], [74, 1], [84, 0], [86, 4], [72, 8], [85, 14], [80, 1], [78, 7]]) if (free2(x, y)) prop('nature', ...choice(snow), 2, 2, x, y, 1);

@@ -81,11 +81,12 @@ const fmt = n => Math.round(n).toLocaleString('en-US');
 const DIR = { up: 0, left: 1, down: 2, right: 3 };
 const at = p => ({ x: p.x * TW, y: p.y * TW });
 function makeChar(sheet, p, o = {}) { const q = at(p); return Object.assign({ sheet, x: q.x, y: q.y, dir: 'down', moving: false, anim: 0, home: { ...q }, wander: 0, target: null, pause: 0 }, o); }
-let MAP;
+let MAP, MAP_TOWN, MINI_TOWN;
+let WD = { id: 'town', W: 0, H: 0 }; // the world you are in
 function blockedAt(x, y) {
   for (const [dx, dy] of [[-9, -6], [9, -6], [-9, 2], [9, 2]]) {
     const tx = Math.floor((x + dx) / TW), ty = Math.floor((y + dy) / TW);
-    if (tx < 0 || ty < 0 || tx >= World.W || ty >= World.H || MAP.solid[ty][tx]) return true;
+    if (tx < 0 || ty < 0 || tx >= WD.W || ty >= WD.H || MAP.solid[ty][tx]) return true;
   }
   return false;
 }
@@ -336,6 +337,7 @@ async function sleep(passedOut) {
   try {
     closeTrade(); $('journal').classList.remove('on'); S.fishing = null;
     while (Q.sending) await wait(100); await flush();
+    if (WD.id !== 'town') switchWorld('town', { x: World.P.homeDoor.x, y: World.P.homeDoor.y + 1.2 });
     if (!passedOut) { await walkTo(World.P.homeDoor.x * TW, (World.P.homeDoor.y - .25) * TW, 'up'); S.inside = true; sfx('ok'); }
     S.night = { start: performance.now(), dawn: 0, out: !!passedOut };
     quietBusy = true;
@@ -601,6 +603,7 @@ function hud() {
   $('debtFill').style.width = Math.min(100, worth() / DEBT * 100) + '%';
   if (S.player) { $('enFill').style.width = (S.player.energy / Rules.ENERGY.max * 100) + '%'; $('enFill').style.background = S.player.energy < 20 ? 'var(--bad)' : '#78e678'; }
   $('obj').textContent = STEPS[S.step].text;
+  if (WD.id !== 'town') { $('zone').textContent = WD.w.name; return; }
   const z = World.zone(Math.floor(player.x / TW), Math.floor(player.y / TW));
   $('zone').textContent = World.ZONE_NAME[z] || '';
 }
@@ -608,6 +611,7 @@ function hud() {
 // ---------- interaction ----------
 function faceToward(a, b) { const dx = b.x - a.x, dy = b.y - a.y; return Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'); }
 function nearest() {
+  if (WD.id !== 'town') return worldNearest();
   const P = World.P, d2 = p => Math.hypot(player.x - p.x * TW, player.y - p.y * TW);
   let best = null, bd = 58;
   for (const n of Object.values(NPCS)) { const d = Math.hypot(n.x - player.x, n.y - player.y); if (d < bd) { bd = d; best = { kind: 'npc', n, label: 'TALK TO ' + n.name.toUpperCase() }; } }
@@ -619,6 +623,7 @@ function nearest() {
   if (d2(P.boatDock) < 50) best = { kind: 'boat', label: S.boat ? 'SAIL TO THE ISLAND' : 'RENT A BOAT (' + BOAT_COST + ')' };
   if (d2(P.boatIsland) < 50) best = { kind: 'boatBack', label: 'SAIL BACK' };
   if (!S.chest && d2(P.chest) < 46) best = { kind: 'chest', label: 'OPEN CHEST' };
+  const g = gateTarget(); if (g) best = g;
   return best;
 }
 function interact() {
@@ -637,6 +642,10 @@ function interact() {
   else if (t.kind === 'fish') startFishing();
   else if (t.kind === 'cat') petCat(t);
   else if (t.kind === 'wild') encounterWild(t);
+  else if (t.kind === 'enter') enterWorld(t.to);
+  else if (t.kind === 'exit') leaveWorld();
+  else if (t.kind === 'piece') touchPiece(t.o);
+  else if (t.kind === 'read') { say({ name: t.o.kind === 'merchant' ? 'Moon Merchant' : 'Old stone', sheet: t.o.kind === 'merchant' ? 'hermit' : null, color: '#b9a8e8' }, t.o.text); }
   else if (t.kind === 'board') openTown();
   else if (t.kind === 'home') {
     const hour = 6 + S.t / DAY_SECONDS * 18;
@@ -722,7 +731,7 @@ function fit() {
 }
 // Where a world point is on screen (stage pixels), for the tour's spotlight.
 function toScreen(wx, wy) {
-  const MWp = World.W * TW, MHp = World.H * TW;
+  const MWp = WD.W * TW, MHp = WD.H * TW;
   const camX = Math.max(0, Math.min(MWp - VW, player.x - VW / 2)), camY = Math.max(0, Math.min(MHp - VH, player.y - VH / 2));
   const r = cv.getBoundingClientRect(), st = $('stage').getBoundingClientRect();
   return { x: r.left - st.left + (wx - camX) * r.width / VW, y: r.top - st.top + (wy - camY) * r.height / VH, k: r.width / VW };
@@ -757,7 +766,7 @@ function update(dt) {
     dx = dy = 0;
   } else player.moving = !!(dx || dy);
   if (player.moving && !player.auto) { player.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'); moveChar(player, dx, dy); player.anim += dt * 12; }
-  for (const n of Object.values(NPCS)) {
+  for (const n of WD.id === 'town' ? Object.values(NPCS) : []) {
     if (busy || !n.wander) { n.moving = false; if (Math.hypot(n.x - player.x, n.y - player.y) < 70) n.dir = faceToward(n, player); continue; }
     if (Math.hypot(n.x - player.x, n.y - player.y) < 70) { n.moving = false; n.dir = faceToward(n, player); continue; }
     if (n.pause > 0) { n.pause -= dt; n.moving = false; continue; }
@@ -778,17 +787,17 @@ function update(dt) {
 }
 function draw() {
   if (!S) return;
-  const MWp = World.W * TW, MHp = World.H * TW;
+  const MWp = WD.W * TW, MHp = WD.H * TW;
   const camX = Math.max(0, Math.min(MWp - VW, player.x - VW / 2)), camY = Math.max(0, Math.min(MHp - VH, player.y - VH / 2));
   ctx.fillStyle = '#5ec6e6'; ctx.fillRect(0, 0, VW, VH);
   ctx.drawImage(MAP.ground, camX, camY, VW, VH, 0, 0, VW, VH);
-  drawFarm(camX, camY);
+  if (WD.id === 'town') drawFarm(camX, camY);
   const vis = (x, y, w, h) => x + w > camX - 64 && x < camX + VW + 64 && y + h > camY - 64 && y < camY + VH + 96;
   const list = [];
   for (const p of MAP.props) { const x = p.x * TW, y = p.y * TW; if (vis(x, y, p.w * TW, p.h * TW)) list.push({ base: p.flat ? -1 : (p.y + p.h) * TW, p }); }
-  for (const c of Object.values(NPCS).concat(S.inside ? [] : player)) if (vis(c.x - 32, c.y - 60, 64, 64)) list.push({ base: c.y, c });
+  for (const c of (WD.id === 'town' ? Object.values(NPCS) : []).concat(S.inside ? [] : player)) if (vis(c.x - 32, c.y - 60, 64, 64)) list.push({ base: c.y, c });
   if (cat) list.push({ base: cat.y, cat: true });
-  list.push(...spiritDrawables(camX, camY));
+  list.push(...spiritDrawables(camX, camY), ...worldDrawables(camX, camY));
   list.sort((a, b) => a.base - b.base);
   for (const o of list) {
     if (o.cat) { drawCat(camX, camY); continue; }
@@ -799,7 +808,7 @@ function draw() {
     ctx.globalAlpha = 1;
   }
   ctx.font = '10px Joy, monospace'; ctx.textAlign = 'center';
-  for (const n of Object.values(NPCS)) {
+  for (const n of WD.id === 'town' ? Object.values(NPCS) : []) {
     if (!n.color || !vis(n.x - 32, n.y - 60, 64, 64)) continue;
     const w = ctx.measureText(n.name).width + 8; ctx.fillStyle = '#000a'; ctx.fillRect(n.x - camX - w / 2, n.y - camY - 74, w, 13);
     ctx.fillStyle = n.color; ctx.fillText(n.name, n.x - camX, n.y - camY - 64);
@@ -818,10 +827,11 @@ function draw() {
     }
   }
   drawPopups(camX, camY, 1 / 60);
+  drawWorldMood(camX, camY);
   drawNight(camX, camY);
   drawFishing();
   // objective marker / edge arrow
-  const tgt = STEPS[S.step].target();
+  const tgt = WD.id === 'town' ? STEPS[S.step].target() : null;
   if (tgt && !uiOpen() && !S.night) {
     const tx = tgt.x - camX, ty = tgt.y - camY - 70;
     ctx.fillStyle = '#ffd86b';
@@ -881,8 +891,9 @@ let leaving = false; addEventListener('pagehide', () => { leaving = true; }); ad
 function loop(now) { if (leaving) return; const dt = Math.min(.05, (now - last) / 1000); last = now; update(dt); draw(); requestAnimationFrame(loop); }
 
 // life.js and panels.js load after this file: start only once every script is in.
-const start = () => loadAll().then(async () => { buildIcons(); MAP = World.build(IMG); MINI = World.minimap(176, 102); requestAnimationFrame(loop); await boot(); })
+const start = () => loadAll().then(async () => { buildIcons(); MAP = MAP_TOWN = World.build(IMG); MINI = MINI_TOWN = World.minimap(176, 102); WD = { id: 'town', W: World.W, H: World.H }; requestAnimationFrame(loop); await boot(); })
   .catch(err => { document.body.innerHTML = '<p style="padding:2em;font-family:monospace;color:#fff">Could not load game files: ' + err.message + '</p>'; });
 if (document.readyState === 'loading') addEventListener('DOMContentLoaded', start); else start();
 
+window.nearestDbg = () => nearest();
 window.PB = { get flush() { return flush; }, get Q() { return Q; }, get S() { return S; }, get NPCS() { return NPCS; }, get player() { return player; }, sleep, interact, openTrade, openPosition, talkTo, sync, Backend, World };
