@@ -20,7 +20,7 @@ const chapterDone = p => [null, p.book && p.harvested >= 5, p.clues & 1, p.clues
 // ---------- after every sync: pay finished quests and move the story on ----------
 let progressBusy = false;
 async function checkProgress() {
-  if (progressBusy || !S || !S.player || !S.player.commitment || S.sleeping || Q.sending || Q.list.length) return;
+  if (progressBusy || (typeof DUEL !== 'undefined' && DUEL.on) || !S || !S.player || !S.player.commitment || S.sleeping || Q.sending || Q.list.length) return;
   progressBusy = true;
   try {
     const p = S.player, slots = await questSlots();

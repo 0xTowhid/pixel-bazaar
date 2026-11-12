@@ -53,7 +53,7 @@ function worldNearest() {
     if (['brazier', 'bell', 'gear'].includes(o.kind)) {
       const k = Worlds.PUZZLE_OF[WD.id], done = S.player.solved_day && S.player.solved_day[k] === S.day;
       best = done ? { kind: 'piece', none: true, label: 'SOLVED TODAY · COME BACK TOMORROW' } : { kind: 'piece', o, label: { brazier: 'LIGHT THE BRAZIER', bell: 'RING THE BELL', gear: 'WIND THE GEAR' }[o.kind] };
-    } else best = { kind: 'read', o, label: o.kind === 'merchant' ? 'TALK TO THE MOON MERCHANT' : 'READ' };
+    } else best = { kind: 'read', o, label: o.kind === 'merchant' ? 'DUEL TABLE · TALK TO RITA' : o.kind === 'gate' && WD.id === 'woods' && S.player.chapter >= 5 ? 'THE SPIRIT GATE' : 'READ' };
   }
   if (best) return best;
   return wildTarget();
@@ -144,8 +144,10 @@ function drawObject(o, x, y, t) {
   } else if (o.kind === 'gate') {
     const gr = ctx.createRadialGradient(x, y - 30, 2, x, y - 30, 40); gr.addColorStop(0, 'rgba(185,168,232,.6)'); gr.addColorStop(1, 'rgba(185,168,232,0)');
     ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x, y - 30, 40, 0, 7); ctx.fill();
+    if (WD.id === 'woods' && S.player.chapter >= 5) drawSpiritAt(11, x, y - 4, 'down', t, 3.2, S.player.boss_wins & 1 ? '#ffe9a0' : '#b9a8e8'); // the Great Spirit wakes
   } else if (o.kind === 'merchant') {
-    drawSpiritAt(16, x, y, 'down', t, 2.2, '#b6ff9e');
+    ctx.drawImage(IMG.rita, 0, DIR.down * 64, 64, 64, Math.round(x - 32), Math.round(y - 60), 64, 64); // Rita runs the night duel table
+    ctx.fillStyle = '#4a2f5e'; ctx.fillRect(x - 26, y - 4, 52, 14); drawSpiritAt(16, x + 34, y, 'left', t, 1.6, '#b6ff9e');
   } else if (o.kind === 'lamp') {
     ctx.fillStyle = '#3a2a4a'; ctx.fillRect(x - 2, y - 36, 4, 36); ctx.fillStyle = `rgba(255,${190 + Math.sin(t * 5) * 30},120,1)`; ctx.fillRect(x - 6, y - 46, 12, 12);
   }

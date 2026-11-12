@@ -11,7 +11,7 @@
   const CROPS = [[4, 2, 6, 2, 0, true], [5, 3, 10, 3, 0, true], [6, 4, 22, 2, 0, true], [7, 3, 8, 3, 0, true], [8, 2, 6, 2, 0, true], [9, 3, 12, 2, 0, true], [0, 2, 5, 3, 0, true], [10, 4, 80, 3, 2, true], [2, 2, 60, 2, 2, false]];
   const ITEMS = { license_x5: 250, license_x10: 900, bridge: 600, boat: 300, stall: 1500 };
   const PROJECTS = [[[[1, 30], [11, 5]], 400], [[[12, 10], [11, 8]], 0], [[[0, 40]], 600]];
-  const BADGES = ['first_harvest', 'green_thumb', 'jade_hunter', 'angler', 'x10_survivor', 'faded_rita', 'beat_kaito', 'debt_free', 'early_bird', 'restorer', 'best_friend', 'first_spirit', 'spirit_tamer', 'shiny_hunter', 'legend_tamer', 'wallet_linked', 'lantern_seeker', 'lantern_keeper'];
+  const BADGES = ['first_harvest', 'green_thumb', 'jade_hunter', 'angler', 'x10_survivor', 'faded_rita', 'beat_kaito', 'debt_free', 'early_bird', 'restorer', 'best_friend', 'first_spirit', 'spirit_tamer', 'shiny_hunter', 'legend_tamer', 'wallet_linked', 'lantern_seeker', 'lantern_keeper', 'spirit_champion'];
   const PLOT_COST = 120, MAX_PLOTS = 18, START_PLOTS = 6, BARN_CAP = 40, NPCS = 8, ROCKS = 8, ENERGY_MAX = 100;
 
   const R = (typeof module !== 'undefined' && module.exports) ? require('./rules.js') : root.Rules;
@@ -27,7 +27,7 @@
       projects: PROJECTS.map(() => false), donated: PROJECTS.map(() => new Array(NG + 1).fill(0)), mined_day: 0, mined: 0, catches_today: 0, cat_day: 0,
       harvested: 0, jade_found: 0, fish_caught: 0, kaito_pnl: 0, start_coins: START_COINS, seasons_won: 0, best_score: 0,
       lead: null, enc_today: 0, fed_today: 0, wild: null, wallet: null, book: 0, shards: 0, clues: 0, solved_day: [0, 0, 0],
-      fate_day: 0, fate: [], daily: [0, 0, 0, 0, 0, 0, 0], quests_claimed: 0, chapter: 1, boss_wins: 0 };
+      fate_day: 0, fate: [], daily: [0, 0, 0, 0, 0, 0, 0], quests_claimed: 0, chapter: 1, boss_wins: 0, duel_day: [0, 0, 0], duel_wins: 0 };
   };
   const preimage = (player, season, day, event, rumors, salt) => `${player}|${season}|${day}|${event}|${rumors}|${salt}`;
   function settle(pos, price) { const e = Math.max(1, pos.entry); const mv = Math.trunc((price - e) * 1e6 / e); return Math.trunc(pos.stake * pos.lev * mv * (pos.long ? 1 : -1) / 1e6); }
@@ -91,7 +91,7 @@
       p.plots = old.plots.map(pl => ({ ...pl, watered_day: 0 })); p.seeds = old.seeds; p.friendship = old.friendship; p.projects = old.projects; p.donated = old.donated;
       p.harvested = old.harvested; p.jade_found = old.jade_found; p.fish_caught = old.fish_caught;
       p.seasons_won = old.seasons_won; p.best_score = old.best_score;
-      p.lead = old.lead; p.wallet = old.wallet; p.book = old.book; p.shards = old.shards; p.clues = old.clues; p.chapter = old.chapter; p.boss_wins = old.boss_wins;
+      p.lead = old.lead; p.wallet = old.wallet; p.book = old.book; p.shards = old.shards; p.clues = old.clues; p.chapter = old.chapter; p.boss_wins = old.boss_wins; p.duel_wins = old.duel_wins;
       this.players[c] = p;
     }
     open_position(c, { good, long, lev, stake }) {
@@ -240,6 +240,19 @@
             req(done, 'this chapter is not finished yet'); p.chapter++;
             if (p.chapter >= 2 && p.chapter <= 4) { p.shards++; p.coins += 10000; } if (p.chapter === 5) { p.shards += 2; p.coins += 20000; }
             if (p.chapter > 5) { badges.push('lantern_keeper'); this._mintSpirit(c, 37, false); p.book = this._bookAdd(p.book, 37); }
+            break;
+          }
+          case 'Duel': {
+            const f = a.foe; req(f >= 0 && f < R.FOES.length, 'no such rival');
+            req(Array.isArray(a.team) && a.team.length >= 1 && a.team.length <= 3, 'pick one to three spirits');
+            req(p.duel_day[f] !== p.day, 'one duel a day with each rival');
+            if (f === 2) req(p.chapter >= 5, 'the Great Spirit is still asleep');
+            energy(R.DUEL_ENERGY);
+            const mine = a.team.map((t, i) => { req(!a.team.slice(0, i).includes(t), 'each spirit fights once'); this._ownsSpirit(c, t); const k = this.tokens[t]; return [k.species, R.spiritLevel(k.xp)]; });
+            p.duel_day[f] = p.day;
+            let n = 0; const won = R.duel(mine, R.FOES[f].team, () => roll('duel' + f, n++)).won;
+            a.team.forEach(t => this._xp(t, won ? 20 : 6));
+            if (won) { p.coins += R.FOES[f].coins * 100; p.duel_wins++; if (f === 2) { p.boss_wins |= 1; p.shards++; badges.push('spirit_champion'); } }
             break;
           }
           case 'Solve': {

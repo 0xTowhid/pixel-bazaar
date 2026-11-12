@@ -100,7 +100,7 @@ const Worlds = (() => {
       for (const [x, y] of [[6, 19], [12, 19], [24, 19]]) a.prop('house', 16 + (x % 3), 14, 1, 1, x + 1, y);
       for (let i = 0; i < 6; i++) a.prop('house', 22 + (i % 4), 20, 1, 2, 5 + i * 5, 4, 1);
       a.prop('house', 0, 5, 3, 2, 18, 26, 0); // the moon gate back home
-      a.objects.push({ kind: 'merchant', x: 15.5, y: 12.8, solid: true, text: 'The Moon Merchant: "Charms, lanterns, strange fruit. Come back when the duel tables open."' });
+      a.objects.push({ kind: 'merchant', x: 15.5, y: 12.8, solid: true, text: 'Rita runs the duel table at night.' });
       a.objects.push({ kind: 'lamp', x: 9.5, y: 15.2 }); a.objects.push({ kind: 'lamp', x: 28.5, y: 15.2 }); a.objects.push({ kind: 'lamp', x: 19.5, y: 7.2 });
       for (let x = 1; x < a.W - 2; x += 2) for (const y of [1, a.H - 3]) if (a.free2(x, y)) a.prop('nature', 14, 0, 2, 2, x, y, 1);
       return { spawn: { x: 19.5, y: 24.6 }, exit: { x: 19.5, y: 27.6, to: 'town', label: 'THROUGH THE MOON GATE, HOME' } };

@@ -66,7 +66,7 @@
     x10_survivor: 'Won a x10 trade', faded_rita: 'Faded Rita and won', beat_kaito: 'Beat Kaito this season', debt_free: 'Paid the debt',
     early_bird: 'Paid the debt by day 6', restorer: 'Finished a town project', best_friend: '5 hearts with a local',
     first_spirit: 'Caught your first spirit', spirit_tamer: 'Caught 10 kinds of spirit', shiny_hunter: 'Caught a shiny spirit',
-    legend_tamer: 'Raised a legendary spirit', wallet_linked: 'Linked a NEAR wallet', lantern_seeker: 'Solved all three world puzzles', lantern_keeper: 'Brought the Lantern back',
+    legend_tamer: 'Raised a legendary spirit', wallet_linked: 'Linked a NEAR wallet', lantern_seeker: 'Solved all three world puzzles', lantern_keeper: 'Brought the Lantern back', spirit_champion: 'Beat the Great Spirit in a duel',
   };
   // ---- spirits (same table as the contract) ----
   const ELEMENTS = [
@@ -205,6 +205,37 @@
   function rumorRight(k, r, truth) { return r.quiet ? !SOURCES[k].domain.includes(EVENTS[truth].id) : r.ev === truth; }
   const hearts = f => Math.min(5, Math.floor((f || 0) / 20));
 
-  const Rules = { GOODS, CROPS, EVENTS, SOURCES, NPC_IDS, ITEMS, PROJECTS, BADGES, ENERGY, ELEMENTS, RARITY, SPECIES, SPAWN, ZONES, CATCH_CHANCE, ENCOUNTERS_A_DAY, FEEDS_A_DAY, spiritLevel, FATE, QUESTS, CHAPTERS, mulberry32, seasonAccuracy, planDay, encodeRumors, decodeRumors, rumorRight, evIndex, hearts };
+  // ---- spirit duels (same as the contract) ----
+  const FOES = [
+    { name: 'Mei', where: 'town', face: 'Slime', team: [[12, 2], [20, 3], [23, 3]], coins: 40, line: "Let's see what your little ones can do!" },
+    { name: 'Rita', where: 'Moon Market', face: 'LanternRed', team: [[25, 8], [17, 9], [34, 10]], coins: 120, line: "Darling, I never lose. Not at cards, not at markets." },
+    { name: 'Great Spirit', where: 'the old woods gate', face: 'GiantSpirit', team: [[10, 12], [17, 12], [11, 16]], coins: 300, line: 'WHO WAKES THE GUARDIAN OF THE LANTERN?' },
+  ];
+  const DUEL_ENERGY = 10;
+  const BEATS = [[0, 4], [4, 1], [1, 0], [2, 3], [3, 0], [5, 6], [6, 5]];
+  const beats = (a, b) => BEATS.some(([x, y]) => x === a && y === b);
+  const fighter = (sp, lv) => { const s = SPECIES[sp]; return { sp, lv, el: s.el, hp: Math.trunc(s.hp * (20 + lv) / 20), atk: Math.trunc(s.atk * (20 + lv) / 20), spd: s.spd + Math.trunc(lv / 4) }; };
+  // the same duel the contract runs; `next()` gives the rolls in order. Returns { won, log } so the game can show every hit.
+  function duel(team, foe, next) {
+    const side = [team.map(([s, l]) => fighter(s, l)), foe.map(([s, l]) => fighter(s, l))];
+    const hp = side.map(v => v.map(f => f.hp)), at = [0, 0], log = [];
+    for (let t = 0; t < 80; t++) {
+      if (at[0] === side[0].length || at[1] === side[1].length) break;
+      const x = side[0][at[0]], y = side[1][at[1]], r = next();
+      const first = x.spd > y.spd || (x.spd === y.spd && r < 128) ? 0 : 1;
+      for (const k of [first, 1 - first]) {
+        const me = side[k][at[k]], them = side[1 - k][at[1 - k]];
+        let dmg = Math.trunc(me.atk * (85 + next() % 31) / 100), eff = 0;
+        if (beats(me.el, them.el)) { dmg = Math.trunc(dmg * 3 / 2); eff = 1; } else if (beats(them.el, me.el)) { dmg = Math.trunc(dmg * 2 / 3); eff = -1; }
+        const crit = next() < 20; if (crit) dmg = Math.trunc(dmg * 3 / 2);
+        dmg = Math.max(1, dmg); hp[1 - k][at[1 - k]] -= dmg;
+        const ko = hp[1 - k][at[1 - k]] <= 0;
+        log.push({ by: k, from: at[k], to: at[1 - k], dmg, eff, crit, ko, left: Math.max(0, hp[1 - k][at[1 - k]]) });
+        if (ko) { at[1 - k]++; break; }
+      }
+    }
+    return { won: at[1] === side[1].length, log, side };
+  }
+  const Rules = { FOES, DUEL_ENERGY, beats, fighter, duel, GOODS, CROPS, EVENTS, SOURCES, NPC_IDS, ITEMS, PROJECTS, BADGES, ENERGY, ELEMENTS, RARITY, SPECIES, SPAWN, ZONES, CATCH_CHANCE, ENCOUNTERS_A_DAY, FEEDS_A_DAY, spiritLevel, FATE, QUESTS, CHAPTERS, mulberry32, seasonAccuracy, planDay, encodeRumors, decodeRumors, rumorRight, evIndex, hearts };
   if (typeof module !== 'undefined' && module.exports) module.exports = Rules; else root.Rules = Rules;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -109,6 +109,25 @@ body:not(.ingame) #hudL,body:not(.ingame) #objBox,body:not(.ingame) #topR,body:n
 .fKind{font-size:.8em}.fFront img{width:6.5em;height:6.5em;image-rendering:pixelated;margin:.8em 0}.fName{color:var(--gold);margin-bottom:.5em}.fText{font-size:.75em;line-height:1.6}
 #objBox{pointer-events:auto!important;cursor:pointer}
 #fade{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .35s;z-index:65}#fade.on{opacity:1}
+#duel{width:min(96%,62em);max-height:94%;overflow:auto;background:radial-gradient(circle at 50% 0,#4a2a5e,#1c1630 70%)}
+.dHead{display:flex;gap:.8em;align-items:center}.dHead img{width:4em;height:4em;image-rendering:pixelated;border:3px solid #b9a8e8;border-radius:8px;background:#2a2346}
+.dRow{display:grid;grid-template-columns:repeat(3,1fr);gap:.6em}.dGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(11em,1fr));gap:.6em;max-height:22em;overflow:auto}
+.dCard{border:3px solid;border-radius:10px;padding:.5em;background:#1c1630cc;text-align:center;position:relative;font-size:.85em}.dCard b{display:block;margin:.2em 0;color:#fff3d6}
+.dCard img{width:3.6em;height:3.6em;image-rendering:pixelated}.dCard.pick{cursor:pointer;opacity:.6}.dCard.pick.on{opacity:1;box-shadow:0 0 14px #ffd86b88;transform:translateY(-2px)}
+.dNum{position:absolute;top:.3em;left:.4em;background:var(--gold);color:#1c1630;border-radius:50%;width:1.5em;height:1.5em;line-height:1.5em;font-style:normal}
+.dSpr{width:3.6em;height:3.6em;margin:0 auto;image-rendering:pixelated;background-repeat:no-repeat}.dSpr.big{width:6em;height:6em}
+.dWheel{margin:.8em 0;text-align:center}.dBtns{display:flex;justify-content:space-between;align-items:center;gap:.6em;flex-wrap:wrap}
+#dStage{position:relative;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:.5em;min-height:20em}
+.dSide{display:flex;flex-direction:column;gap:.4em}.dVs{font-size:2em;color:var(--gold)}
+.dF{position:relative;text-align:center;opacity:.45;transform:scale(.8);transition:all .25s}.dF.front{opacity:1;transform:scale(1.1)}.dF.ko{filter:grayscale(1);opacity:.25}
+.dHp{height:.6em;background:#3a2f5c;border-radius:.3em;margin:.3em auto;width:7em;overflow:hidden}.dHp i{display:block;height:100%;background:#8ee68a;transition:width .3s}
+.dF.lungeR{transform:translateX(2em) scale(1.15)}.dF.lungeL{transform:translateX(-2em) scale(1.15)}.dF.hurt .dSpr{filter:brightness(3) sepia(1) hue-rotate(-40deg)}
+.dDmg{position:absolute;left:50%;top:0;color:#fff;font-size:1.4em;text-shadow:0 2px 0 #000;animation:dUp .7s ease-out forwards}.dDmg.crit{color:#ffd86b;font-size:1.8em}
+@keyframes dUp{from{transform:translate(-50%,0);opacity:1}to{transform:translate(-50%,-2em);opacity:0}}
+#dLog{grid-column:1/-1;text-align:center;min-height:1.6em}
+.dEnd{position:absolute;inset:0;background:#120e1fe6;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:.4em;border-radius:12px;animation:dIn .4s}
+.dEnd.win .gname{color:var(--gold);font-size:2em}.dEnd.lose .gname{color:#ff7a6e;font-size:2em}@keyframes dIn{from{opacity:0;transform:scale(.9)}}
+@media (max-width:760px){.dRow{grid-template-columns:repeat(3,1fr);font-size:.8em}.dSpr.big{width:4em;height:4em}.dHp{width:5em}}
 #book{width:min(96%,62em);max-height:92%;overflow:auto}
 .sGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(13em,1fr));gap:.8em;margin-top:.6em}
 .sCard{border:3px solid;border-radius:12px;padding:.7em;background:linear-gradient(160deg,#3b2a6b,#1c1630 65%);position:relative}
@@ -228,6 +247,7 @@ body.dlgOn #hotbar,body.dlgOn #chainlog{display:none}
   <div id="fade"></div>
   <div id="quests" class="ui box panel"></div>
   <div id="fate" class="ui box panel"></div>
+  <div id="duel" class="ui box panel"></div>
   <div id="catch" class="ui box"></div>
   <div id="cine"><canvas id="fxcv"></canvas><div class="lb top"></div><div class="lb bot"></div>
     <div id="cineTitle">CHAPTER 0 · THE NIGHT THE LANTERN WENT OUT</div><div id="cineN"></div>
@@ -255,4 +275,5 @@ body.dlgOn #hotbar,body.dlgOn #chainlog{display:none}
 <script src="spirits.js"></script>
 <script src="worldplay.js"></script>
 <script src="quests.js"></script>
+<script src="duel.js"></script>
 <script src="story.js"></script>

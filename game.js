@@ -460,7 +460,7 @@ function advance() { S.step = Math.min(S.step + 1, STEPS.length - 1); sfx('ok');
 
 // ---------- UI ----------
 let dlg = null, cardCb = null;
-const uiOpen = () => !!dlg || (S && (S.fishing || S.story || S.catching)) || ['trade', 'card', 'journal', 'profile', 'netErr', 'book', 'quests', 'fate'].some(id => $(id)?.classList.contains('on'));
+const uiOpen = () => !!dlg || (S && (S.fishing || S.story || S.catching)) || ['trade', 'card', 'journal', 'profile', 'netErr', 'book', 'quests', 'fate', 'duel'].some(id => $(id)?.classList.contains('on'));
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 function toast(t, sec = 2.5) { const el = $('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => el.style.display = 'none', sec * 1000); }
 function hideToast() { $('toast').style.display = 'none'; }
@@ -495,7 +495,7 @@ function rumorText(k) {
 }
 function hear(k) {
   const first = !S.heard[k]; S.heard[k] = true;
-  say(NPCS[k], '"' + rumorText(k) + '"', [{ t: 'THANKS', fn: closeDlg }, { t: 'GIVE A GIFT', fn: () => giftMenu(k) }]);
+  say(NPCS[k], '"' + rumorText(k) + '"', [{ t: 'THANKS', fn: closeDlg }, { t: 'GIVE A GIFT', fn: () => giftMenu(k) }, ...(k === 'mei' && (S.spirits || []).length ? [duelChoice(0)] : [])]);
   if (k === 'mei' && S.step === 0) advance();
 }
 function talkTo(n) {
@@ -648,7 +648,12 @@ function interact() {
   else if (t.kind === 'enter') enterWorld(t.to);
   else if (t.kind === 'exit') leaveWorld();
   else if (t.kind === 'piece') touchPiece(t.o);
-  else if (t.kind === 'read') { say({ name: t.o.kind === 'merchant' ? 'Moon Merchant' : 'Old stone', sheet: t.o.kind === 'merchant' ? 'hermit' : null, color: '#b9a8e8' }, t.o.text); }
+  else if (t.kind === 'read') {
+    const o = t.o, who = { name: o.kind === 'merchant' ? 'Rita, at the night table' : 'Old stone', sheet: o.kind === 'merchant' ? 'rita' : null, color: '#b9a8e8' };
+    if (o.kind === 'merchant') say(who, 'Darling! By day I sell rumors, by moonlight I duel. Three spirits each. Winner takes the pot.', [duelChoice(1), { t: 'LEAVE', fn: closeDlg }]);
+    else if (o.kind === 'gate' && WD.id === 'woods' && S.player.chapter >= 5) say({ name: 'The old spirit gate', color: '#b9a8e8' }, S.player.boss_wins & 1 ? 'The Great Spirit rests. It bows when it sees you. (You can still spar with it once a day.)' : 'The seal is cracking. Something huge breathes behind it. The thief of the Lantern?', [duelChoice(2), { t: 'NOT YET', fn: closeDlg }]);
+    else say(who, o.text);
+  }
   else if (t.kind === 'board') openTown();
   else if (t.kind === 'home') {
     const hour = 6 + S.t / DAY_SECONDS * 18;
@@ -686,7 +691,7 @@ addEventListener('keydown', e => {
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; keys[k] = true;
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
   if (k === 'e' || k === ' ' || k === 'Enter') interact();
-  if (k === 'Escape') { closeTrade(); $('journal').classList.remove('on'); $('profile').classList.remove('on'); $('book').classList.remove('on'); $('quests').classList.remove('on'); if (dlg) closeDlg(); }
+  if (k === 'Escape') { closeTrade(); $('journal').classList.remove('on'); $('profile').classList.remove('on'); $('book').classList.remove('on'); $('quests').classList.remove('on'); if (DUEL.on && !$('dStage')) closeDuel(); if (dlg) closeDlg(); }
   if (k === 'q' && S && S.player && !dlg && !$('card').classList.contains('on')) $('quests').classList.contains('on') ? $('quests').classList.remove('on') : openQuests();
   if (k === 'b' && S && S.player && !dlg && !$('card').classList.contains('on')) $('book').classList.contains('on') ? $('book').classList.remove('on') : openBook();
   if (k === 'j' && !dlg && !$('card').classList.contains('on')) $('journal').classList.contains('on') ? $('journal').classList.remove('on') : openJournal();
@@ -752,7 +757,7 @@ addEventListener('resize', () => { fit(); layoutTop(); }); fit(); setTimeout(lay
 let MINI, last = performance.now(), wx = [];
 for (let i = 0; i < 160; i++) wx.push({ x: Math.random() * VW, y: Math.random() * VH, s: .6 + Math.random() * .8 });
 function update(dt) {
-  const pOn = ['trade', 'card', 'journal', 'profile', 'netErr', 'cine', 'tour', 'book', 'catch', 'quests', 'fate'].some(id => $(id)?.classList.contains('on'));
+  const pOn = ['trade', 'card', 'journal', 'profile', 'netErr', 'cine', 'tour', 'book', 'catch', 'quests', 'fate', 'duel'].some(id => $(id)?.classList.contains('on'));
   document.body.classList.toggle('dlgOn', !!dlg);
   if ((layoutTop.n = (layoutTop.n || 0) + 1) % 20 === 0) layoutTop();
   if (pOn !== document.body.classList.contains('panelOn')) { document.body.classList.toggle('panelOn', pOn); if (pOn) for (const k in keys) keys[k] = false; }

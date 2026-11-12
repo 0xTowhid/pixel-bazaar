@@ -103,6 +103,48 @@ pub fn daily_quest(commit: &str, who: &AccountId, slot: u8) -> u8 {
     while picked.len() <= slot as usize { let q = roll(commit, who, "quest", i) % QUESTS.len() as u8; if !picked.contains(&q) { picked.push(q); } i += 1; }
     picked[slot as usize]
 }
+// ---------------- spirit duels ----------------
+/// Duel rivals: (name, team of (species, level), coins for a win). 0 Mei in town, 1 Rita at the Moon Market,
+/// 2 the Great Spirit at the old woods gate (story chapter 5).
+pub const FOES: [(&str, [(u8, u8); 3], u32); 3] = [
+    ("Mei", [(12, 2), (20, 3), (23, 3)], 40),
+    ("Rita", [(25, 8), (17, 9), (34, 10)], 120),
+    ("Great Spirit", [(10, 12), (17, 12), (11, 16)], 300),
+];
+pub const DUEL_ENERGY: u16 = 10;
+/// Element wheel: fire burns nature, nature drinks water, water puts out fire, wind wears down earth,
+/// earth smothers fire, spirit and dark beat each other.
+pub fn beats(a: u8, b: u8) -> bool {
+    matches!((a, b), (FIRE, NATURE) | (NATURE, WATER) | (WATER, FIRE) | (WIND, EARTH) | (EARTH, FIRE) | (SPIRIT, DARK) | (DARK, SPIRIT))
+}
+/// A fighter's (element, hp, attack, speed) at a level.
+pub fn fighter(species: u8, level: u8) -> (u8, i32, i32, i32) {
+    let s = SPECIES[species as usize]; let l = level as i32;
+    (s.2, s.4 as i32 * (20 + l) / 20, s.5 as i32 * (20 + l) / 20, s.6 as i32 + l / 4)
+}
+/// The whole duel, turn by turn, from a stream of rolls (fixed by the day's commitment). true = the player wins.
+/// shared/rules.js has the same function, so the game can show every hit.
+pub fn duel(team: &[(u8, u8)], foe: &[(u8, u8)], next: &mut dyn FnMut() -> u8) -> bool {
+    let a: Vec<_> = team.iter().map(|&(s, l)| fighter(s, l)).collect();
+    let b: Vec<_> = foe.iter().map(|&(s, l)| fighter(s, l)).collect();
+    let mut hp = [a.iter().map(|f| f.1).collect::<Vec<_>>(), b.iter().map(|f| f.1).collect::<Vec<_>>()];
+    let side = [&a, &b]; let mut at = [0usize, 0usize];
+    for _ in 0..80 {
+        if at[0] == a.len() || at[1] == b.len() { break; }
+        let (x, y) = (side[0][at[0]], side[1][at[1]]);
+        let r = next();
+        let first = if x.3 > y.3 || (x.3 == y.3 && r < 128) { 0 } else { 1 };
+        for k in [first, 1 - first] {
+            let (me, them) = (side[k][at[k]], side[1 - k][at[1 - k]]);
+            let mut dmg = me.2 * (85 + (next() % 31) as i32) / 100;
+            if beats(me.0, them.0) { dmg = dmg * 3 / 2; } else if beats(them.0, me.0) { dmg = dmg * 2 / 3; }
+            if next() < 20 { dmg = dmg * 3 / 2; }
+            let h = &mut hp[1 - k][at[1 - k]]; *h -= dmg.max(1);
+            if *h <= 0 { at[1 - k] += 1; break; }
+        }
+    }
+    at[1] == b.len()
+}
 pub const NFT_BASE: &str = "https://raw.githubusercontent.com/0xTowhid/pixel-bazaar/main/nft";
 
 #[derive(BorshStorageKey)]
@@ -149,6 +191,7 @@ pub struct Player {
     pub book: u64, pub shards: u16,
     pub clues: u32, pub solved_day: Vec<u8>,
     pub fate_day: u8, pub fate: Vec<u8>, pub daily: Vec<u8>, pub quests_claimed: u8, pub chapter: u8, pub boss_wins: u32,
+    pub duel_day: Vec<u8>, pub duel_wins: u32,
 }
 
 /// An NFT: a spirit, a badge or a legendary catch.
@@ -185,6 +228,8 @@ pub enum Action {
     Solve { puzzle: u8, answer: Vec<u8> },
     // Madame Vey, the quest board, the story
     DrawFate, ClaimQuest { slot: u8 }, AdvanceStory,
+    // spirit duels: up to three of your spirits against a rival's team
+    Duel { foe: u8, team: Vec<String> },
 }
 
 #[near(serializers = [borsh, json])]
@@ -220,6 +265,7 @@ fn new_player(season: u32) -> Player {
         lead: None, enc_today: 0, fed_today: 0, wild: None, wallet: None, book: 0, shards: 0,
         clues: 0, solved_day: vec![0; PUZZLES.len()],
         fate_day: 0, fate: vec![], daily: vec![0; 7], quests_claimed: 0, chapter: 1, boss_wins: 0,
+        duel_day: vec![0; FOES.len()], duel_wins: 0,
     }
 }
 /// Commitment string the operator hashes on day start and reveals at settlement.
@@ -282,7 +328,7 @@ impl Contract {
         p.seeds = old.seeds; p.friendship = old.friendship; p.projects = old.projects; p.donated = old.donated;
         p.harvested = old.harvested; p.jade_found = old.jade_found; p.fish_caught = old.fish_caught;
         p.seasons_won = old.seasons_won; p.best_score = old.best_score;
-        p.lead = old.lead; p.wallet = old.wallet; p.book = old.book; p.shards = old.shards; p.clues = old.clues; p.chapter = old.chapter; p.boss_wins = old.boss_wins;
+        p.lead = old.lead; p.wallet = old.wallet; p.book = old.book; p.shards = old.shards; p.clues = old.clues; p.chapter = old.chapter; p.boss_wins = old.boss_wins; p.duel_wins = old.duel_wins;
         self.players.insert(id, p);
     }
 
@@ -525,6 +571,29 @@ impl Contract {
                     p.chapter += 1;
                     match p.chapter { 2 | 3 | 4 => { p.shards += 1; p.coins += 100 * 100; } 5 => { p.shards += 2; p.coins += 200 * 100; } _ => {} }
                     if p.chapter > STORY_CHAPTERS { badges.push("lantern_keeper"); self.mint_spirit(&id, 37, false); p.book |= 1u64 << 37; } // the Jade Dragon
+                }
+                Action::Duel { foe, team } => {
+                    let f = foe as usize; require!(f < FOES.len(), "no such rival");
+                    require!(!team.is_empty() && team.len() <= 3, "pick one to three spirits");
+                    require!(p.duel_day[f] != p.day, "one duel a day with each rival");
+                    if f == 2 { require!(p.chapter >= 5, "the Great Spirit is still asleep"); }
+                    use_energy(&mut p, DUEL_ENERGY);
+                    let mut mine = vec![];
+                    for (i, t) in team.iter().enumerate() {
+                        require!(!team[..i].contains(t), "each spirit fights once");
+                        self.assert_owns_spirit(&id, t);
+                        let Some(Tok::Spirit { species, xp, .. }) = self.tokens.get(t).cloned() else { unreachable!() };
+                        mine.push((species, spirit_level(xp)));
+                    }
+                    p.duel_day[f] = p.day;
+                    let mut n = 0u32; let what = format!("duel{f}");
+                    let won = duel(&mine, &FOES[f].1, &mut || { n += 1; roll(&commit, &id, &what, n - 1) });
+                    for t in team.iter() { self.add_xp(t, if won { 20 } else { 6 }); }
+                    if won {
+                        p.coins += FOES[f].2 as u64 * 100; p.duel_wins += 1;
+                        if f == 2 { p.boss_wins |= 1; p.shards += 1; badges.push("spirit_champion"); }
+                    }
+                    log!("duel with {}: {}", FOES[f].0, if won { "won" } else { "lost" });
                 }
                 Action::Solve { puzzle, answer } => {
                     require!((puzzle as usize) < PUZZLES.len(), "no such puzzle");
@@ -878,8 +947,8 @@ impl Contract {
     }
 }
 
-pub const BADGES: [&str; 18] = ["first_harvest", "green_thumb", "jade_hunter", "angler", "x10_survivor", "faded_rita", "beat_kaito", "debt_free", "early_bird", "restorer", "best_friend",
-    "first_spirit", "spirit_tamer", "shiny_hunter", "legend_tamer", "wallet_linked", "lantern_seeker", "lantern_keeper"];
+pub const BADGES: [&str; 19] = ["first_harvest", "green_thumb", "jade_hunter", "angler", "x10_survivor", "faded_rita", "beat_kaito", "debt_free", "early_bird", "restorer", "best_friend",
+    "first_spirit", "spirit_tamer", "shiny_hunter", "legend_tamer", "wallet_linked", "lantern_seeker", "lantern_keeper", "spirit_champion"];
 fn use_energy(p: &mut Player, n: u16) { require!(p.energy >= n, "you are too tired"); p.energy -= n; }
 
 #[cfg(test)]
@@ -1249,5 +1318,33 @@ mod tests {
         let p = c.get_player(pl()).unwrap(); assert_eq!(p.chapter, 6);
         assert!(c.get_spirits(pl()).iter().any(|s| s.species == 37), "the Jade Dragon joins you");
         assert_eq!(c.mt_balance_of(pl(), "badge_lantern_keeper".into()).0, 1);
+    }
+    #[test]
+    fn duels_are_fixed_by_the_day_and_pay_once() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        let t = c.mint_spirit(&pl(), 2, false); // an Inferno
+        c.add_xp(&t, 40 * 20);
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::Duel { foe: 2, team: vec![t.clone()] }]))).is_err(), "boss needs chapter 5");
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::Duel { foe: 0, team: vec![t.clone(), t.clone()] }]))).is_err(), "no doubles");
+        let before = c.get_player(pl()).unwrap().coins;
+        c.act(vec![Action::Duel { foe: 0, team: vec![t.clone()] }]);
+        let p = c.get_player(pl()).unwrap();
+        assert_eq!(p.coins, before + 40 * 100); assert_eq!(p.duel_wins, 1); // a level 40 Inferno beats Mei
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::Duel { foe: 0, team: vec![t.clone()] }]))).is_err(), "once a day");
+        c.players.get_mut(&pl()).unwrap().chapter = 5;
+        c.act(vec![Action::Duel { foe: 2, team: vec![t.clone()] }]);
+        let p = c.get_player(pl()).unwrap();
+        assert_eq!(p.boss_wins & 1, 1); assert_eq!(c.mt_balance_of(pl(), "badge_spirit_champion".into()).0, 1);
+        c.act(vec![Action::AdvanceStory]); assert_eq!(c.get_player(pl()).unwrap().chapter, 6);
+    }
+    #[test]
+    fn a_weak_team_loses_but_learns() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        let t = c.mint_spirit(&pl(), 23, false); // a level 1 Flutter
+        c.act(vec![Action::Duel { foe: 1, team: vec![t.clone()] }]);
+        let p = c.get_player(pl()).unwrap(); assert_eq!(p.duel_wins, 0);
+        assert!(matches!(c.tokens.get(&t), Some(Tok::Spirit { xp: 6, .. })));
+        // the element wheel matters
+        assert!(beats(WATER, FIRE) && !beats(FIRE, WATER));
     }
 }
