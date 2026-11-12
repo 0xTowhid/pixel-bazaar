@@ -6,7 +6,7 @@
 //!   at settlement; the contract rejects a reveal that does not match.
 //! - Coins, prices, leverage positions, liquidations, farm plots, seeds, energy, friendships, town projects.
 //! - Goods in your barn, items (licenses, bridge, boat, stall) and achievement badges are NEP-245 tokens.
-//! - NPC accounts (`rita.<contract>`, `kaito.<contract>`) with their own trades and ledgers.
+//! - Agent trader accounts (`rita.`, `kaito.`, `pell.`, `bolt.`, `luna.<contract>`) with their own trades and ledgers.
 //! Numbers match shared/rules.js and shared/engine.js.
 
 use near_sdk::json_types::U128;
@@ -766,6 +766,7 @@ impl Contract {
     pub fn commit_day(&mut self, player: AccountId, day: u8, commitment: String, npc_moves: Vec<NpcMove>) {
         self.assert_operator();
         require!(commitment.len() == 64, "commitment must be a sha256 hex");
+        require!(npc_moves.len() <= 8, "too many agent moves");
         let p = self.player_mut(&player);
         require!(!p.finished && p.day == day, "wrong day");
         require!(p.commitment.is_none(), "already committed");
@@ -1584,5 +1585,22 @@ mod tests {
     fn natural_bosses_are_rare() {
         let n = (0..3000u64).filter(|w| env::sha256(format!("pixel-bazaar|boss|{w}").as_bytes())[0] < BOSS_CHANCE).count();
         assert!(n > 100 && n < 330, "about one 2-day window in 15: {n}"); // ~ once a month
+    }
+    #[test]
+    fn agent_traders_each_win_or_lose_on_their_own_ledger() {
+        let mut c = setup();
+        let ag = |n: &str| -> AccountId { format!("{n}.bazaar.testnet").parse().unwrap() };
+        for n in ["kaito", "pell", "bolt", "luna"] { c.npcs.insert(ag(n), 1000 * 100); }
+        let season = c.get_player(pl()).unwrap().season;
+        let h = hex::encode(env::sha256(commit_preimage(&pl(), season, 1, 0, "r", "s").as_bytes()));
+        // event 0 lifts good 1: Kaito and Luna are long it, Granny Pell fades Kaito, Bolt bets on another good
+        ctx(op()); c.commit_day(pl(), 1, h, vec![
+            NpcMove { npc: ag("kaito"), good: 1, long: true }, NpcMove { npc: ag("pell"), good: 1, long: false },
+            NpcMove { npc: ag("luna"), good: 1, long: true }, NpcMove { npc: ag("bolt"), good: 5, long: true }]); ctx(pl());
+        night(&mut c, 1, 0);
+        let led: std::collections::HashMap<String, i64> = c.get_npcs().into_iter().map(|(a, v)| (a.to_string(), v)).collect();
+        assert!(led["luna.bazaar.testnet"] > 1000 * 100 && led["pell.bazaar.testnet"] < 1000 * 100, "{led:?}");
+        assert!(led["kaito.bazaar.testnet"] - 1000 * 100 == 2 * (led["luna.bazaar.testnet"] - 1000 * 100), "Kaito bets twice as big");
+        ctx(op()); assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| { let mut c2 = setup(); ctx(op()); c2.commit_day(pl(), 1, "a".repeat(64), (0..9).map(|_| NpcMove { npc: ag("bolt"), good: 1, long: true }).collect()) })).is_err());
     }
 }

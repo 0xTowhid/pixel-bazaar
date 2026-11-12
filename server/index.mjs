@@ -48,7 +48,7 @@ const mockKeys = new Map();
 let mock;
 if (MOCK) {
   mock = new Engine(OPERATOR, CONTRACT, sha);
-  mock.create_npc(OPERATOR, 'rita'); mock.create_npc(OPERATOR, 'kaito');
+  for (const a of Rules.AGENTS) mock.create_npc(OPERATOR, a.id);
   view = async (method, args) => { const fn = mock[method]; if (!fn) throw new Error('no view ' + method); return method === 'get_player' ? fn.call(mock, args.account_id) : method === 'mt_balance_of' ? fn.call(mock, args.account_id, args.token_id) : fn.call(mock); };
   hasKey = async (account, pk) => mockKeys.get(account) === pk;
   balanceOf = async () => 100; sendNear = async () => null;
@@ -109,7 +109,9 @@ function plan(account, season, day) {
   const r = rumors.rita;
   const npc_moves = [{ npc: `kaito.${CONTRACT}`, good: kaito.good, long: kaito.long }];
   if (r.lying) npc_moves.push({ npc: `rita.${CONTRACT}`, good: Rules.EVENTS[r.ev].fx[0][0], long: false });
-  return { truth, rumors, rumorText, salt, commitment, weather, npc_moves, kaito };
+  const agents = Rules.agentMoves(rng, truth, rumors, kaito);
+  for (const [id, m] of Object.entries(agents)) npc_moves.push({ npc: `${id}.${CONTRACT}`, good: m.good, long: m.long });
+  return { truth, rumors, rumorText, salt, commitment, weather, npc_moves, kaito, agents };
 }
 
 // ---------- http ----------
@@ -189,7 +191,7 @@ const routes = {
       const s = Rules.SOURCES[k], f = (p.friendship || [])[s.npc] || 0;
       rumors[k] = { ...r }; if (Rules.hearts(f) < 2) delete rumors[k].sure;
     }
-    return { season: p.season, day: p.day, asleep: !!p.asleep, rumors, weather: d.weather, kaito: d.kaito, stormWarning, commitment: d.commitment, tx: txHash(tx) };
+    return { season: p.season, day: p.day, asleep: !!p.asleep, rumors, weather: d.weather, kaito: d.kaito, agents: d.agents, stormWarning, commitment: d.commitment, tx: txHash(tx) };
   }),
   // Reveal the event after the player has gone to sleep.
   'POST /api/settle': body => checkId(body.accountId) && withLock(body.accountId, async () => {

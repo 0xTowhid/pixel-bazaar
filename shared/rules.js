@@ -256,6 +256,21 @@
     CURSES: [{ name: 'Sticky Boots', text: '-15 energy on their next move' }, { name: 'Crow Thief', text: 'a crow steals 30 of their coins' }, { name: 'Frog Voice', text: 'they croak for a day. harmless, very funny' }],
     BOSS_WINDOW_MS: 2 * 86400000, BOSS_CHANCE: 17, BOSS_HP: 3000, BOSS_HITS: 3, BOSS_FORMS: [11, 2, 8],
   };
-  const Rules = { ISLAND, LEGENDS, FOES, DUEL_ENERGY, beats, fighter, duel, GOODS, CROPS, EVENTS, SOURCES, NPC_IDS, ITEMS, PROJECTS, BADGES, ENERGY, ELEMENTS, RARITY, SPECIES, SPAWN, ZONES, CATCH_CHANCE, ENCOUNTERS_A_DAY, FEEDS_A_DAY, spiritLevel, FATE, QUESTS, CHAPTERS, mulberry32, seasonAccuracy, planDay, encodeRumors, decodeRumors, rumorRight, evIndex, hearts };
+  // ---- bazaar agents: traders with their own NEAR accounts and coin ledgers, settled on chain every night ----
+  const AGENTS = [
+    { id: 'kaito', name: 'Kaito the Whale', sheet: 'kaito', style: 'Big money. Reads the market right about two times in three.', stake: 200 },
+    { id: 'rita', name: 'Rita', sheet: 'rita', style: 'Shorts what she lies about. Only trades on the days she lies.', stake: 100 },
+    { id: 'pell', name: 'Granny Pell', sheet: 'v1', style: 'A contrarian. Always bets against Kaito, on the same good.', stake: 100 },
+    { id: 'bolt', name: 'Bolt-9', sheet: 'v2', style: "A trading bot. Follows Mei's gossip blindly, every single day.", stake: 100 },
+    { id: 'luna', name: 'Luna Moonsong', sheet: 'seer', style: 'Reads the stars. Right about seven times in ten.', stake: 100 },
+  ];
+  // the new agents' bets for a day (Kaito and Rita are planned in planDay)
+  function agentMoves(rng, truth, rumors, kaito) {
+    const bet = ev => ({ good: EVENTS[ev].fx[0][0], long: EVENTS[ev].up });
+    const mei = rumors.mei && !rumors.mei.quiet ? rumors.mei.ev : Math.floor(rng() * EVENTS.length);
+    const luna = rng() < .7 ? truth : Math.floor(rng() * EVENTS.length);
+    return { pell: { good: kaito.good, long: !kaito.long }, bolt: bet(mei), luna: bet(luna) };
+  }
+  const Rules = { AGENTS, agentMoves, ISLAND, LEGENDS, FOES, DUEL_ENERGY, beats, fighter, duel, GOODS, CROPS, EVENTS, SOURCES, NPC_IDS, ITEMS, PROJECTS, BADGES, ENERGY, ELEMENTS, RARITY, SPECIES, SPAWN, ZONES, CATCH_CHANCE, ENCOUNTERS_A_DAY, FEEDS_A_DAY, spiritLevel, FATE, QUESTS, CHAPTERS, mulberry32, seasonAccuracy, planDay, encodeRumors, decodeRumors, rumorRight, evIndex, hearts };
   if (typeof module !== 'undefined' && module.exports) module.exports = Rules; else root.Rules = Rules;
 })(typeof window !== 'undefined' ? window : globalThis);

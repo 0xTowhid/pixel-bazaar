@@ -186,7 +186,7 @@ async function sync() {
 async function beginDay(first) {
   const d = await mustDo('Committing today to NEAR', () => Backend.beginDay(), 'commit_day');
   if (d.finished) { await sync(); endSeason(S.player.won); return; }
-  S.t = 0; S.warned = false; S.heard = {}; S.weather = d.weather; S.kaito = d.kaito; S.stormWarning = d.stormWarning;
+  S.t = 0; S.warned = false; S.heard = {}; S.weather = d.weather; S.kaito = d.kaito; S.agents = d.agents || {}; S.stormWarning = d.stormWarning;
   S.rumors = {};
   for (const [k, r] of Object.entries(d.rumors)) S.rumors[k] = r.quiet ? { quiet: true, sure: r.sure } : { ev: EVENTS[r.ev], evIdx: r.ev, lying: !!r.lying, sure: r.sure };
   NPCS.kaito.selling = d.kaito ? `${d.kaito.long ? 'LONG' : 'SHORT'} ${GOODS[d.kaito.good].name.toUpperCase()} x5` : null;
@@ -525,10 +525,29 @@ function talkTo(n) {
   say(n, pick(['Have you met Madame Vey in the woods? Spooky lady.', "The Old Sailor is never wrong about the sea.", 'Rita always seems to know which way prices go. Funny that.', 'Get home before midnight. Nobody sleeps well on the street.']));
 }
 
+// ---------- the bazaar agents: traders with their own NEAR accounts, settled on chain every night ----------
+async function openAgents() {
+  let led = []; try { led = await Backend.npcs(); } catch (e) {}
+  const bal = id => { const r = led.find(([a]) => a.split('.')[0] === id); return r ? r[1] / 100 : null; };
+  const today = id => id === 'kaito' ? S.kaito : id === 'rita' ? (S.rumors.rita && S.rumors.rita.lying ? { good: S.rumors.rita.ev.fx[0][0], long: false, secret: true } : null) : (S.agents || {})[id];
+  const rows = Rules.AGENTS.map(a => {
+    const m = today(a.id), b = bal(a.id), pnl = b === null ? null : b - 1000;
+    return `<div class="agRow"><canvas data-face="${a.sheet}" width="48" height="48"></canvas><div class="agTxt"><b>${a.name.toUpperCase()}</b><div class="sub">${a.style}</div>
+      <div class="sub">${m ? (m.secret ? "TODAY: she won't say. (Hint: whatever she's selling.)" : `TODAY: <span class="${m.long ? 'up' : 'dn'}">${m.long ? '▲ LONG' : '▼ SHORT'} ${GOODS[m.good].name.toUpperCase()}</span> · ${a.stake} coins x5`) : 'TODAY: sitting out'}</div></div>
+      <div class="agBal ${pnl === null ? '' : pnl >= 0 ? 'up' : 'dn'}">${b === null ? '—' : fmt(b)}<div class="sub">${pnl === null ? '' : (pnl >= 0 ? '+' : '') + fmt(pnl)}</div></div></div>`;
+  }).join('');
+  $('trade').classList.add('wideAg');
+  $('trade').innerHTML = `<div class="gname">BAZAAR AGENTS</div><div class="sub" style="line-height:1.6;margin:.3em 0 .6em">Each agent is its own NEAR account with a coin ledger. Their bets are committed with your day and settled on chain at night, against the same prices as yours. Follow them, or fade them.</div>
+    <div class="agList">${rows}</div><div class="tfoot"><span></span><span><button class="link" id="agBack">BACK TO TRADING</button></span></div>`;
+  $('trade').querySelectorAll('canvas[data-face]').forEach(c => portrait(c.dataset.face, c));
+  $('agBack').onclick = renderTrade;
+}
+
 // ---------- trading screen ----------
 function openTrade() { hideToast(); renderTrade(); $('trade').classList.add('on'); sfx('menu'); }
 function closeTrade() { $('trade').classList.remove('on'); }
 function renderTrade() {
+  $('trade').classList.remove('wideAg');
   const g = GOODS[S.sel], price = S.price[g.id];
   const gi = goodIdx(g.id);
   const chips = Object.keys(S.heard).map(k => {
@@ -536,7 +555,8 @@ function renderTrade() {
     const fx = r.ev.fx.find(([x]) => x === gi); if (!fx) return '';
     const up = fx[1] > 1;
     return `<span class="chip"><canvas data-face="${SOURCES[k].sheet}" width="40" height="40"></canvas><span class="${up ? 'up' : 'dn'}">${up ? '▲ UP' : '▼ DOWN'}</span></span>`;
-  }).join('') + (S.kaito && S.kaito.good === gi ? `<span class="chip"><canvas data-face="kaito" width="40" height="40"></canvas><span class="${S.kaito.long ? 'up' : 'dn'}">${S.kaito.long ? '▲ LONG' : '▼ SHORT'}</span></span>` : '');
+  }).join('') + (S.kaito && S.kaito.good === gi ? `<span class="chip"><canvas data-face="kaito" width="40" height="40"></canvas><span class="${S.kaito.long ? 'up' : 'dn'}">${S.kaito.long ? '▲ LONG' : '▼ SHORT'}</span></span>` : '')
+    + Object.entries(S.agents || {}).filter(([, m]) => m.good === gi).map(([id, m]) => `<span class="chip" title="${Rules.AGENTS.find(a => a.id === id).name}"><canvas data-face="${Rules.AGENTS.find(a => a.id === id).sheet}" width="40" height="40"></canvas><span class="${m.long ? 'up' : 'dn'}">${m.long ? '▲ LONG' : '▼ SHORT'}</span></span>`).join('');
   const o = previewOutcome(S.stake, S.mult);
   const open = S.positions.map(p => `${p.dir > 0 ? '▲' : '▼'} ${GOOD(p.good).name} x${p.lev} · ${p.stake}`).join('   ');
   $('trade').innerHTML = `
@@ -547,7 +567,7 @@ function renderTrade() {
     <div class="stake"><button class="arrow" id="tMinus">−</button><span>${S.stake}</span><img src="assets/items/GoldCoin.png"><button class="arrow" id="tPlus">+</button></div>
     <div class="out"><span class="up">▲ +${fmt(o.win)}</span><span class="dn">▼ ${o.lose === null ? 'REKT' : fmt(o.lose)}</span></div>
     <button class="btn big gold wide" id="tOpen">OPEN</button>
-    <div class="tfoot"><span>${open || 'Coins ' + fmt(S.coins)}</span><span><button class="link" id="tLic">UPGRADES</button> · <button class="link" id="tClose">CLOSE</button></span></div>`;
+    <div class="tfoot"><span>${open || 'Coins ' + fmt(S.coins)}</span><span><button class="link" id="tAg">AGENTS</button> · <button class="link" id="tLic">UPGRADES</button> · <button class="link" id="tClose">CLOSE</button></span></div>`;
   $('trade').querySelectorAll('canvas[data-face]').forEach(c => portrait(c.dataset.face, c));
   const N = GOODS.length - 1; // ore is not traded
   $('tPrev').onclick = () => { S.sel = (S.sel + N - 1) % N; sfx('menu'); renderTrade(); };
@@ -556,7 +576,7 @@ function renderTrade() {
   $('trade').querySelectorAll('[data-m]').forEach(b => b.onclick = () => { const m = +b.dataset.m; if (m > S.lev) { toast('x' + m + ' needs a Leverage License (see LICENSES).', 2.5); sfx('alert'); return; } S.mult = m; renderTrade(); });
   $('tMinus').onclick = () => { S.stake = Math.max(STAKE_STEP, S.stake - STAKE_STEP); renderTrade(); };
   $('tPlus').onclick = () => { S.stake = Math.min(Math.max(STAKE_STEP, Math.floor(S.coins / STAKE_STEP) * STAKE_STEP), S.stake + STAKE_STEP); renderTrade(); };
-  $('tOpen').onclick = openPosition; $('tClose').onclick = closeTrade;
+  $('tOpen').onclick = openPosition; $('tClose').onclick = closeTrade; $('tAg').onclick = openAgents;
   $('tLic').onclick = () => {
     $('trade').innerHTML = `<div class="gname" style="margin-bottom:.6em">UPGRADES</div>
       ${LICENSES.map(l => `<div class="tr"><span>x${l.lev} leverage license</span><span>${S.lev >= l.lev ? '<span class="up">OWNED</span>' : `<button class="btn" data-l="${l.lev}">${l.cost} coins</button>`}</span></div>`).join('')}

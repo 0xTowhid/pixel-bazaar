@@ -26,11 +26,11 @@ near contract deploy "$ACCOUNT" use-file target/near/contract.wasm \
   with-init-call new json-args "{\"operator\":\"$OPS\"}" prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' \
   network-config testnet sign-with-legacy-keychain send
 
-echo "5/5 Creating the NPC accounts rita.$ACCOUNT and kaito.$ACCOUNT"
-near contract call-function as-transaction "$ACCOUNT" create_npc json-args '{"name":"rita"}' \
-  prepaid-gas '50.0 Tgas' attached-deposit '0.1 NEAR' sign-as "$OPS" network-config testnet sign-with-legacy-keychain send
-near contract call-function as-transaction "$ACCOUNT" create_npc json-args '{"name":"kaito"}' \
-  prepaid-gas '50.0 Tgas' attached-deposit '0.1 NEAR' sign-as "$OPS" network-config testnet sign-with-legacy-keychain send
+echo "5/5 Creating the agent trader accounts (rita, kaito, pell, bolt, luna).$ACCOUNT"
+for NPC in rita kaito pell bolt luna; do
+  near contract call-function as-transaction "$ACCOUNT" create_npc json-args "{\"name\":\"$NPC\"}" \
+    prepaid-gas '50.0 Tgas' attached-deposit '0.1 NEAR' sign-as "$OPS" network-config testnet sign-with-legacy-keychain send
+done
 
 KEYFILE="$HOME/.near-credentials/testnet/$OPS.json"
 echo
