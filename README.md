@@ -1,31 +1,31 @@
-# Pixel Bazaar
+# Pixel Bazaar: The Lantern Isles
 
-**Farm by day. Trade on rumors by night.** A pixel-art life sim on NEAR.
+**Catch spirits, solve the mystery, trade on rumors.** A pixel-art RPG and life sim on NEAR, where every spirit, badge and legendary fish is a real NFT you own.
 
-You arrive in a market town owing the Harbor Master 5,000 coins. You have 300 coins and 10 days to pay. Grow carrots, strawberries and pumpkins behind your house, mine jade in the Frost Camp, and fish off the pier. Every morning the locals tell you rumors about tomorrow's prices. Some tell the truth and some don't. Rita lies on the days she is quietly selling the goods she talks up. Use the rumors to time your harvest sales, and go **long or short with leverage** at Tomo's stall. Overnight the day's event hits: prices move, rain waters your crops or frost kills them, and your trades pay out or get liquidated.
+You arrive on the Lantern Isles owing the Harbor Master 5,000 coins, with 300 coins and 10 days to pay. Someone has stolen the Great Lantern and the spirits have gone wild. Catch them, raise them and duel with them. Follow the clues through the Whispering Woods, the Sunken Shrine and the Clockwork Sky to the old spirit gate. Every morning the locals tell you rumors about tomorrow's prices. Some tell the truth and some don't. Use them to go **long or short with leverage** at Tomo's stall, against five agent traders who each have their own NEAR account. And you are not alone on the island: other players leave ghost notes, cast curses, and fight the rare world boss with you.
 
 Built for NEAR HACKATHON 2026, **Games With Real Economies** track.
 
 | | |
 |---|---|
-| **Play it** | **https://213.165.39.157.sslip.io** **https://pixel-bazaar.arculate.markets** | (desktop or phone held sideways; no wallet needed) |
-| **Contract** | [`pixelbazaar2-tow69.testnet`](https://testnet.nearblocks.io/address/pixelbazaar2-tow69.testnet) on NEAR testnet |
-| **NPC accounts** | [`kaito.pixelbazaar2-tow69.testnet`](https://testnet.nearblocks.io/address/kaito.pixelbazaar2-tow69.testnet), [`rita.pixelbazaar2-tow69.testnet`](https://testnet.nearblocks.io/address/rita.pixelbazaar2-tow69.testnet) |
+| **Play it** | **https://pixel-bazaar.arculate.markets** or **https://213.165.39.157.sslip.io** (desktop or phone held sideways; no wallet needed to start) |
+| **Contract** | [`pixelbazaar4-tow69.testnet`](https://testnet.nearblocks.io/address/pixelbazaar4-tow69.testnet) on NEAR testnet |
+| **Agent accounts** | `kaito.`, `rita.`, `pell.`, `bolt.`, `luna.pixelbazaar4-tow69.testnet` |
+| **NFT art** | [`nft/`](nft/) in this repo, served from GitHub raw links in each token's metadata |
 | **Code** | this repository (MIT) |
 
 **Disclosure (rule Q-015):** I am also submitting a second, independent project, **Sealed Calls** (https://github.com/0xTowhid/sealed-calls). The two projects share no code.
 
 ## For judges: a 5-minute run
 
-1. Open the game, choose **NEW TRADER**, pick a name and a password. The game creates `yourname.pixelbazaar2-tow69.testnet` and shows you a 12-word recovery code. Every ✓ line at the bottom of the screen has a **tx ↗** link to the explorer.
-2. Read the morning paper (the Bazaar Bugle) and press **START DAY**. The day's event was committed on chain before you could see any rumors (`✓ commit_day`).
-3. Follow the yellow arrow:
-   - Talk to Mei.
-   - Plant and water a seed behind your house (E, or A on a phone).
-   - Open a trade at Tomo's stall.
-4. After 18:00, go home and **SLEEP**. The operator reveals the night's event, and the contract checks it against the morning commitment before settling (`✓ settle_day`). The night card shows the price move, your profit or LIQUIDATED stamp, who told the truth, and what grew or froze.
-5. Press **P** (or tap **PROFILE**) to see your account, stats and the 11 achievement badges. Badges are NEP-245 tokens held by your account.
-6. Optional: open the game in another browser or on your phone, and choose **LOG IN** with the same name and password. You get the same trader and the same farm.
+1. Open the game. A short intro plays (SKIP works), then **TAKE THE 1-MINUTE TOUR** shows every part of the screen.
+2. Choose **NEW TRADER**, pick a name and a password. The game creates `yourname.pixelbazaar4-tow69.testnet` and shows a 12-word recovery code. Every ✓ line at the bottom of the screen links to the transaction on the explorer.
+3. Read the morning paper and press **START DAY**. The day is committed on chain before you see any rumors (`✓ commit_day`).
+4. Catch a spirit: walk up to a glowing wisp in the grass, press E (A on phones) and stop the bar in the green. The contract decides the catch, and the spirit is minted to you as an NFT. It follows you as your companion.
+5. Press **B** for your spirits (feed, evolve, the Spirit Book, the five legendary fish). Press **LINK A NEAR WALLET** to connect MyNearWallet, Meteor or HOT, then **TO WALLET** sends any spirit, badge or fish to it.
+6. Press **Q** for the story and today's three quests, talk to **Madame Vey** for three fate cards, and challenge **Mei** to a 3-vs-3 spirit duel.
+7. Press **I** for the island: the live feed of every player, ghost notes, curses and the world boss.
+8. After 18:00, go home and **SLEEP**. The contract checks the night's reveal against the morning commitment and settles everything (`✓ settle_day`).
 
 On phones, tap **FULL SCREEN** at the top (on iPhone, use Share → Add to Home Screen).
 
@@ -33,28 +33,32 @@ On phones, tap **FULL SCREEN** at the top (on iPhone, use Share → Add to Home 
 
 | NEAR feature | Where | What it does |
 |---|---|---|
-| Named sub-accounts + function-call keys | `register_player` in `contract/src/lib.rs`, `backend.js` | Your name becomes `yourname.<contract>`. Your browser holds a key that can only call 7 game methods on this contract and cannot move NEAR. No wallet popups and no gas prompts. |
-| Log in anywhere (password or 12-word code) | `backend.js`, `vendor/keys.mjs` | Your name and password derive your key: PBKDF2 (210k rounds) turns them into a standard 12-word NEAR seed phrase (BIP39 + SLIP-10, `m/44'/397'/0'`). The same password or the recovery code rebuilds the key on any device, and the server checks it against the account's access keys. The server stores no secret of yours. |
-| Commit-reveal settlement | `commit_day` / `settle_day`, `server/index.mjs` | Each morning the operator commits `sha256(event, rumors, salt)` before you can act. At night it reveals, and the contract rejects any reveal that does not match. So the event cannot be chosen after seeing your trades (test `operator_cannot_change_the_event`). |
-| Contract-run economy | `act`, `open_position`, `settle_day` | The contract holds coins, prices, leveraged trades, liquidations, farm plots, seeds, watering, growth, energy, mining and fishing results, friendships and town projects. Many small moves (water 10 plots, harvest, sell) are batched into one `act` transaction. |
-| NEP-245 multi-token | `mt_balance_of`, `mt_batch_balance_of`, `mt_transfer`, `get_inventory` | Barn goods (13 kinds), items (leverage licenses, bridge, boat pass, your stall) and 11 achievement badges are NEP-245 tokens. Minting and burning them emits `mt_mint` / `mt_burn` events. Badges are soulbound. `mt_transfer` moves goods and items between traders (respecting the 40-item barn) but needs a 1 yoctoNEAR deposit, which the in-game key cannot attach, so the game itself has no player-to-player trading. |
-| NPC accounts | `create_npc`, `get_npcs` | Kaito the Whale opens a public x5 trade every morning. Rita shorts the good she talks up on the days she lies. Their trades are committed with the day and settle against the same prices as yours. |
-| On-chain rolls | `roll()` and `env::random_seed` in `contract/src/lib.rs` | Mining finds, fishing catches and Mochi's gifts are rolled from the day's commitment, so a script cannot revert and retry until it gets lucky. Daily price noise uses `env::random_seed`. |
-| Leaderboard and profile stats | `get_leaderboard`, `Player.best_score`, `Player.seasons_won` | Finished seasons are ranked first by whether the debt was paid, then by coins. Your best season and seasons won stay on your account. |
+| Named sub-accounts + function-call keys | `register_player` in `contract/src/lib.rs`, `backend.js` | Your name becomes `yourname.<contract>`. Your browser holds a key that can only call 7 game methods on this contract and cannot move NEAR. No wallet popups and no gas prompts while you play. |
+| Log in anywhere (password or 12-word code) | `backend.js`, `vendor/keys.mjs` | PBKDF2 (210k rounds) turns your name and password into a standard 12-word NEAR seed phrase (BIP39 + SLIP-10, `m/44'/397'/0'`). The server stores no secret of yours. |
+| **NEP-171 NFTs** (spirits, badges, legendary fish) | `nft_transfer`, `nft_token`, `nft_tokens_for_owner`, `nft_metadata` | 39 spirit species (+ shiny), 22 badges and 5 one-of-one legendary fish are real NFTs with metadata and art. A spirit keeps its token id as it levels up and evolves; its metadata shows the new form and level. Standard `nft_mint` and `nft_transfer` events (NEP-171 logs), so wallets and explorers show them. |
+| **Wallet link, two-sided** | `link_wallet` (signed by your wallet, 1 yocto), `Action::ConfirmWallet`, `Action::SendToWallet` | Your wallet asks to link, your game account confirms, and from then on the game can send your NFTs to your own wallet. Neither side can link alone. Wallet selector: MyNearWallet, Meteor, HOT. |
+| Commit-reveal days | `commit_day` / `settle_day`, `server/index.mjs` | Each morning the operator commits `sha256(event, rumors, salt)`. At night the contract rejects any reveal that does not match. |
+| On-chain rolls that cannot be rerolled | `roll()` | Spirit encounters, shiny odds, catches, duels, fate cards, quests, puzzle orders, legendary fish and boss damage are rolled from the day's commitment. Reverting a transaction and trying again gives the same result. |
+| Contract-run economy and RPG | `act` | Coins, prices, leveraged trades and liquidations; farm, energy, mining, fishing; spirit XP, feeding, evolution; puzzles, story chapters, quests, duels. Many moves are batched into one `act` transaction. |
+| **Shared island state** | `get_feed`, `get_notes`, `get_boss`, `Action::LeaveNote/VoteNote/Curse/BuyCharm/BossHit/BossClaim` | Ghost notes other players vote TRUE or LIAR (reputation and coins move between accounts), curses that land on another player's next move unless a charm blocks them, and a world boss with one HP bar for everyone. A boss window opens about once a month, decided by `sha256` of the time window; the operator can also summon one for a live event. |
+| **Agent traders with their own accounts** | `create_npc`, `get_npcs`, `commit_day(npc_moves)` | Kaito the Whale, Rita, Granny Pell (contrarian), Bolt-9 (gossip bot) and Luna Moonsong (stargazer) are sub-accounts with coin ledgers. Their bets are committed with your day and settle against the same prices as yours. |
+| NEP-245 multi-token | `mt_balance_of`, `mt_transfer`, `get_inventory` | Barn goods (13 kinds), items (licenses, bridge, boat, stall) and the record of each badge. |
 
 ## The game
 
 | Do | See |
 |---|---|
-| Farm (plots behind your house; keys 1-9 pick the seed) | 9 crops (carrot, strawberry, pumpkin, tomato, corn, eggplant, tea, apple trees that regrow, beehives). Water them daily. Rain waters them for you; frost and blight kill unripe crops. |
-| Mine boulders in the Frost Camp, fish on the lake pier | Jade, ore and fish go into your barn. Fishing is a timing mini-game: win it, and the contract decides the catch (7 in 10). Each action uses energy. |
-| Talk to locals, give gifts | Hearts fill up. At 2 hearts locals tell you how sure they are; at 4 they write to you in the morning paper. |
-| Tomo: TRADE / SELL / SEEDS | Go long or short on 12 goods with x1-x10 leverage (trades pay on the night's event only), sell your harvest, buy seeds, apple saplings and beehives. Licenses for x5 and x10 and your own stall are upgrades you keep. |
-| Town board (by the market) | Donate goods and coins to rebuild the pier (double fish), fix the lighthouse (storm warnings in the paper) and open the tea house (tea sells for 15% more). |
-| Pay the Harbor Master 5,000 | Badges, the leaderboard and a share image of your season. Your farm, seeds, friends and items carry into the next season. |
-| P: Profile, J: Journal | Profile: account, rank, best season, seasons won, crops, jade, fish, badges (locked ones show what earns them), items, best friends, SHARE PROFILE image, LOG OUT. Journal: today's rumors, who has been right, friends, barn, recent transactions. |
+| **Spirits** (B) | 39 species in 7 elements, from Ember Kits to the Jade Dragon. Each world has its own. Catching is a timing bar; the contract decides. Your companion follows you, gains XP every night and from food, and evolves (some need a lantern shard). Elements open worlds: a water spirit lets you dive to the Sunken Shrine, a wind spirit glides you to the Clockwork Sky, a fire spirit lights the dark woods. |
+| **Worlds** | Town and farm, the Whispering Woods (north), the Moon Market (open at night), the Sunken Shrine, the Clockwork Sky. Each has its own music, mood and a puzzle whose order changes every day. |
+| **The Lantern Mystery** (Q) | Five story chapters with clues from each world, ending at the old spirit gate in a duel with the Great Spirit. The ending mints the Jade Dragon to you. |
+| **Daily hooks** | Madame Vey's three fate cards a day (a blessing, a curse and a secret, each with a real effect), three daily quests that pay automatically, and rumors in the morning paper. |
+| **Spirit duels** | Pick three spirits against Mei, Rita at the Moon Market night table, or the Great Spirit. Element wheel: fire › nature › water › fire, wind › earth › fire, spirit ⇄ dark. One duel a day per rival; the whole fight is decided on chain and shown hit by hit. |
+| **Fishing legends** | Five one-of-one fish that only bite when their riddle is true (with a fire companion, on a day of The River, after the sky...). |
+| **The island** (I) | Live feed of every player, ghost notes, curses and charms, the world boss. |
+| **The bazaar** (Tomo) | Long or short on 12 goods with x1-x10 leverage; five agent traders bet beside you (AGENTS board). Sell your harvest, buy seeds, licenses and your own stall. |
+| **Life sim** | Farm 9 crops (rain waters them, frost kills them), mine jade, fish, give gifts until locals trust you, rebuild the town. Pay the Harbor Master 5,000 to finish the season; your spirits, story and farm carry over. |
 
-Controls: arrows or WASD to move, E or Space to interact, 1-9 seeds, P Profile, J Journal, F full screen, M music. On phones (sideways): the on-screen pad and A button.
+Controls: arrows or WASD, E or Space to interact, 1-9 seeds, B spirits, Q quests, I island, P profile, J journal, M music. On phones (sideways): the on-screen pad and A button.
 
 ### Built to keep working on a real network
 - If the morning commit or the night reveal fails, the game retries and then shows **TRY AGAIN**. It never lets you play a day that is not on chain.
@@ -82,7 +86,7 @@ Open http://localhost:8000. `config.js` says `mode: 'local'`, so a JavaScript co
 ### 2. Against the real contract on testnet
 You need Rust (`rustup`), `cargo-near`, `near-cli-rs`, Node 20+ and `jq`. The install lines are at the top of `scripts/deploy-testnet.sh`.
 ```
-ACCOUNT=pixelbazaar-yourname.testnet ./scripts/deploy-testnet.sh   # builds, deploys, creates ops.<account> (the operator), rita.<account> and kaito.<account>
+ACCOUNT=pixelbazaar-yourname.testnet ./scripts/deploy-testnet.sh   # builds, deploys, creates ops.<account> (the operator) and the five agent accounts
 npm install --prefix server --omit=dev
 CONTRACT_ID=... OPERATOR_ID=... OPERATOR_KEY=... GAME_SECRET=... node server/index.mjs   # the script prints this line
 ```
@@ -99,57 +103,52 @@ npm install --prefix server && MOCK=1 node server/index.mjs
 ```
 cd contract && cargo test
 ```
-There are 25 contract unit tests:
-- winning long
-- x10 liquidation
-- operator cannot change the event
-- licenses gate leverage
-- no trading before the commit
-- plant, water, grow, harvest, sell
-- no early harvest
-- rain waters and frost kills
-- energy runs out
-- gifts and town projects
-- the stall sells overnight (NEP-245)
-- the farm is kept across seasons
-- early payoff with badges, seasons won and best score
-- 12 audit regression tests: no restart mid-season, no moves before the commit, the fishing limit across nights,
-  catches decided on chain, rolls fixed for the day, selling cannot make a trade profitable, no weather on chain,
-  transfer rules (barn cap, soulbound badges), per-player Kaito and one leaderboard row per player, `void_day`,
-  gift checks, no hidden pass-out penalty
+48 contract unit tests, among them:
+- trading, liquidation, leverage licenses, the operator cannot change the event
+- farming, weather, energy, gifts, town projects, the stall, seasons and badges
+- spirits: catching, shinies, feeding, evolution with shards, NFT transfers and metadata, the wallet link (both sides needed)
+- puzzles with a daily order, fate cards with real effects, quests paid once, story chapters ending in the Jade Dragon
+- duels decided by the day's rolls (a weak team loses, a strong one wins, once a day), the Great Spirit unlocks the ending
+- legendary fish only in season and only once
+- ghost notes and votes, curses and charms, the shared world boss and its rewards, rare natural boss windows
+- agent traders settling on their own ledgers
+- 12 audit regression tests from the v3 security audit
 
-I also played the browser game end to end in headless Chromium on desktop and phone screen sizes. The runs covered:
-- logging in, a wrong password, and logging in on a new device
-- a full 10-day season and a second season
-- forced network failures, reloads, and closing the tab while asleep
+The JavaScript copy of the contract (`shared/engine.js`) runs the same rules; the duel code was checked to give the same result as the Rust code on 120 random fights. I also played every new feature in headless Chromium on desktop and phone sizes, in offline mode and against the server with two players at once (notes, curses and charms between them).
 
 ## How it is built
 
 ```
-index.html, game.js     the game: rendering, UI, game loop, trading, night and dawn, login
-life.js                 farm plots, mining, fishing mini-game, Mochi the cat, seed hotbar, the `act` queue
+index.html, game.js     the game: rendering, UI, game loop, trading, agents board, night and dawn, login
+story.js                intro, welcome card and the spotlight tour
+spirits.js              wild spirits, catching, companion, Spirit Book, legends tab, wallet link
+worlds.js, worldplay.js the four extra worlds, puzzles, world switching and moods
+quests.js               fate cards, quest board, story chapters
+duel.js                 3 v 3 spirit duels
+island.js               the island: feed, ghost notes, curses and charms, world boss
+life.js                 farm plots, mining, fishing, Mochi the cat, the `act` queue
 panels.js               morning paper, selling, seeds, gifts, town board, profile, share images
-world.js                the 110x64 tile map with seven areas, built in code
-shared/rules.js         goods, crops, events, rumor sources, Kaito, the daily plan (browser + server)
+world.js                the town map, built in code
+shared/rules.js         every table: goods, events, spirits, foes, legends, quests, agents (browser + server)
 shared/engine.js        JavaScript copy of the contract, for offline mode and server testing
-backend.js              local / mock / chain backends; login; signs player moves with the function-call key
-vendor/                 near-api-js 7.4.0 and the key derivation, bundled for the browser
-server/index.mjs        operator: creates accounts, checks login keys, commits each morning, reveals each night.
-                        No database: every day's plan is rebuilt from GAME_SECRET with an HMAC.
+backend.js              local / mock / chain backends; login; signs moves with the function-call key
+vendor/                 near-api-js 7.4.0, key derivation, and the NEAR wallet selector, bundled for the browser
+server/index.mjs        operator: creates accounts, commits each morning (with the agents' bets), reveals each night
 contract/src/lib.rs     the NEAR contract (near-sdk 5)
-tools/                  sprite builders (characters from LPC layers, crops and icons drawn in code)
+nft/, tools/make_nft.py NFT images (built from the game art) and the script that draws them
 ```
 
 **Trust model, plainly:**
 - The operator knows tonight's event, because it has to in order to commit it.
 - What the chain guarantees is that the operator cannot change the event after you act.
 - Settlement, liquidation, farming and items follow the contract's rules.
-- Winning the fishing mini-game is reported by your browser; the catch itself is rolled on chain.
+- Winning the fishing and catching mini-games is reported by your browser; the catch itself is rolled on chain.
+- Duel and puzzle rolls come from the day's commitment, which your browser can see; a player could work out today's duel result before fighting. They still get one try per rival per day.
 - Everything runs on testnet with play coins. There is no real money.
 
 ## Hackathon notes
 - All code was written during the hackathon window (from 2026-11-08). No pre-existing code.
 - Built with help from Claude (AI).
-- Libraries: near-sdk (Rust), near-api-js 7.4.0, @scure/bip39, @noble/curves, @noble/hashes, and Playwright for testing.
-- Art: Ninja Adventure Asset Pack (CC0) and LPC characters (CC-BY-SA 3.0 / GPL 3.0). Crops, icons and the app icon were drawn for this game. See `CREDITS.md`.
+- Libraries: near-sdk (Rust), near-api-js 7.4.0, @near-wallet-selector 10.1.4, @scure/bip39, @noble/curves, @noble/hashes, and Playwright for testing.
+- Art and music: Ninja Adventure Asset Pack (CC0: spirits, bosses, worlds, music) and LPC characters (CC-BY-SA 3.0 / GPL 3.0). Crops, icons and the app icon were drawn for this game. See `CREDITS.md`.
 - License: MIT for code (`LICENSE`). Art keeps its own licenses.

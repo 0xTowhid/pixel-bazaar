@@ -123,7 +123,9 @@ const TOUR = [
   { t: 'ENERGY', d: 'Farming, mining, fishing and catching spirits use energy. It refills every night when you sleep.', at: domTarget(() => $('hudL').children[3]) },
   { t: 'SEEDS', d: 'Pick a seed with keys 1-9 (or tap it). Plant and water it on the plots behind your house, then sell the harvest.', at: domTarget('#hotbar') },
   { t: 'MEI', d: 'The townsfolk hear rumors about tomorrow. Some tell the truth, some do not. Make friends: gifts fill their hearts.', at: worldTarget(() => NPCS.mei) },
-  { t: "TOMO'S STALL", d: 'Sell your harvest, buy seeds, or bet on the rumors: go long or short with leverage. Trades settle overnight on NEAR.', at: worldTarget(() => NPCS.tomo) },
+  { t: "TOMO'S STALL", d: 'Sell your harvest, buy seeds, or bet on the rumors: go long or short with leverage. Five agent traders bet too (see AGENTS): follow them or fade them. Trades settle overnight on NEAR.', at: worldTarget(() => NPCS.tomo) },
+  { t: 'THE ISLAND', d: 'Press I (or tap ISLAND) to see what every other player is up to: the island feed, ghost notes (true or liar?), curses and charms, and the rare world boss that everyone fights together.', at: domTarget('#iBtn') },
+  { t: 'SPIRITS', d: 'Press B for your spirits. Every spirit, badge and legendary fish is a real NFT you own. Link a NEAR wallet and send them there any time. Duel Mei, Rita and the Great Spirit with a team of three.', at: domTarget('#sBtn') },
   { t: 'PROFILE AND JOURNAL', d: 'P opens your profile: badges, spirits, wallet. J opens the journal: rumors, friends, and this tour again.', at: domTarget(() => { const a = $('pBtn').getBoundingClientRect(), b = $('jBtn').getBoundingClientRect(); return { getBoundingClientRect: () => ({ left: a.left, top: a.top, width: b.right - a.left, height: a.height }) }; }) },
   { t: 'YOUR HOUSE', d: 'After 18:00, go home and sleep. Overnight the day is revealed on NEAR: prices move, crops grow, trades pay out.', at: worldTarget(() => ({ x: World.P.homeDoor.x * TW, y: World.P.homeDoor.y * TW }), 130, 130) },
 ];
