@@ -112,6 +112,16 @@ body:not(.ingame) #hudL,body:not(.ingame) #objBox,body:not(.ingame) #topR,body:n
 .fKind{font-size:.8em}.fFront img{width:6.5em;height:6.5em;image-rendering:pixelated;margin:.8em 0}.fName{color:var(--gold);margin-bottom:.5em}.fText{font-size:.75em;line-height:1.6}
 #objBox{pointer-events:auto!important;cursor:pointer}
 #fade{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .35s;z-index:65}#fade.on{opacity:1}
+#island{width:min(96%,52em);max-height:92%;overflow:auto}.isBody{min-height:16em;margin-top:.6em}
+.fList{display:flex;flex-direction:column;gap:.45em;max-height:24em;overflow:auto}.fRowI{line-height:1.5;border-bottom:1px solid #ffffff12;padding-bottom:.35em}
+.nList{display:grid;grid-template-columns:repeat(auto-fill,minmax(15em,1fr));gap:.4em;margin:.6em 0}.nLine{text-align:left;font-size:.75em;line-height:1.5}
+.cList{display:flex;flex-direction:column;gap:.4em}.cRow{display:flex;justify-content:space-between;align-items:center;gap:.5em;flex-wrap:wrap;background:#2a2346;padding:.4em .6em;border-radius:8px}.cRow .btn{font-size:.7em;margin-left:.3em}
+.bossBox{text-align:center}.dSpr.huge{width:9em;height:9em}.dSpr.huge.hurt{filter:brightness(3) sepia(1) hue-rotate(-40deg)}
+.bHp{display:inline-block;width:8em;height:.6em;background:#3a2f5c;border-radius:.3em;overflow:hidden;vertical-align:middle}.bHp i{display:block;height:100%;background:#ff7a6e}
+.bHp.big{display:block;width:min(30em,90%);height:1em;margin:.5em auto}.isEmpty{text-align:center;padding:2em 1em}
+#bossBar{position:absolute;left:50%;top:13%;transform:translateX(-50%);display:none;padding:.4em .9em;color:#ffd9d4;border-color:#ff7a6e;z-index:30;animation:bPulse 1.4s ease-in-out infinite;cursor:pointer;white-space:nowrap;font-size:.8em}
+#bossBar.on{display:block;pointer-events:auto!important}body:has(.panel.on) #bossBar,body:has(#dialog.on) #bossBar{display:none!important}
+@media (max-width:900px){#bossBar{font-size:.55em;top:24%}#bossBar .bHp{width:4em}}@keyframes bPulse{50%{box-shadow:0 0 18px #ff7a6e88}}
 #duel{width:min(96%,62em);max-height:94%;overflow:auto;background:radial-gradient(circle at 50% 0,#4a2a5e,#1c1630 70%)}
 .dHead{display:flex;gap:.8em;align-items:center}.dHead img{width:4em;height:4em;image-rendering:pixelated;border:3px solid #b9a8e8;border-radius:8px;background:#2a2346}
 .dRow{display:grid;grid-template-columns:repeat(3,1fr);gap:.6em}.dGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(11em,1fr));gap:.6em;max-height:22em;overflow:auto}
@@ -233,7 +243,7 @@ body.dlgOn #hotbar,body.dlgOn #chainlog{display:none}
     <div class="box"><span>ENERGY</span><div class="debtbar"><div id="enFill" style="background:#78e678"></div></div></div>
   </div>
   <div id="objBox" class="ui box"><span id="obj"></span></div>
-  <div id="topR" class="ui"><button class="box" id="sBtn">SPIRITS<span class="kh"> (B)</span></button><button class="box" id="pBtn">PROFILE<span class="kh"> (P)</span></button><button class="box" id="jBtn">JOURNAL<span class="kh"> (J)</span></button><button class="box" id="fsBtn">FULL SCREEN</button><button class="box" id="mute">♪ ON</button></div>
+  <div id="topR" class="ui"><button class="box" id="iBtn">ISLAND<span class="kh"> (I)</span></button><button class="box" id="sBtn">SPIRITS<span class="kh"> (B)</span></button><button class="box" id="pBtn">PROFILE<span class="kh"> (P)</span></button><button class="box" id="jBtn">JOURNAL<span class="kh"> (J)</span></button><button class="box" id="fsBtn">FULL SCREEN</button><button class="box" id="mute">♪ ON</button></div>
   <div id="zone" class="ui"></div>
   <div id="hint" class="ui box"></div>
   <div id="toast" class="ui box"></div>
@@ -253,6 +263,8 @@ body.dlgOn #hotbar,body.dlgOn #chainlog{display:none}
   <div id="quests" class="ui box panel"></div>
   <div id="fate" class="ui box panel"></div>
   <div id="duel" class="ui box panel"></div>
+  <div id="island" class="ui box panel"></div>
+  <div id="bossBar" class="ui box"></div>
   <div id="catch" class="ui box"></div>
   <div id="cine"><canvas id="fxcv"></canvas><div class="lb top"></div><div class="lb bot"></div>
     <div id="cineTitle">CHAPTER 0 · THE NIGHT THE LANTERN WENT OUT</div><div id="cineN"></div>
@@ -281,6 +293,7 @@ body.dlgOn #hotbar,body.dlgOn #chainlog{display:none}
 <script src="worldplay.js"></script>
 <script src="quests.js"></script>
 <script src="duel.js"></script>
+<script src="island.js"></script>
 <script src="story.js"></script>
 </body>
 </html>

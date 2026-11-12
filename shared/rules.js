@@ -66,7 +66,7 @@
     x10_survivor: 'Won a x10 trade', faded_rita: 'Faded Rita and won', beat_kaito: 'Beat Kaito this season', debt_free: 'Paid the debt',
     early_bird: 'Paid the debt by day 6', restorer: 'Finished a town project', best_friend: '5 hearts with a local',
     first_spirit: 'Caught your first spirit', spirit_tamer: 'Caught 10 kinds of spirit', shiny_hunter: 'Caught a shiny spirit',
-    legend_tamer: 'Raised a legendary spirit', wallet_linked: 'Linked a NEAR wallet', lantern_seeker: 'Solved all three world puzzles', lantern_keeper: 'Brought the Lantern back', spirit_champion: 'Beat the Great Spirit in a duel', fishing_legend: 'Caught all five legendary fish',
+    legend_tamer: 'Raised a legendary spirit', wallet_linked: 'Linked a NEAR wallet', lantern_seeker: 'Solved all three world puzzles', lantern_keeper: 'Brought the Lantern back', spirit_champion: 'Beat the Great Spirit in a duel', fishing_legend: 'Caught all five legendary fish', island_oracle: '10 people believed your notes', boss_slayer: 'Fought a world boss to the end',
   };
   // ---- spirits (same table as the contract) ----
   const ELEMENTS = [
@@ -244,6 +244,18 @@
     { name: 'Ghost Carp', chance: 12, tint: '#b9a8e8', riddle: 'It appears once the clock in the sky turns again.' },
     { name: 'Jade Leviathan', chance: 8, tint: '#8ee68a', riddle: 'The old ones say: hold the other four, and the sea gives up its king.' },
   ];
-  const Rules = { LEGENDS, FOES, DUEL_ENERGY, beats, fighter, duel, GOODS, CROPS, EVENTS, SOURCES, NPC_IDS, ITEMS, PROJECTS, BADGES, ENERGY, ELEMENTS, RARITY, SPECIES, SPAWN, ZONES, CATCH_CHANCE, ENCOUNTERS_A_DAY, FEEDS_A_DAY, spiritLevel, FATE, QUESTS, CHAPTERS, mulberry32, seasonAccuracy, planDay, encodeRumors, decodeRumors, rumorRight, evIndex, hearts };
+  // ---- the island: ghost notes, curses, the world boss (same numbers as the contract) ----
+  const ISLAND = {
+    NOTE_LINES: [
+      { t: 'Rita lies today.' }, { t: 'Rita tells the truth today.' }, { t: 'Buy {good} before night falls.', arg: 'good' },
+      { t: 'Sell your {good}, the price drops tomorrow.', arg: 'good' }, { t: 'A shiny spirit hides near here.' }, { t: 'Fish bite best before ten.' },
+      { t: 'The puzzle here starts with piece {n}.', arg: 'n' }, { t: 'Kaito is wrong today. Bet against him.' }, { t: "Madame Vey's curse is nasty today. Buy a charm." },
+      { t: 'The world boss is weak to {el}.', arg: 'el' }, { t: "Don't come here without a fire spirit." }, { t: 'Free coins under the old tree! Trust me.' },
+    ],
+    NOTES_KEPT: 120, FEED_KEPT: 50, VOTES_A_DAY: 6, CURSE_COST: 40, CHARM_COST: 25,
+    CURSES: [{ name: 'Sticky Boots', text: '-15 energy on their next move' }, { name: 'Crow Thief', text: 'a crow steals 30 of their coins' }, { name: 'Frog Voice', text: 'they croak for a day. harmless, very funny' }],
+    BOSS_WINDOW_MS: 2 * 86400000, BOSS_CHANCE: 17, BOSS_HP: 3000, BOSS_HITS: 3, BOSS_FORMS: [11, 2, 8],
+  };
+  const Rules = { ISLAND, LEGENDS, FOES, DUEL_ENERGY, beats, fighter, duel, GOODS, CROPS, EVENTS, SOURCES, NPC_IDS, ITEMS, PROJECTS, BADGES, ENERGY, ELEMENTS, RARITY, SPECIES, SPAWN, ZONES, CATCH_CHANCE, ENCOUNTERS_A_DAY, FEEDS_A_DAY, spiritLevel, FATE, QUESTS, CHAPTERS, mulberry32, seasonAccuracy, planDay, encodeRumors, decodeRumors, rumorRight, evIndex, hearts };
   if (typeof module !== 'undefined' && module.exports) module.exports = Rules; else root.Rules = Rules;
 })(typeof window !== 'undefined' ? window : globalThis);

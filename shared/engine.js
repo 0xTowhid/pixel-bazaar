@@ -11,7 +11,7 @@
   const CROPS = [[4, 2, 6, 2, 0, true], [5, 3, 10, 3, 0, true], [6, 4, 22, 2, 0, true], [7, 3, 8, 3, 0, true], [8, 2, 6, 2, 0, true], [9, 3, 12, 2, 0, true], [0, 2, 5, 3, 0, true], [10, 4, 80, 3, 2, true], [2, 2, 60, 2, 2, false]];
   const ITEMS = { license_x5: 250, license_x10: 900, bridge: 600, boat: 300, stall: 1500 };
   const PROJECTS = [[[[1, 30], [11, 5]], 400], [[[12, 10], [11, 8]], 0], [[[0, 40]], 600]];
-  const BADGES = ['first_harvest', 'green_thumb', 'jade_hunter', 'angler', 'x10_survivor', 'faded_rita', 'beat_kaito', 'debt_free', 'early_bird', 'restorer', 'best_friend', 'first_spirit', 'spirit_tamer', 'shiny_hunter', 'legend_tamer', 'wallet_linked', 'lantern_seeker', 'lantern_keeper', 'spirit_champion', 'fishing_legend'];
+  const BADGES = ['first_harvest', 'green_thumb', 'jade_hunter', 'angler', 'x10_survivor', 'faded_rita', 'beat_kaito', 'debt_free', 'early_bird', 'restorer', 'best_friend', 'first_spirit', 'spirit_tamer', 'shiny_hunter', 'legend_tamer', 'wallet_linked', 'lantern_seeker', 'lantern_keeper', 'spirit_champion', 'fishing_legend', 'island_oracle', 'boss_slayer'];
   const PLOT_COST = 120, MAX_PLOTS = 18, START_PLOTS = 6, BARN_CAP = 40, NPCS = 8, ROCKS = 8, ENERGY_MAX = 100;
 
   const R = (typeof module !== 'undefined' && module.exports) ? require('./rules.js') : root.Rules;
@@ -27,7 +27,8 @@
       projects: PROJECTS.map(() => false), donated: PROJECTS.map(() => new Array(NG + 1).fill(0)), mined_day: 0, mined: 0, catches_today: 0, cat_day: 0,
       harvested: 0, jade_found: 0, fish_caught: 0, kaito_pnl: 0, start_coins: START_COINS, seasons_won: 0, best_score: 0,
       lead: null, enc_today: 0, fed_today: 0, wild: null, wallet: null, book: 0, shards: 0, clues: 0, solved_day: [0, 0, 0],
-      fate_day: 0, fate: [], daily: [0, 0, 0, 0, 0, 0, 0], quests_claimed: 0, chapter: 1, boss_wins: 0, duel_day: [0, 0, 0], duel_wins: 0, legends: 0 };
+      fate_day: 0, fate: [], daily: [0, 0, 0, 0, 0, 0, 0], quests_claimed: 0, chapter: 1, boss_wins: 0, duel_day: [0, 0, 0], duel_wins: 0, legends: 0,
+      note_day: 0, votes_today: 0, voted: [], rep: 0, curse_day: 0, hex: null, last_hex: null, charms: 0, boss_seen: 0, boss_hits: 0, boss_claimed: 0 };
   };
   const preimage = (player, season, day, event, rumors, salt) => `${player}|${season}|${day}|${event}|${rumors}|${salt}`;
   function settle(pos, price) { const e = Math.max(1, pos.entry); const mv = Math.trunc((price - e) * 1e6 / e); return Math.trunc(pos.stake * pos.lev * mv * (pos.long ? 1 : -1) / 1e6); }
@@ -42,6 +43,34 @@
       this.operator = operator; this.contractId = contractId; this.sha = sha256hex || null;
       this.players = {}; this.balances = {}; this.supply = {}; this.npcs = {}; this.leaderboard = [];
       this.tokens = {}; this.owners = {}; this.byOwner = {}; this.links = {}; this.nextToken = 0;
+      this.notes = []; this.nextNote = 0; this.feed = []; this.boss = null; this.bossWindow = -1; this.now = () => Date.now();
+    }
+    // ---- the island (shared by every player) ----
+    _post(who, text) { this.feed.push({ at: this.now(), who, text }); if (this.feed.length > R.ISLAND.FEED_KEPT) this.feed.shift(); }
+    _bossRoll(w) { if (this.sha) { const h = this.sha('pixel-bazaar|boss|' + w); return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16)]; } const f = fnv('pixel-bazaar|boss|' + w); return [f & 255, (f >>> 8) & 255]; }
+    _maybeSpawnBoss(now) {
+      const w = Math.floor(now / R.ISLAND.BOSS_WINDOW_MS);
+      if (this.bossWindow === w || (this.boss && this.boss.hp > 0 && now < this.boss.ends)) return;
+      this.bossWindow = w; const r = this._bossRoll(w);
+      if (r[0] < R.ISLAND.BOSS_CHANCE) this._spawnBoss(R.ISLAND.BOSS_FORMS[r[1] % 3], (w + 1) * R.ISLAND.BOSS_WINDOW_MS);
+    }
+    _spawnBoss(species, ends) {
+      this.boss = { id: this.boss ? this.boss.id + 1 : 1, species, hp: R.ISLAND.BOSS_HP, max: R.ISLAND.BOSS_HP, ends, hitters: [], killed_by: null };
+      this._post(this.contractId, `THE ${SP[species].name.toUpperCase()} DESCENDS ON THE ISLAND! Everyone, fight!`);
+    }
+    get_notes(world) { return this.notes.filter(n => n.world === world); }
+    get_feed() { return this.feed.slice(); }
+    get_boss() {
+      const now = this.now(), w = Math.floor(now / R.ISLAND.BOSS_WINDOW_MS), b = this.boss;
+      if (b && ((b.hp > 0 && now < b.ends) || (b.killed_by && now < b.ends + R.ISLAND.BOSS_WINDOW_MS))) return clone(b);
+      const r = this._bossRoll(w);
+      if (this.bossWindow !== w && r[0] < R.ISLAND.BOSS_CHANCE) return { id: 0, species: R.ISLAND.BOSS_FORMS[r[1] % 3], hp: R.ISLAND.BOSS_HP, max: R.ISLAND.BOSS_HP, ends: (w + 1) * R.ISLAND.BOSS_WINDOW_MS, hitters: [], killed_by: null };
+      return null;
+    }
+    summon_boss(c, { species }) {
+      this._op(c); req(R.ISLAND.BOSS_FORMS.includes(species), 'not a boss');
+      req(!this.boss || this.boss.hp <= 0 || this.now() >= this.boss.ends, 'a boss is already up');
+      this._spawnBoss(species, this.now() + R.ISLAND.BOSS_WINDOW_MS);
     }
     _p(a) { return this.players[a] || fail('not a player'); }
     _op(c) { if (c !== this.operator) fail('operator only'); }
@@ -91,7 +120,7 @@
       p.plots = old.plots.map(pl => ({ ...pl, watered_day: 0 })); p.seeds = old.seeds; p.friendship = old.friendship; p.projects = old.projects; p.donated = old.donated;
       p.harvested = old.harvested; p.jade_found = old.jade_found; p.fish_caught = old.fish_caught;
       p.seasons_won = old.seasons_won; p.best_score = old.best_score;
-      p.lead = old.lead; p.wallet = old.wallet; p.book = old.book; p.shards = old.shards; p.clues = old.clues; p.chapter = old.chapter; p.boss_wins = old.boss_wins; p.duel_wins = old.duel_wins; p.legends = old.legends;
+      p.lead = old.lead; p.wallet = old.wallet; p.book = old.book; p.shards = old.shards; p.clues = old.clues; p.chapter = old.chapter; p.boss_wins = old.boss_wins; p.duel_wins = old.duel_wins; p.legends = old.legends; p.rep = old.rep; p.voted = old.voted; p.charms = old.charms; p.boss_seen = old.boss_seen; p.boss_hits = old.boss_hits; p.boss_claimed = old.boss_claimed;
       this.players[c] = p;
     }
     open_position(c, { good, long, lev, stake }) {
@@ -116,11 +145,13 @@
     }
     act(c, { actions }) {
       req(actions && actions.length > 0 && actions.length <= 60, '1 to 60 actions');
-      const before = clone(this._p(c)), balBefore = { ...this.balances }, supBefore = { ...this.supply };
+      this._p(c); const allBefore = clone(this.players), balBefore = { ...this.balances }, supBefore = { ...this.supply };
+      const isl = clone({ n: this.notes, nn: this.nextNote, f: this.feed, b: this.boss, w: this.bossWindow });
       const nft = clone({ t: this.tokens, o: this.owners, b: this.byOwner, l: this.links, n: this.nextToken });
       try { this._act(c, actions); }
       catch (e) {
-        this.players[c] = before; this.balances = balBefore; this.supply = supBefore;
+        this.players = allBefore; this.balances = balBefore; this.supply = supBefore;
+        this.notes = isl.n; this.nextNote = isl.nn; this.feed = isl.f; this.boss = isl.b; this.bossWindow = isl.w;
         this.tokens = nft.t; this.owners = nft.o; this.byOwner = nft.b; this.links = nft.l; this.nextToken = nft.n; throw e;
       }
     }
@@ -131,6 +162,7 @@
       const fate = (k, v) => p.fate_day === p.day && p.fate.length === 3 && p.fate[k] === v, inc = i => { p.daily[i] = Math.min(255, p.daily[i] + 1); };
       const energy = n => { req(p.energy >= n, 'you are too tired'); p.energy -= n; };
       const badges = [];
+      if (p.hex) { const h = p.hex; p.hex = null; if (h.kind === 0) p.energy = Math.max(0, p.energy - 15); if (h.kind === 1) p.coins = Math.max(0, p.coins - 3000); p.last_hex = h; }
       for (const a of actions) {
         switch (a.t) {
           case 'Plant': { energy(2); req(a.crop < CROPS.length && p.seeds[a.crop] > 0, 'no seeds of that kind'); const pl = p.plots[a.plot] || fail('no such plot'); req(pl.crop === null, 'plot is not empty'); p.plots[a.plot] = { crop: a.crop, grown: 0, watered_day: 0 }; p.seeds[a.crop]--; break; }
@@ -163,7 +195,7 @@
               const season = [leadEl === FIRE, leadEl === WATER && p.day >= 5, fate(0, 0), p.chapter >= 5, (p.legends & 15) === 15];
               const k = R.LEGENDS.findIndex((_, k) => season[k] && !(p.legends & (1 << k)));
               if (k >= 0 && roll('legend', p.catches_today) < R.LEGENDS[k].chance) {
-                p.legends |= 1 << k; const id = 'f' + (++this.nextToken); this.tokens[id] = { type: 'Fish', kind: k }; this._give(id, c);
+                p.legends |= 1 << k; this._post(c, 'pulled up the legendary ' + R.LEGENDS[k].name); const id = 'f' + (++this.nextToken); this.tokens[id] = { type: 'Fish', kind: k }; this._give(id, c);
                 if (p.legends === 31) badges.push('fishing_legend');
               } }
             break;
@@ -209,6 +241,7 @@
               this._mintSpirit(c, w.species, w.shiny); inc(0); p.book = this._bookAdd(p.book, w.species);
               const caught = this._bookCount(p.book);
               if (caught === 1) badges.push('first_spirit'); if (caught === 10) badges.push('spirit_tamer'); if (w.shiny) badges.push('shiny_hunter');
+              if (w.shiny || sp.rar >= 2) this._post(c, `caught a ${w.shiny ? 'SHINY ' : ''}${sp.name}`);
             }
             break;
           }
@@ -258,8 +291,55 @@
             p.duel_day[f] = p.day;
             let n = 0; const won = R.duel(mine, R.FOES[f].team, () => roll('duel' + f, n++)).won;
             a.team.forEach(t => this._xp(t, won ? 20 : 6));
-            if (won) { p.coins += R.FOES[f].coins * 100; p.duel_wins++; if (f === 2) { p.boss_wins |= 1; p.shards++; badges.push('spirit_champion'); } }
+            if (won) { p.coins += R.FOES[f].coins * 100; p.duel_wins++; if (f === 2) { p.boss_wins |= 1; p.shards++; badges.push('spirit_champion'); } this._post(c, `beat ${R.FOES[f].name} in a spirit duel`); }
             break;
+          }
+          case 'LeaveNote': {
+            req(a.world >= 0 && a.world < 5 && a.line >= 0 && a.line < R.ISLAND.NOTE_LINES.length && a.x >= 0 && a.x < 1200 && a.y >= 0 && a.y < 1200, 'bad note');
+            req(p.note_day !== p.day, 'one ghost note a day'); p.note_day = p.day;
+            this.notes.push({ id: ++this.nextNote, author: c, world: a.world, x: a.x, y: a.y, line: a.line, arg: a.arg | 0, at: this.now(), truth: 0, liar: 0 });
+            if (this.notes.length > R.ISLAND.NOTES_KEPT) this.notes.shift();
+            break;
+          }
+          case 'VoteNote': {
+            req(p.votes_today < R.ISLAND.VOTES_A_DAY, 'you have voted enough today'); req(!p.voted.includes(a.id), 'you already voted on that note');
+            const n = this.notes.find(n => n.id === a.id) || fail('the note faded away'); req(n.author !== c, 'not your own note');
+            if (a.truth) n.truth++; else n.liar++;
+            p.votes_today++; p.voted.push(a.id); if (p.voted.length > 60) p.voted.shift();
+            const au = this.players[n.author];
+            if (au) { au.rep += a.truth ? 1 : -1; if (a.truth) au.coins += 500; if (au.rep === 10 && a.truth) this._badge('island_oracle', n.author); }
+            break;
+          }
+          case 'Curse': {
+            req(a.kind >= 0 && a.kind < 3, 'no such curse'); req(a.target !== c, 'you cannot curse yourself');
+            req(p.curse_day !== p.day, 'one curse a day'); req(p.coins >= R.ISLAND.CURSE_COST * 100, 'a curse costs 40 coins');
+            const t = this.players[a.target] || fail('no such player');
+            p.coins -= R.ISLAND.CURSE_COST * 100; p.curse_day = p.day;
+            const blocked = t.charms > 0, name = R.ISLAND.CURSES[a.kind].name;
+            if (blocked) { t.charms--; t.last_hex = { from: c, kind: a.kind, blocked: true }; } else t.hex = { from: c, kind: a.kind, blocked: false };
+            this._post(c, blocked ? `cursed ${a.target} with ${name}, but a charm blocked it` : `cursed ${a.target} with ${name}`);
+            break;
+          }
+          case 'BuyCharm': req(p.charms < 3, 'you can carry three charms'); req(p.coins >= R.ISLAND.CHARM_COST * 100, 'a charm costs 25 coins'); p.coins -= R.ISLAND.CHARM_COST * 100; p.charms++; break;
+          case 'BossHit': {
+            const now = this.now(); this._maybeSpawnBoss(now);
+            const b = this.boss && this.boss.hp > 0 && now < this.boss.ends ? this.boss : fail('the sky is calm. no world boss right now');
+            if (p.boss_seen !== b.id) { p.boss_seen = b.id; p.boss_hits = 0; }
+            req(p.boss_hits < R.ISLAND.BOSS_HITS, 'you have hit it three times. let the others try');
+            const lead = p.lead && this.owners[p.lead] === c ? p.lead : fail('you need a companion spirit to fight');
+            energy(15);
+            const t = this.tokens[lead], f = R.fighter(t.species, R.spiritLevel(t.xp));
+            let dmg = Math.trunc(f.atk * (100 + roll('boss', p.boss_hits) % 60) / 100) * 3;
+            if (R.beats(f.el, SP[b.species].el)) dmg = Math.trunc(dmg * 3 / 2);
+            p.boss_hits++; b.hp -= dmg; if (!b.hitters.includes(c) && b.hitters.length < 500) b.hitters.push(c);
+            const killed = b.hp <= 0; if (killed) b.killed_by = c; this._xp(lead, 15);
+            this._post(c, killed ? `landed the final blow on the ${SP[b.species].name}!` : `hit the ${SP[b.species].name} for ${dmg}`);
+            break;
+          }
+          case 'BossClaim': {
+            const b = this.boss || fail('no world boss'); req(b.killed_by, 'the boss still stands'); req(b.hitters.includes(c), 'you did not fight it');
+            req(p.boss_claimed !== b.id, 'already claimed'); p.boss_claimed = b.id; p.coins += 25000; p.shards++; if (b.killed_by === c) p.coins += 10000;
+            badges.push('boss_slayer'); break;
           }
           case 'Solve': {
             req(a.puzzle >= 0 && a.puzzle < PUZZLES.length, 'no such puzzle');
@@ -285,7 +365,7 @@
     pay_debt(c) {
       const p = this._p(c); req(!p.finished && p.coins >= DEBT, 'not enough coins');
       p.coins -= DEBT; p.finished = true; p.won = true; p.seasons_won++; p.best_score = Math.max(p.best_score, p.coins + DEBT);
-      this._badge('debt_free', c); if (p.day <= 6) this._badge('early_bird', c);
+      this._badge('debt_free', c); this._post(c, `paid off the 5,000 coin debt on day ${p.day}`); if (p.day <= 6) this._badge('early_bird', c);
       if (p.coins + DEBT - p.start_coins > p.kaito_pnl) this._badge('beat_kaito', c);
       this._rank({ account: c, season: p.season, score: p.coins + DEBT, day: p.day, won: true });
     }
@@ -333,7 +413,7 @@
         if (m.npc.startsWith('kaito.')) p.kaito_pnl += pnl;
       }
       p.prices = prices; p.commitment = null; p.npc_moves = []; p.asleep = false; p.passed_out = false; p.energy = ENERGY_MAX; p.catches_today = 0;
-      p.enc_today = 0; p.fed_today = 0; p.wild = null; p.daily = [0, 0, 0, 0, 0, 0, 0]; p.quests_claimed = 0;
+      p.enc_today = 0; p.fed_today = 0; p.wild = null; p.daily = [0, 0, 0, 0, 0, 0, 0]; p.quests_claimed = 0; p.votes_today = 0;
       if (p.lead && this.owners[p.lead] === player) this._xp(p.lead, 10);
       if (day >= SEASON_DAYS) {
         p.finished = true; p.won = p.coins >= DEBT; if (p.won) { p.coins -= DEBT; badges.push('debt_free'); }

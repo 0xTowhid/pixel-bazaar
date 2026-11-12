@@ -17,7 +17,7 @@ const Backend = (() => {
   async function api(path, body) {
     const r = await fetch((cfg.api || '') + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) });
     const j = await r.json().catch(() => ({ error: 'Server error' }));
-    if (!r.ok || j.error) throw new Error(j.error || 'Server error');
+    if (!r.ok || (j && j.error)) throw new Error((j && j.error) || 'Server error');
     return j;
   }
   async function loadNear() {
@@ -111,7 +111,7 @@ const Backend = (() => {
     linkRequest() { return this.view('get_link_request', { game_account: me.accountId }); },
     get network() { return cfg.network || 'testnet'; },
     localEngine() { return local && local.engine; },
-    get contractId() { return cfg.contractId; },
+    get contractId() { return local ? 'local' : cfg.contractId; },
     /** A player move. Returns the transaction hash in chain mode. */
     async call(method, args = {}) {
       if (mode === 'local') { local.engine[method](me.accountId, args); return null; }

@@ -179,7 +179,7 @@ async function sync() {
   if (S.chest) { World.P.chestProp.sx = 9; }
   S.player = p;
   S.spirits = await Backend.spirits().catch(() => S.spirits || []);
-  setTimeout(checkProgress, 50);
+  setTimeout(checkProgress, 50); setTimeout(checkHex, 80);
   renderHotbar();
   return p;
 }
@@ -460,7 +460,7 @@ function advance() { S.step = Math.min(S.step + 1, STEPS.length - 1); sfx('ok');
 
 // ---------- UI ----------
 let dlg = null, cardCb = null;
-const uiOpen = () => !!dlg || (S && (S.fishing || S.story || S.catching)) || ['trade', 'card', 'journal', 'profile', 'netErr', 'book', 'quests', 'fate', 'duel'].some(id => $(id)?.classList.contains('on'));
+const uiOpen = () => !!dlg || (S && (S.fishing || S.story || S.catching)) || ['trade', 'card', 'journal', 'profile', 'netErr', 'book', 'quests', 'fate', 'duel', 'island'].some(id => $(id)?.classList.contains('on'));
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 function toast(t, sec = 2.5) { const el = $('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => el.style.display = 'none', sec * 1000); }
 function hideToast() { $('toast').style.display = 'none'; }
@@ -614,7 +614,7 @@ function hud() {
 // ---------- interaction ----------
 function faceToward(a, b) { const dx = b.x - a.x, dy = b.y - a.y; return Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'); }
 function nearest() {
-  if (WD.id !== 'town') return worldNearest();
+  if (WD.id !== 'town') return worldNearest() || noteTarget();
   const P = World.P, d2 = p => Math.hypot(player.x - p.x * TW, player.y - p.y * TW);
   let best = null, bd = 58;
   for (const n of Object.values(NPCS)) { const d = Math.hypot(n.x - player.x, n.y - player.y); if (d < bd) { bd = d; best = { kind: 'npc', n, label: 'TALK TO ' + n.name.toUpperCase() }; } }
@@ -627,7 +627,7 @@ function nearest() {
   if (d2(P.boatIsland) < 50) best = { kind: 'boatBack', label: 'SAIL BACK' };
   if (!S.chest && d2(P.chest) < 46) best = { kind: 'chest', label: 'OPEN CHEST' };
   const g = gateTarget(); if (g) best = g;
-  return best;
+  return best || noteTarget();
 }
 function interact() {
   initAudio();
@@ -648,6 +648,7 @@ function interact() {
   else if (t.kind === 'enter') enterWorld(t.to);
   else if (t.kind === 'exit') leaveWorld();
   else if (t.kind === 'piece') touchPiece(t.o);
+  else if (t.kind === 'note') readNote(t.n);
   else if (t.kind === 'read') {
     const o = t.o, who = { name: o.kind === 'merchant' ? 'Rita, at the night table' : 'Old stone', sheet: o.kind === 'merchant' ? 'rita' : null, color: '#b9a8e8' };
     if (o.kind === 'merchant') say(who, 'Darling! By day I sell rumors, by moonlight I duel. Three spirits each. Winner takes the pot.', [duelChoice(1), { t: 'LEAVE', fn: closeDlg }]);
@@ -691,8 +692,9 @@ addEventListener('keydown', e => {
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; keys[k] = true;
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
   if (k === 'e' || k === ' ' || k === 'Enter') interact();
-  if (k === 'Escape') { closeTrade(); $('journal').classList.remove('on'); $('profile').classList.remove('on'); $('book').classList.remove('on'); $('quests').classList.remove('on'); if (DUEL.on && !$('dStage')) closeDuel(); if (dlg) closeDlg(); }
+  if (k === 'Escape') { closeTrade(); $('journal').classList.remove('on'); $('profile').classList.remove('on'); $('book').classList.remove('on'); $('quests').classList.remove('on'); if (DUEL.on && !$('dStage')) closeDuel(); closeIsland(); if (dlg) closeDlg(); }
   if (k === 'q' && S && S.player && !dlg && !$('card').classList.contains('on')) $('quests').classList.contains('on') ? $('quests').classList.remove('on') : openQuests();
+  if (k === 'i' && S && S.player && !dlg && !$('card').classList.contains('on')) $('island').classList.contains('on') ? closeIsland() : openIsland();
   if (k === 'b' && S && S.player && !dlg && !$('card').classList.contains('on')) $('book').classList.contains('on') ? $('book').classList.remove('on') : openBook();
   if (k === 'j' && !dlg && !$('card').classList.contains('on')) $('journal').classList.contains('on') ? $('journal').classList.remove('on') : openJournal();
   if (k === 'p' && S && !dlg && !(e.target && e.target.tagName === 'INPUT') && !$('card').classList.contains('on')) $('profile').classList.contains('on') ? $('profile').classList.remove('on') : openProfile();
@@ -710,6 +712,8 @@ document.querySelectorAll('#pad button').forEach(b => {
 $('mute').onclick = toggleMusic; $('jBtn').onclick = () => { initAudio(); if (S) openJournal(); };
 $('pBtn').onclick = () => { initAudio(); if (S) openProfile(); };
 $('sBtn').onclick = () => { initAudio(); if (S && S.player) openBook(); };
+$('iBtn').onclick = () => { initAudio(); if (S && S.player) openIsland(); };
+$('bossBar').onclick = () => { if (S && S.player) openIsland('boss'); };
 $('objBox').onclick = () => { initAudio(); if (S && S.player) openQuests(); };
 // Full screen: the Fullscreen API where the browser has it (Android, desktop); on iPhone, add to the home screen.
 const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
@@ -757,7 +761,7 @@ addEventListener('resize', () => { fit(); layoutTop(); }); fit(); setTimeout(lay
 let MINI, last = performance.now(), wx = [];
 for (let i = 0; i < 160; i++) wx.push({ x: Math.random() * VW, y: Math.random() * VH, s: .6 + Math.random() * .8 });
 function update(dt) {
-  const pOn = ['trade', 'card', 'journal', 'profile', 'netErr', 'cine', 'tour', 'book', 'catch', 'quests', 'fate', 'duel'].some(id => $(id)?.classList.contains('on'));
+  const pOn = ['trade', 'card', 'journal', 'profile', 'netErr', 'cine', 'tour', 'book', 'catch', 'quests', 'fate', 'duel', 'island'].some(id => $(id)?.classList.contains('on'));
   document.body.classList.toggle('dlgOn', !!dlg);
   if ((layoutTop.n = (layoutTop.n || 0) + 1) % 20 === 0) layoutTop();
   if (pOn !== document.body.classList.contains('panelOn')) { document.body.classList.toggle('panelOn', pOn); if (pOn) for (const k in keys) keys[k] = false; }
@@ -807,7 +811,7 @@ function draw() {
   for (const p of MAP.props) { const x = p.x * TW, y = p.y * TW; if (vis(x, y, p.w * TW, p.h * TW)) list.push({ base: p.flat ? -1 : (p.y + p.h) * TW, p }); }
   for (const c of (WD.id === 'town' ? Object.values(NPCS) : []).concat(S.inside ? [] : player)) if (vis(c.x - 32, c.y - 60, 64, 64)) list.push({ base: c.y, c });
   if (cat) list.push({ base: cat.y, cat: true });
-  list.push(...spiritDrawables(camX, camY), ...worldDrawables(camX, camY));
+  list.push(...spiritDrawables(camX, camY), ...worldDrawables(camX, camY), ...noteDrawables(camX, camY));
   list.sort((a, b) => a.base - b.base);
   for (const o of list) {
     if (o.cat) { drawCat(camX, camY); continue; }
