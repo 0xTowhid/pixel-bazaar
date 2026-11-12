@@ -44,9 +44,46 @@ pub const ENERGY_MAX: u16 = 100;
 pub const PROJECTS: [(&[(usize, u32)], u64); 3] = [(&[(1, 30), (11, 5)], 400), (&[(12, 10), (11, 8)], 0), (&[(0, 40)], 600)];
 const PLAYER_METHODS: &str = "start_season,open_position,buy_item,claim,sleep,pay_debt,act";
 
+// ---------------- spirits ----------------
+pub const FIRE: u8 = 0; pub const WATER: u8 = 1; pub const WIND: u8 = 2; pub const EARTH: u8 = 3;
+pub const NATURE: u8 = 4; pub const SPIRIT: u8 = 5; pub const DARK: u8 = 6;
+/// (sprite, name, element, rarity 0-3, hp, atk, spd, evolves into (-1 none), at level, needs a lantern shard)
+pub const SPECIES: [(&str, &str, u8, u8, u16, u16, u16, i8, u8, bool); 39] = [
+    ("Flam", "Ember Kit", FIRE, 0, 30, 12, 10, 1, 10, false), ("Flam2", "Blue Blaze", FIRE, 1, 40, 16, 13, 2, 20, true), ("GiantFlam", "Inferno", FIRE, 3, 56, 24, 15, -1, 0, false),
+    ("Axolot", "Tide Axolot", WATER, 0, 34, 10, 11, 4, 10, false), ("AxolotBlue", "Deep Axolot", WATER, 1, 44, 14, 14, 5, 20, false), ("KappaGreen", "Kappa Sage", WATER, 2, 58, 18, 16, -1, 0, false),
+    ("Owl", "Hoot", WIND, 1, 30, 11, 15, 7, 12, false), ("Owl2", "Storm Owl", WIND, 2, 42, 15, 19, 8, 22, true), ("TenguBlue", "Tengu", WIND, 3, 54, 22, 22, -1, 0, false),
+    ("Spirit", "Wisp", SPIRIT, 0, 28, 10, 14, 10, 10, false), ("Spirit2", "Ember Wisp", SPIRIT, 1, 38, 14, 17, 11, 22, true), ("GiantSpirit", "Great Spirit", SPIRIT, 3, 60, 20, 18, -1, 0, false),
+    ("Bamboo", "Sprout", NATURE, 0, 32, 10, 9, 13, 10, false), ("BambooYellow", "Bamboo Guard", NATURE, 1, 46, 13, 11, -1, 0, false),
+    ("Mole", "Digger", EARTH, 0, 34, 11, 8, 15, 10, false), ("Mole2", "Rock Mole", EARTH, 1, 48, 15, 9, -1, 0, false),
+    ("LanternGreen", "Lantern Wisp", SPIRIT, 1, 36, 12, 13, 17, 14, false), ("LanternRed", "Lantern Ghoul", DARK, 2, 48, 17, 14, -1, 0, false),
+    ("Mushroom", "Shroomy", NATURE, 0, 30, 9, 8, 19, 10, false), ("Mushroom2", "Sporecap", NATURE, 1, 42, 13, 10, -1, 0, false),
+    ("Slime", "Bubble Slime", WATER, 0, 30, 9, 10, 21, 8, false), ("Slime2", "Moss Slime", NATURE, 0, 38, 12, 11, 22, 18, false), ("Slime3", "King Slime", WATER, 1, 50, 15, 12, -1, 0, false),
+    ("Butterfly", "Flutter", WIND, 0, 26, 9, 16, 24, 10, false), ("ButterflyBlue", "Gale Moth", WIND, 1, 36, 13, 19, -1, 0, false),
+    ("Skull", "Bones", DARK, 1, 32, 13, 12, 26, 14, false), ("SkullBlue", "Frost Bones", DARK, 2, 44, 17, 14, -1, 0, false),
+    ("Octopus", "Inky", WATER, 0, 34, 11, 10, 28, 12, false), ("Octopus2", "Kraken Jr", WATER, 2, 50, 17, 12, -1, 0, false),
+    ("Racoon", "Racoon", EARTH, 0, 32, 11, 13, 30, 15, false), ("GoldRacoon", "Gold Racoon", EARTH, 2, 44, 15, 17, -1, 0, false),
+    ("Lizard", "Salamander", FIRE, 0, 32, 12, 12, 32, 12, false), ("Lizard2", "Magma Lizard", FIRE, 1, 44, 16, 13, -1, 0, false),
+    ("Eye", "Seer Eye", SPIRIT, 1, 30, 12, 12, 34, 14, false), ("Eye2", "Night Eye", DARK, 2, 42, 16, 14, -1, 0, false),
+    ("Snake", "Hiss", NATURE, 0, 30, 12, 13, 36, 12, false), ("Snake2", "Viper", DARK, 1, 42, 16, 15, -1, 0, false),
+    ("Dragon", "Jade Dragon", EARTH, 3, 64, 24, 20, -1, 0, false), ("DragonYellow", "Sun Drake", FIRE, 3, 62, 26, 18, -1, 0, false),
+];
+/// Where each spirit lives in the wild: (species, weight). Zones: 0 town and farm, 1 Whispering Woods, 2 Sunken Shrine, 3 Clockwork Sky, 4 Moon Market.
+pub const SPAWN: [&[(u8, u8)]; 5] = [
+    &[(12, 22), (14, 20), (18, 22), (20, 22), (23, 16), (29, 12), (3, 6)],
+    &[(0, 26), (9, 26), (31, 20), (35, 20), (6, 8)],
+    &[(27, 30), (3, 30), (20, 20), (5, 3)],
+    &[(23, 30), (6, 26), (24, 14), (7, 6), (38, 1)],
+    &[(16, 34), (25, 28), (33, 22), (17, 4)],
+];
+pub const CATCH_CHANCE: [u16; 4] = [205, 154, 102, 38]; // out of 256: 80%, 60%, 40%, 15%
+pub const ENCOUNTERS_A_DAY: u8 = 12;
+pub const FEEDS_A_DAY: u8 = 5;
+pub fn spirit_level(xp: u32) -> u8 { (1 + xp / 20).min(40) as u8 }
+pub const NFT_BASE: &str = "https://raw.githubusercontent.com/0xTowhid/pixel-bazaar/main/nft";
+
 #[derive(BorshStorageKey)]
 #[near]
-enum Key { Players, Balances, Supply, Npcs }
+enum Key { Players, Balances, Supply, Npcs, Tokens, Owners, ByOwner, Links }
 
 #[near(serializers = [borsh, json])]
 #[derive(Clone)]
@@ -83,7 +120,30 @@ pub struct Player {
     pub projects: Vec<bool>, pub donated: Vec<Vec<u32>>, pub mined_day: u8, pub mined: u32, pub catches_today: u8, pub cat_day: u8,
     pub harvested: u32, pub jade_found: u32, pub fish_caught: u32, pub kaito_pnl: i64, pub start_coins: u64,
     pub seasons_won: u32, pub best_score: u64,
+    // spirits and wallet (kept between seasons)
+    pub lead: Option<String>, pub enc_today: u8, pub fed_today: u8, pub wild: Option<Wild>, pub wallet: Option<AccountId>,
+    pub book: u64, pub shards: u16,
 }
+
+/// An NFT: a spirit, a badge or a legendary catch.
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+#[serde(tag = "type")]
+pub enum Tok { Spirit { species: u8, shiny: bool, xp: u32 }, Badge { name: String }, Fish { kind: u8 } }
+
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct Wild { pub species: u8, pub shiny: bool, pub zone: u8 }
+
+#[near(serializers = [json])]
+pub struct SpiritView { pub token_id: String, pub species: u8, pub name: String, pub element: u8, pub rarity: u8, pub shiny: bool, pub xp: u32, pub level: u8, pub hp: u16, pub atk: u16, pub spd: u16 }
+
+#[near(serializers = [json])]
+pub struct TokenMetadata { pub title: String, pub description: String, pub media: String, pub copies: u64, pub extra: String }
+#[near(serializers = [json])]
+pub struct JsonToken { pub token_id: String, pub owner_id: AccountId, pub metadata: TokenMetadata }
+#[near(serializers = [json])]
+pub struct ContractMetadata { pub spec: String, pub name: String, pub symbol: String, pub icon: Option<String>, pub base_uri: Option<String>, pub reference: Option<String>, pub reference_hash: Option<String> }
 
 #[near(serializers = [json])]
 #[derive(Clone)]
@@ -91,6 +151,10 @@ pub struct Player {
 pub enum Action {
     Plant { plot: u8, crop: u8 }, Water { plot: u8 }, Harvest { plot: u8 }, Mine { rock: u8 }, Fish { ok: bool }, Cat,
     Sell { good: u8, qty: u32 }, Gift { npc: u8, good: u8 }, Donate { project: u8, coins: u64 }, BuySeed { crop: u8, qty: u16 }, BuyPlot,
+    // spirits
+    Encounter { zone: u8 }, Catch { ok: bool }, SetLead { token: String }, Feed { token: String, good: u8 }, Evolve { token: String },
+    // your NEAR wallet
+    ConfirmWallet { wallet: AccountId }, UnlinkWallet, SendToWallet { token: String },
 }
 
 #[near(serializers = [borsh, json])]
@@ -106,6 +170,11 @@ pub struct Contract {
     supply: LookupMap<String, u128>,
     npcs: IterableMap<AccountId, i64>, // npc account -> coin ledger (cents)
     leaderboard: Vec<Entry>,
+    tokens: LookupMap<String, Tok>,             // NEP-171: token id -> what it is
+    owners: LookupMap<String, AccountId>,       // token id -> owner
+    by_owner: LookupMap<AccountId, Vec<String>>, // owner -> token ids
+    links: LookupMap<AccountId, AccountId>,     // game account -> wallet that asked to link
+    next_token: u64,
 }
 
 fn new_player(season: u32) -> Player {
@@ -118,6 +187,7 @@ fn new_player(season: u32) -> Player {
         friendship: vec![0; NPCS], gift_day: vec![0; NPCS], projects: vec![false; PROJECTS.len()], donated: vec![vec![0; NG + 1]; PROJECTS.len()],
         mined_day: 0, mined: 0, catches_today: 0, cat_day: 0, harvested: 0, jade_found: 0, fish_caught: 0, kaito_pnl: 0, start_coins: START_COINS,
         seasons_won: 0, best_score: 0,
+        lead: None, enc_today: 0, fed_today: 0, wild: None, wallet: None, book: 0, shards: 0,
     }
 }
 /// Commitment string the operator hashes on day start and reveals at settlement.
@@ -140,7 +210,8 @@ fn ripe(pl: &Plot) -> bool { pl.crop.map(|c| pl.grown >= CROPS[c as usize].1).un
 impl Contract {
     #[init]
     pub fn new(operator: AccountId) -> Self {
-        Self { operator, players: LookupMap::new(Key::Players), balances: LookupMap::new(Key::Balances), supply: LookupMap::new(Key::Supply), npcs: IterableMap::new(Key::Npcs), leaderboard: vec![] }
+        Self { operator, players: LookupMap::new(Key::Players), balances: LookupMap::new(Key::Balances), supply: LookupMap::new(Key::Supply), npcs: IterableMap::new(Key::Npcs), leaderboard: vec![],
+            tokens: LookupMap::new(Key::Tokens), owners: LookupMap::new(Key::Owners), by_owner: LookupMap::new(Key::ByOwner), links: LookupMap::new(Key::Links), next_token: 0 }
     }
     fn assert_operator(&self) { require!(env::predecessor_account_id() == self.operator, "operator only"); }
 
@@ -179,6 +250,7 @@ impl Contract {
         p.seeds = old.seeds; p.friendship = old.friendship; p.projects = old.projects; p.donated = old.donated;
         p.harvested = old.harvested; p.jade_found = old.jade_found; p.fish_caught = old.fish_caught;
         p.seasons_won = old.seasons_won; p.best_score = old.best_score;
+        p.lead = old.lead; p.wallet = old.wallet; p.book = old.book; p.shards = old.shards;
         self.players.insert(id, p);
     }
 
@@ -230,6 +302,7 @@ impl Contract {
         require!(!p.finished && !p.asleep, "day is over");
         let commit = p.commitment.clone().unwrap_or_else(|| env::panic_str("the day has not started yet"));
         let mut badges: Vec<&str> = vec![];
+        let lead_el = self.lead_element(&id, &p);
         for a in actions {
             match a {
                 Action::Plant { plot, crop } => {
@@ -264,8 +337,10 @@ impl Contract {
                     require!(p.mined & (1 << rock) == 0, "already mined today");
                     p.mined |= 1 << rock;
                     let r = roll(&commit, &id, "mine", rock as u32);
-                    if r < 64 { self.barn_add(&id, 11, 1); p.jade_found += 1; if p.jade_found == 5 { badges.push("jade_hunter"); } }
+                    let jade = if lead_el == Some(EARTH) { 96 } else { 64 }; // an earth spirit digs better
+                    if r < jade { self.barn_add(&id, 11, 1); p.jade_found += 1; if p.jade_found == 5 { badges.push("jade_hunter"); } }
                     else if r < 200 { self.barn_add(&id, 12, 1); }
+                    else if r >= 250 { p.shards += 1; } // a lantern shard, for the last evolutions
                     else { p.seeds[(r % 7) as usize] += 2; }
                 }
                 Action::Fish { ok } => {
@@ -274,7 +349,8 @@ impl Contract {
                     let r = roll(&commit, &id, "fish", p.catches_today as u32);
                     p.catches_today += 1;
                     // the mini-game must be won, and then the catch is still decided on chain (7 in 10)
-                    if ok && r < 179 {
+                    let bite = if lead_el == Some(WATER) { 210 } else { 179 }; // a water spirit helps
+                    if ok && r < bite {
                         let n = if p.projects[0] { 2 } else { 1 };
                         self.barn_add(&id, 1, n); p.fish_caught += n;
                         if p.fish_caught >= 10 && p.fish_caught - n < 10 { badges.push("angler"); }
@@ -329,6 +405,68 @@ impl Contract {
                 Action::BuyPlot => {
                     require!(p.plots.len() < MAX_PLOTS, "no more land"); require!(p.coins >= PLOT_COST * 100, "not enough coins");
                     p.coins -= PLOT_COST * 100; p.plots.push(Plot::default());
+                }
+                Action::Encounter { zone } => {
+                    use_energy(&mut p, 5);
+                    require!((zone as usize) < SPAWN.len(), "no such place");
+                    require!(p.enc_today < ENCOUNTERS_A_DAY, "the spirits are hiding until tomorrow");
+                    if zone == 2 { require!(self.owns_element(&id, WATER), "you need a water spirit to dive to the shrine"); }
+                    if zone == 3 { require!(self.owns_element(&id, WIND), "you need a wind spirit to glide to the sky"); }
+                    let n = p.enc_today as u32; p.enc_today += 1;
+                    let table = SPAWN[zone as usize];
+                    let total: u32 = table.iter().map(|x| x.1 as u32).sum();
+                    let mut pick = (roll(&commit, &id, "enc", n) as u32 * 256 + roll(&commit, &id, "enc2", n) as u32) % total;
+                    let mut species = table[0].0;
+                    for &(sp, w) in table { if pick < w as u32 { species = sp; break; } pick -= w as u32; }
+                    let shiny = roll(&commit, &id, "shiny", n) < 4; // 1 in 64
+                    p.wild = Some(Wild { species, shiny, zone });
+                }
+                Action::Catch { ok } => {
+                    let w = p.wild.take().unwrap_or_else(|| env::panic_str("there is no spirit here"));
+                    let sp = SPECIES[w.species as usize];
+                    let mut chance = CATCH_CHANCE[sp.3 as usize];
+                    if lead_el == Some(sp.2) { chance += 38; } // a spirit of the same element calms it
+                    if ok && (roll(&commit, &id, "catch", p.enc_today as u32) as u16) < chance {
+                        self.mint_spirit(&id, w.species, w.shiny);
+                        p.book |= 1u64 << w.species;
+                        let caught = p.book.count_ones();
+                        if caught == 1 { badges.push("first_spirit"); }
+                        if caught >= 10 && (p.book & !(1u64 << w.species)).count_ones() < 10 { badges.push("spirit_tamer"); }
+                        if w.shiny { badges.push("shiny_hunter"); }
+                    }
+                }
+                Action::SetLead { token } => { self.assert_owns_spirit(&id, &token); p.lead = Some(token); }
+                Action::Feed { token, good } => {
+                    self.assert_owns_spirit(&id, &token);
+                    require!(p.fed_today < FEEDS_A_DAY, "it is full for today");
+                    require!((good as usize) < NG && self.bal(GOODS[good as usize], &id) >= 1, "you don't have that");
+                    self.burn(GOODS[good as usize], &id, 1); p.fed_today += 1;
+                    let xp = match good { 11 => 25, 1 | 2 | 3 => 12, _ => 6 };
+                    self.add_xp(&token, xp);
+                }
+                Action::Evolve { token } => {
+                    self.assert_owns_spirit(&id, &token);
+                    let Some(Tok::Spirit { species, shiny, xp }) = self.tokens.get(&token).cloned() else { env::panic_str("not a spirit") };
+                    let sp = SPECIES[species as usize];
+                    require!(sp.7 >= 0, "this is its final form");
+                    require!(spirit_level(xp) >= sp.8, "it needs a higher level");
+                    if sp.9 { require!(p.shards >= 1, "it needs a lantern shard"); p.shards -= 1; }
+                    let next = sp.7 as u8;
+                    self.tokens.insert(token.clone(), Tok::Spirit { species: next, shiny, xp });
+                    p.book |= 1u64 << next;
+                    if SPECIES[next as usize].3 == 3 { badges.push("legend_tamer"); }
+                    log!("{} evolved into {}", token, SPECIES[next as usize].1);
+                }
+                Action::ConfirmWallet { wallet } => {
+                    require!(self.links.get(&id) == Some(&wallet), "ask from your wallet first");
+                    self.links.remove(&id); p.wallet = Some(wallet); badges.push("wallet_linked");
+                }
+                Action::UnlinkWallet => { p.wallet = None; }
+                Action::SendToWallet { token } => {
+                    let to = p.wallet.clone().unwrap_or_else(|| env::panic_str("link a wallet first"));
+                    require!(self.owners.get(&token) == Some(&id), "not yours");
+                    if p.lead.as_deref() == Some(token.as_str()) { p.lead = None; }
+                    self.move_token(&token, &id, &to, Some("sent to the linked wallet"));
                 }
             }
         }
@@ -432,7 +570,8 @@ impl Contract {
             }
         }
         p.prices = prices.clone(); p.commitment = None; p.npc_moves = vec![]; p.asleep = false; p.passed_out = false;
-        p.energy = ENERGY_MAX; p.catches_today = 0;
+        p.energy = ENERGY_MAX; p.catches_today = 0; p.enc_today = 0; p.fed_today = 0; p.wild = None;
+        if let Some(t) = p.lead.clone() { if self.owners.get(&t) == Some(&player) { self.add_xp(&t, 10); } } // your companion grows with you
         if day >= SEASON_DAYS {
             p.finished = true; p.won = p.coins >= DEBT;
             if p.won { p.coins -= DEBT; badges.push("debt_free"); }
@@ -486,7 +625,11 @@ impl Contract {
     fn badge(&mut self, name: &str, id: &AccountId) -> bool {
         let t = format!("badge_{name}");
         if self.bal(&t, id) > 0 { return false; }
-        self.mint(&t, id, 1); true
+        self.mint(&t, id, 1); // the record that you earned it (stays even if you send the NFT away)
+        let tid = self.new_token_id("b");
+        self.tokens.insert(tid.clone(), Tok::Badge { name: name.to_string() });
+        self.give_token(&tid, id);
+        true
     }
 
     // ---------------- NEP-245 multi-token (goods, items, badges) ----------------
@@ -538,7 +681,7 @@ impl Contract {
         let barn = (0..NG).map(|g| self.bal(GOODS[g], &account_id) as u32).collect();
         let mut owned = vec![];
         for (t, _) in ITEMS.iter() { if self.bal(t, &account_id) > 0 { owned.push(t.to_string()); } }
-        for b in ["first_harvest", "green_thumb", "jade_hunter", "angler", "x10_survivor", "faded_rita", "beat_kaito", "debt_free", "early_bird", "restorer", "best_friend"] {
+        for b in BADGES {
             if self.bal(&format!("badge_{b}"), &account_id) > 0 { owned.push(format!("badge_{b}")); }
         }
         (barn, owned)
@@ -548,6 +691,120 @@ impl Contract {
     pub fn get_operator(&self) -> AccountId { self.operator.clone() }
 }
 
+
+// ---------------- spirits and NEP-171 NFTs ----------------
+#[near]
+impl Contract {
+    fn new_token_id(&mut self, prefix: &str) -> String { self.next_token += 1; format!("{prefix}{}", self.next_token) }
+    fn give_token(&mut self, tid: &str, to: &AccountId) {
+        self.owners.insert(tid.to_string(), to.clone());
+        self.by_owner.entry(to.clone()).or_insert_with(Vec::new).push(tid.to_string());
+        log!(r#"EVENT_JSON:{{"standard":"nep171","version":"1.2.0","event":"nft_mint","data":[{{"owner_id":"{}","token_ids":["{}"]}}]}}"#, to, tid);
+    }
+    fn move_token(&mut self, tid: &str, from: &AccountId, to: &AccountId, memo: Option<&str>) {
+        require!(from != to, "already there");
+        if let Some(v) = self.by_owner.get_mut(from) { v.retain(|t| t != tid); }
+        self.owners.insert(tid.to_string(), to.clone());
+        self.by_owner.entry(to.clone()).or_insert_with(Vec::new).push(tid.to_string());
+        if let Some(p) = self.players.get_mut(from) { if p.lead.as_deref() == Some(tid) { p.lead = None; } }
+        log!(r#"EVENT_JSON:{{"standard":"nep171","version":"1.2.0","event":"nft_transfer","data":[{{"old_owner_id":"{}","new_owner_id":"{}","token_ids":["{}"]{}}}]}}"#,
+            from, to, tid, memo.map(|m| format!(r#","memo":"{}""#, m.replace(['"', '\\'], "'"))).unwrap_or_default());
+    }
+    fn mint_spirit(&mut self, to: &AccountId, species: u8, shiny: bool) -> String {
+        let tid = self.new_token_id("s");
+        self.tokens.insert(tid.clone(), Tok::Spirit { species, shiny, xp: 0 });
+        self.give_token(&tid, to);
+        tid
+    }
+    fn add_xp(&mut self, tid: &str, n: u32) {
+        if let Some(Tok::Spirit { xp, .. }) = self.tokens.get_mut(tid) { *xp = (*xp + n).min(40 * 20); }
+    }
+    fn assert_owns_spirit(&self, id: &AccountId, tid: &str) {
+        require!(self.owners.get(tid) == Some(id), "that spirit is not with you");
+        require!(matches!(self.tokens.get(tid), Some(Tok::Spirit { .. })), "not a spirit");
+    }
+    fn spirit_species(&self, tid: &str) -> Option<u8> { match self.tokens.get(tid) { Some(Tok::Spirit { species, .. }) => Some(*species), _ => None } }
+    fn lead_element(&self, id: &AccountId, p: &Player) -> Option<u8> {
+        let t = p.lead.as_ref()?; if self.owners.get(t) != Some(id) { return None; }
+        self.spirit_species(t).map(|s| SPECIES[s as usize].2)
+    }
+    fn owns_element(&self, id: &AccountId, el: u8) -> bool {
+        self.by_owner.get(id).map(|v| v.iter().any(|t| self.spirit_species(t).map(|s| SPECIES[s as usize].2 == el).unwrap_or(false))).unwrap_or(false)
+    }
+
+    // ----- wallet link: the wallet asks (signed with its own key), the game account confirms in `act` -----
+    #[payable]
+    pub fn link_wallet(&mut self, game_account: AccountId) {
+        require!(env::attached_deposit() == NearToken::from_yoctonear(1), "requires 1 yoctoNEAR (sign with your wallet)");
+        require!(self.players.contains_key(&game_account), "no trader with that name");
+        self.links.insert(game_account, env::predecessor_account_id());
+    }
+    pub fn get_link_request(&self, game_account: AccountId) -> Option<AccountId> { self.links.get(&game_account).cloned() }
+
+    // ----- NEP-171 -----
+    #[payable]
+    pub fn nft_transfer(&mut self, receiver_id: AccountId, token_id: String, approval_id: Option<u64>, memo: Option<String>) {
+        require!(env::attached_deposit() == NearToken::from_yoctonear(1), "requires 1 yoctoNEAR");
+        require!(approval_id.is_none(), "approvals not supported");
+        let from = env::predecessor_account_id();
+        require!(self.owners.get(&token_id) == Some(&from), "not the owner");
+        self.move_token(&token_id, &from, &receiver_id, memo.as_deref());
+    }
+    pub fn nft_token(&self, token_id: String) -> Option<JsonToken> {
+        let owner = self.owners.get(&token_id)?.clone();
+        Some(JsonToken { metadata: self.meta(&token_id), token_id, owner_id: owner })
+    }
+    pub fn nft_total_supply(&self) -> U128 { U128(self.next_token as u128) }
+    pub fn nft_supply_for_owner(&self, account_id: AccountId) -> U128 { U128(self.by_owner.get(&account_id).map(|v| v.len()).unwrap_or(0) as u128) }
+    pub fn nft_tokens_for_owner(&self, account_id: AccountId, from_index: Option<U128>, limit: Option<u64>) -> Vec<JsonToken> {
+        let v = self.by_owner.get(&account_id).cloned().unwrap_or_default();
+        let from = from_index.map(|x| x.0 as usize).unwrap_or(0); let lim = limit.unwrap_or(50).min(100) as usize;
+        v.iter().skip(from).take(lim).filter_map(|t| self.nft_token(t.clone())).collect()
+    }
+    pub fn nft_tokens(&self, from_index: Option<U128>, limit: Option<u64>) -> Vec<JsonToken> {
+        let from = from_index.map(|x| x.0 as u64).unwrap_or(0); let lim = limit.unwrap_or(50).min(100);
+        let mut out = vec![];
+        for n in from + 1..=self.next_token {
+            if out.len() as u64 >= lim { break; }
+            for pre in ["s", "b", "f"] { if let Some(t) = self.nft_token(format!("{pre}{n}")) { out.push(t); } }
+        }
+        out
+    }
+    pub fn nft_metadata(&self) -> ContractMetadata {
+        ContractMetadata { spec: "nft-1.0.0".into(), name: "Lantern Isles Spirits".into(), symbol: "SPIRIT".into(), icon: None,
+            base_uri: Some(NFT_BASE.into()), reference: None, reference_hash: None }
+    }
+    fn meta(&self, tid: &str) -> TokenMetadata {
+        match self.tokens.get(tid) {
+            Some(Tok::Spirit { species, shiny, xp }) => {
+                let sp = SPECIES[*species as usize]; let el = ["Fire", "Water", "Wind", "Earth", "Nature", "Spirit", "Dark"][sp.2 as usize];
+                let rar = ["Common", "Uncommon", "Rare", "Legendary"][sp.3 as usize];
+                TokenMetadata {
+                    title: format!("{}{} (Lv {})", if *shiny { "Shiny " } else { "" }, sp.1, spirit_level(*xp)),
+                    description: format!("A {} {} spirit from the Lantern Isles (Pixel Bazaar on NEAR).", rar.to_lowercase(), el.to_lowercase()),
+                    media: format!("{NFT_BASE}/spirits/{}{}.png", sp.0, if *shiny { "_shiny" } else { "" }), copies: 1,
+                    extra: format!(r#"{{"species":"{}","element":"{}","rarity":"{}","level":{},"xp":{},"hp":{},"atk":{},"spd":{},"shiny":{}}}"#, sp.1, el, rar, spirit_level(*xp), xp, sp.4, sp.5, sp.6, shiny),
+                }
+            }
+            Some(Tok::Badge { name }) => TokenMetadata { title: format!("Badge: {}", name.replace('_', " ")), description: "An achievement badge from Pixel Bazaar on NEAR.".into(),
+                media: format!("{NFT_BASE}/badges/{name}.png"), copies: 1, extra: format!(r#"{{"badge":"{name}"}}"#) },
+            Some(Tok::Fish { kind }) => TokenMetadata { title: format!("Legendary fish #{kind}"), description: "A legendary catch from the Lantern Isles.".into(),
+                media: format!("{NFT_BASE}/fish/{kind}.png"), copies: 1, extra: format!(r#"{{"fish":{kind}}}"#) },
+            None => env::panic_str("no such token"),
+        }
+    }
+    /// The spirits an account holds, with stats (for the game UI).
+    pub fn get_spirits(&self, account_id: AccountId) -> Vec<SpiritView> {
+        self.by_owner.get(&account_id).cloned().unwrap_or_default().into_iter().filter_map(|t| match self.tokens.get(&t) {
+            Some(Tok::Spirit { species, shiny, xp }) => { let sp = SPECIES[*species as usize]; let lv = spirit_level(*xp) as u16;
+                Some(SpiritView { token_id: t.clone(), species: *species, name: sp.1.into(), element: sp.2, rarity: sp.3, shiny: *shiny, xp: *xp, level: lv as u8,
+                    hp: sp.4 + sp.4 * (lv - 1) / 20, atk: sp.5 + sp.5 * (lv - 1) / 20, spd: sp.6 + sp.6 * (lv - 1) / 25 }) }
+            _ => None }).collect()
+    }
+}
+
+pub const BADGES: [&str; 16] = ["first_harvest", "green_thumb", "jade_hunter", "angler", "x10_survivor", "faded_rita", "beat_kaito", "debt_free", "early_bird", "restorer", "best_friend",
+    "first_spirit", "spirit_tamer", "shiny_hunter", "legend_tamer", "wallet_linked"];
 fn use_energy(p: &mut Player, n: u16) { require!(p.energy >= n, "you are too tired"); p.energy -= n; }
 
 #[cfg(test)]
@@ -768,4 +1025,100 @@ mod tests {
 
     #[test]
     fn audit_passing_out_costs_nothing_hidden() { let mut c = setup(); commit(&mut c, 1, 2, "s"); c.sleep(true); ctx(op()); let l = c.settle_day(pl(), 1, 2, "r".into(), "s".into()); assert_eq!(l.passed_out_loss, 0); }
+
+    // ---------- spirits and NFTs ----------
+    fn catch_one(c: &mut Contract, zone: u8) -> Option<String> {
+        // try encounters until one is caught (rolls are fixed per day, so this is deterministic)
+        for _ in 0..ENCOUNTERS_A_DAY {
+            let before = c.get_spirits(pl()).len();
+            let p = c.players.get_mut(&pl()).unwrap(); p.energy = 100;
+            c.act(vec![Action::Encounter { zone }, Action::Catch { ok: true }]);
+            let v = c.get_spirits(pl()); if v.len() > before { return Some(v.last().unwrap().token_id.clone()); }
+        }
+        None
+    }
+    #[test]
+    fn spirits_catch_mint_nft_and_badge() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        let t = catch_one(&mut c, 0).expect("caught something in town");
+        let tok = c.nft_token(t.clone()).unwrap();
+        assert_eq!(tok.owner_id, pl()); assert!(tok.metadata.media.contains("/spirits/"));
+        assert_eq!(c.mt_balance_of(pl(), "badge_first_spirit".into()).0, 1);
+        let all = c.nft_tokens_for_owner(pl(), None, None);
+        assert!(all.iter().any(|x| x.metadata.title.starts_with("Badge")), "badges are NFTs too");
+        assert!(c.get_player(pl()).unwrap().book != 0);
+    }
+    #[test]
+    #[should_panic(expected = "water spirit")]
+    fn spirits_shrine_needs_a_water_spirit() { let mut c = setup(); commit(&mut c, 1, 2, "s"); c.act(vec![Action::Encounter { zone: 2 }]); }
+    #[test]
+    #[should_panic(expected = "no spirit here")]
+    fn spirits_no_catch_without_encounter() { let mut c = setup(); commit(&mut c, 1, 2, "s"); c.act(vec![Action::Catch { ok: true }]); }
+    #[test]
+    fn spirits_lost_minigame_never_catches() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        for _ in 0..6 { c.act(vec![Action::Encounter { zone: 0 }, Action::Catch { ok: false }]); }
+        assert!(c.get_spirits(pl()).is_empty());
+    }
+    #[test]
+    fn spirits_lead_feeds_levels_and_evolves_keeping_the_token() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        let t = c.mint_spirit(&pl(), 20, false); // Bubble Slime, evolves at Lv 8
+        c.act(vec![Action::SetLead { token: t.clone() }]);
+        night(&mut c, 1, 2); // +10 xp for the lead at night
+        assert_eq!(c.get_spirits(pl())[0].xp, 10);
+        commit(&mut c, 2, 2, "s");
+        c.barn_add(&pl(), 11, 5);
+        c.act((0..5).map(|_| Action::Feed { token: t.clone(), good: 11 }).collect()); // 5 jade = +125 xp
+        assert_eq!(c.get_spirits(pl())[0].level, 7);
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::Feed { token: t.clone(), good: 11 }])));
+        assert!(r.is_err(), "only 5 meals a day");
+        night(&mut c, 2, 2); commit(&mut c, 3, 2, "s"); // another night with you: Lv 8
+        assert!(c.get_spirits(pl())[0].level >= 8);
+        c.act(vec![Action::Evolve { token: t.clone() }]);
+        let v = c.get_spirits(pl()); assert_eq!(v[0].species, 21); assert_eq!(v[0].token_id, t, "same NFT, new form");
+    }
+    #[test]
+    #[should_panic(expected = "lantern shard")]
+    fn spirits_last_forms_need_a_shard() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        let t = c.mint_spirit(&pl(), 1, false); c.add_xp(&t, 800);
+        c.act(vec![Action::Evolve { token: t }]);
+    }
+    #[test]
+    fn wallet_link_send_and_bring_back() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        let t = c.mint_spirit(&pl(), 0, true);
+        let w: AccountId = "towhid.testnet".parse().unwrap();
+        testing_env!(VMContextBuilder::new().current_account_id("bazaar.testnet".parse().unwrap()).predecessor_account_id(w.clone()).attached_deposit(NearToken::from_yoctonear(1)).build());
+        c.link_wallet(pl());
+        ctx(pl()); c.act(vec![Action::ConfirmWallet { wallet: w.clone() }, Action::SendToWallet { token: t.clone() }]);
+        assert_eq!(c.nft_token(t.clone()).unwrap().owner_id, w);
+        assert!(c.get_spirits(pl()).is_empty());
+        testing_env!(VMContextBuilder::new().current_account_id("bazaar.testnet".parse().unwrap()).predecessor_account_id(w.clone()).attached_deposit(NearToken::from_yoctonear(1)).build());
+        c.nft_transfer(pl(), t.clone(), None, None);
+        assert_eq!(c.nft_token(t).unwrap().owner_id, pl());
+    }
+    #[test]
+    #[should_panic(expected = "ask from your wallet first")]
+    fn wallet_cannot_link_without_the_wallet_signing() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        c.act(vec![Action::ConfirmWallet { wallet: "thief.testnet".parse().unwrap() }]);
+    }
+    #[test]
+    #[should_panic(expected = "link a wallet first")]
+    fn wallet_send_needs_a_link() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s"); let t = c.mint_spirit(&pl(), 0, false);
+        c.act(vec![Action::SendToWallet { token: t }]);
+    }
+    #[test]
+    fn spirits_encounter_limit_and_reset() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        c.players.get_mut(&pl()).unwrap().energy = 100;
+        c.act((0..ENCOUNTERS_A_DAY).map(|_| Action::Encounter { zone: 0 }).collect());
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::Encounter { zone: 0 }])));
+        assert!(r.is_err());
+        night(&mut c, 1, 2); commit(&mut c, 2, 2, "s");
+        c.act(vec![Action::Encounter { zone: 0 }]);
+    }
 }
