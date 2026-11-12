@@ -71,6 +71,25 @@ button{font:inherit;color:inherit}
 #journal{width:min(92%,30em)}
 #profile{width:min(94%,34em)}
 body:not(.ingame) #hudL,body:not(.ingame) #objBox,body:not(.ingame) #topR,body:not(.ingame) #hotbar,body:not(.ingame) #pad{display:none!important}
+#cine{position:absolute;inset:0;display:none;z-index:70;cursor:pointer}#cine.on{display:block}
+#fxcv{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated}
+#cine .lb{position:absolute;left:0;right:0;height:9%;background:#000}#cine .lb.top{top:0}#cine .lb.bot{bottom:0}
+#cineTitle{position:absolute;top:11%;left:0;right:0;text-align:center;color:var(--gold);font-size:clamp(11px,1.5vw,20px)}
+#cineN{position:absolute;top:3%;left:2%;color:#b9a8e8;font-size:clamp(9px,1vw,13px)}
+#cineSkip{position:absolute;top:2%;right:2%;z-index:2}
+#cineBox{position:absolute;left:10%;right:10%;bottom:12%;padding:1.1em 1.3em;display:flex;gap:1em;align-items:center;font-size:clamp(11px,1.45vw,19px);line-height:1.55}
+#cineBox canvas{width:5.2em;height:5.2em;image-rendering:pixelated;border:3px solid var(--gold);border-radius:8px;background:#2a2346;flex:none}
+#cineBox.narr{text-align:center;justify-content:center;font-size:clamp(12px,1.7vw,22px)}
+#tour{position:absolute;inset:0;display:none;z-index:70}#tour.on{display:block}
+#tourSpot{position:absolute;border:3px solid var(--gold);border-radius:10px;box-shadow:0 0 0 9999px rgba(11,8,20,.72);transition:all .25s ease;pointer-events:none}
+#tourBox{position:absolute;padding:1em 1.2em;transition:left .25s,top .25s}
+#tourBox .tT{color:var(--gold);font-size:1.35em;margin:.4em 0 .5em}#tourBox .tD{line-height:1.6}
+.tDots{display:flex;gap:.35em;margin:1em 0}.tDots i{width:1.6em;height:.4em;border-radius:3px;background:#3a2f5c}.tDots i.on{background:var(--gold)}
+.tBtns{display:flex;gap:.5em;align-items:center;flex-wrap:wrap}.tBtns button[disabled]{opacity:.4}
+.wGrid{display:grid;grid-template-columns:1fr 1fr;gap:.8em 1.4em}
+.wItem{display:flex;gap:.8em;align-items:center}.wItem img{width:3.4em;height:3.4em;image-rendering:pixelated}
+.wItem b{display:block;color:var(--gold);font-weight:normal}.wItem span{font-size:.75em;color:var(--mut)}
+@media (max-width:700px){.wGrid{grid-template-columns:1fr}}
 #netErr{width:min(90%,26em);text-align:center;z-index:60}
 .phead{display:flex;gap:.9em;align-items:center}.phead canvas{width:4em;height:4em;image-rendering:pixelated;border:2px solid var(--gold);border-radius:6px;background:#2a2346}
 .phead a{color:var(--gold)}
@@ -163,6 +182,10 @@ body.dlgOn #hotbar,body.dlgOn #chainlog{display:none}
   <div id="journal" class="ui box panel"></div>
   <div id="profile" class="ui box panel"></div>
   <div id="netErr" class="ui box panel"></div>
+  <div id="cine"><canvas id="fxcv"></canvas><div class="lb top"></div><div class="lb bot"></div>
+    <div id="cineTitle">CHAPTER 0 · THE NIGHT THE LANTERN WENT OUT</div><div id="cineN"></div>
+    <button class="btn" id="cineSkip">SKIP ▸▸</button><div id="cineBox" class="box"></div></div>
+  <div id="tour"><div id="tourSpot"></div><div id="tourBox" class="box"></div></div>
   <div id="card" class="ui box panel"></div>
 </div>
 <div id="rotate">Turn your phone sideways to play.</div>
@@ -181,3 +204,4 @@ body.dlgOn #hotbar,body.dlgOn #chainlog{display:none}
 <script src="game.js"></script>
 <script src="life.js"></script>
 <script src="panels.js"></script>
+<script src="story.js"></script>

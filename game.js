@@ -56,7 +56,18 @@ function loadAll() {
 function initAudio() {
   if (audioReady) return; audioReady = true;
   for (const [k, f] of Object.entries(SND_SRC)) SND[k] = new Audio('assets/audio/' + f + '.wav');
-  music = new Audio('assets/audio/village.ogg'); music.loop = true; music.volume = .3;
+  playMusic(wantMusic, true);
+}
+// One track per place: the town, each world, duels, the intro.
+const MUSIC = { village: 'assets/audio/village.ogg', story: 'assets/music/story.ogg', woods: 'assets/music/woods.ogg', shrine: 'assets/music/shrine.ogg',
+  sky: 'assets/music/sky.ogg', moon: 'assets/music/moon.ogg', fight: 'assets/music/fight.ogg', boss: 'assets/music/boss.ogg' };
+let wantMusic = 'village';
+function playMusic(name, force) {
+  wantMusic = name; if (!audioReady) return;
+  if (!force && music && music.dataset.n === name) return;
+  const old = music;
+  if (old) { let v = old.volume; const t = setInterval(() => { v -= .05; if (v <= 0) { clearInterval(t); old.pause(); } else old.volume = v; }, 60); }
+  music = new Audio(MUSIC[name] || MUSIC.village); music.dataset.n = name; music.loop = true; music.volume = .3;
   if (musicOn) music.play().catch(() => {});
 }
 function sfx(k) { if (!audioReady || !SND[k]) return; const a = SND[k].cloneNode(); a.volume = .4; a.play().catch(() => {}); }
@@ -121,7 +132,10 @@ async function boot() {
   if (p.finished) await mustDo('Starting a new season', () => Backend.call('start_season'), 'start_season');
   else if (p.asleep) { await mustDo('Finishing last night', () => Backend.settle(p.day), 'settle_day'); toast('You slept through the night.', 3); }
   await beginDay(true);
-  showPaper(() => toast('You owe the Harbor Master 5,000 coins. You have ' + fmt(S.coins) + ' and ' + (SEASON_DAYS - S.day + 1) + ' days.', 6));
+  const firstTime = !safeGet('pb_intro|' + Backend.accountId);
+  let tour = false;
+  if (firstTime) { await playIntro(); tour = await showWelcome(); safeSet('pb_intro|' + Backend.accountId, '1'); }
+  showPaper(() => { if (tour) startTour(); else toast('You owe the Harbor Master 5,000 coins. You have ' + fmt(S.coins) + ' and ' + (SEASON_DAYS - S.day + 1) + ' days.', 6); });
 }
 // What the chain does not keep (your notes on who lies, the tutorial step, price history) lives in this browser.
 const memKey = p => 'pb_mem|' + Backend.accountId + '|' + p.season;
@@ -441,7 +455,7 @@ function advance() { S.step = Math.min(S.step + 1, STEPS.length - 1); sfx('ok');
 
 // ---------- UI ----------
 let dlg = null, cardCb = null;
-const uiOpen = () => !!dlg || (S && S.fishing) || ['trade', 'card', 'journal', 'profile', 'netErr'].some(id => $(id)?.classList.contains('on'));
+const uiOpen = () => !!dlg || (S && (S.fishing || S.story)) || ['trade', 'card', 'journal', 'profile', 'netErr'].some(id => $(id)?.classList.contains('on'));
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 function toast(t, sec = 2.5) { const el = $('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => el.style.display = 'none', sec * 1000); }
 function hideToast() { $('toast').style.display = 'none'; }
@@ -570,8 +584,10 @@ function openJournal() { hideToast();
     <div class="jh">BADGES (NEP-245)</div><div class="badges">${Object.entries(Rules.BADGES).map(([k, n]) => `<span class="${S.items.has('badge_' + k) ? 'got' : ''}">${n}</span>`).join('')}</div>
     <div class="tr" style="margin-top:.6em"><span>Items</span><span>x${S.lev} license${S.bridge ? ' · bridge' : ''}${S.boat ? ' · boat pass' : ''}${S.items.has('stall') ? ' · stall' : ''}</span></div>
     ${txHistory.length ? '<div class="jh">ON NEAR</div><div class="txh">' + txHistory.map(h => '<div>' + h + '</div>').join('') + '</div>' : ''}
-    <button class="btn big" id="jClose">CLOSE (J)</button>`;
+    <div style="display:flex;gap:.5em;flex-wrap:wrap"><button class="btn" id="jTour">REPLAY TOUR</button><button class="btn" id="jIntro">REPLAY INTRO</button><button class="btn big" id="jClose">CLOSE (J)</button></div>`;
   $('journal').classList.add('on'); $('jClose').onclick = () => $('journal').classList.remove('on'); sfx('menu');
+  $('jTour').onclick = () => { $('journal').classList.remove('on'); startTour(); };
+  $('jIntro').onclick = async () => { $('journal').classList.remove('on'); await playIntro(); };
 }
 function clockText() { const m = 6 * 60 + Math.floor(S.t / DAY_SECONDS * 18 * 60); return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
 function hud() {
@@ -650,6 +666,7 @@ const keys = {};
 addEventListener('keydown', e => {
   initAudio();
   if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+  if (window.storyKey && storyKey(e)) return; // the intro and the tour take the keyboard while they run
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; keys[k] = true;
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
   if (k === 'e' || k === ' ' || k === 'Enter') interact();
@@ -697,6 +714,13 @@ function fit() {
   if (cv.width !== VW) cv.width = VW;
   cv.height = VH; ctx.imageSmoothingEnabled = false;
 }
+// Where a world point is on screen (stage pixels), for the tour's spotlight.
+function toScreen(wx, wy) {
+  const MWp = World.W * TW, MHp = World.H * TW;
+  const camX = Math.max(0, Math.min(MWp - VW, player.x - VW / 2)), camY = Math.max(0, Math.min(MHp - VH, player.y - VH / 2));
+  const r = cv.getBoundingClientRect(), st = $('stage').getBoundingClientRect();
+  return { x: r.left - st.left + (wx - camX) * r.width / VW, y: r.top - st.top + (wy - camY) * r.height / VH, k: r.width / VW };
+}
 // Keep the goal banner between the left HUD and the top-right buttons so they never overlap on small screens.
 function layoutTop() {
   const ob = $('objBox'); if (!ob || !$('stage') || !$('hudL') || !$('topR')) return;
@@ -708,7 +732,7 @@ addEventListener('resize', () => { fit(); layoutTop(); }); fit(); setTimeout(lay
 let MINI, last = performance.now(), wx = [];
 for (let i = 0; i < 160; i++) wx.push({ x: Math.random() * VW, y: Math.random() * VH, s: .6 + Math.random() * .8 });
 function update(dt) {
-  const pOn = ['trade', 'card', 'journal', 'profile', 'netErr'].some(id => $(id)?.classList.contains('on'));
+  const pOn = ['trade', 'card', 'journal', 'profile', 'netErr', 'cine', 'tour'].some(id => $(id)?.classList.contains('on'));
   document.body.classList.toggle('dlgOn', !!dlg);
   if ((layoutTop.n = (layoutTop.n || 0) + 1) % 20 === 0) layoutTop();
   if (pOn !== document.body.classList.contains('panelOn')) { document.body.classList.toggle('panelOn', pOn); if (pOn) for (const k in keys) keys[k] = false; }
