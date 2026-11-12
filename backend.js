@@ -100,6 +100,18 @@ const Backend = (() => {
       if (mode === 'mock') return api('/mock/view', { method: 'get_leaderboard' });
       await loadNear(); return provider.callFunction({ contractId: cfg.contractId, method: 'get_leaderboard', args: {} });
     },
+    /** Any read-only contract method (spirits, NFTs, wallet link requests). */
+    async view(method, args = {}) {
+      if (mode === 'local') { const e = local.engine; return e[method](...Object.values(args)); }
+      if (mode === 'mock') return api('/mock/view', { method, args });
+      await loadNear(); return provider.callFunction({ contractId: cfg.contractId, method, args });
+    },
+    spirits() { return this.view('get_spirits', { account_id: me.accountId }); },
+    nfts() { return this.view('nft_tokens_for_owner', { account_id: me.accountId }); },
+    linkRequest() { return this.view('get_link_request', { game_account: me.accountId }); },
+    get network() { return cfg.network || 'testnet'; },
+    localEngine() { return local && local.engine; },
+    get contractId() { return cfg.contractId; },
     /** A player move. Returns the transaction hash in chain mode. */
     async call(method, args = {}) {
       if (mode === 'local') { local.engine[method](me.accountId, args); return null; }

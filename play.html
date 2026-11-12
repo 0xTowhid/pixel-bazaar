@@ -90,6 +90,29 @@ body:not(.ingame) #hudL,body:not(.ingame) #objBox,body:not(.ingame) #topR,body:n
 .wItem{display:flex;gap:.8em;align-items:center}.wItem img{width:3.4em;height:3.4em;image-rendering:pixelated}
 .wItem b{display:block;color:var(--gold);font-weight:normal}.wItem span{font-size:.75em;color:var(--mut)}
 @media (max-width:700px){.wGrid{grid-template-columns:1fr}}
+#book{width:min(96%,62em);max-height:92%;overflow:auto}
+.sGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(13em,1fr));gap:.8em;margin-top:.6em}
+.sCard{border:3px solid;border-radius:12px;padding:.7em;background:linear-gradient(160deg,#3b2a6b,#1c1630 65%);position:relative}
+.sCard.shiny{background:linear-gradient(160deg,#5a2f6b,#1c1630 65%);box-shadow:0 0 14px #ffe9a066}
+.sTop{display:flex;justify-content:space-between;align-items:center;gap:.4em}.sTop span{font-size:.6em;color:#1c1630;padding:.2em .4em;border-radius:4px}
+.sCard img{display:block;width:5.5em;height:5.5em;margin:.5em auto;image-rendering:pixelated}
+.sStats{display:flex;justify-content:space-between;margin:.4em 0}.sStats i{font-style:normal}.cy{color:#8fe0ff}
+.sPow{color:var(--gold)}.sBtns{display:flex;flex-wrap:wrap;gap:.3em;margin-top:.5em;align-items:center}.sBtns .btn{font-size:.75em;padding:.35em .5em}
+.sNft{font-size:.55em;color:var(--mut);margin-top:.4em}
+.bGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(6em,1fr));gap:.5em;margin-top:.6em}
+.bSlot{background:#2a2346;border-radius:8px;padding:.4em;text-align:center;border:2px solid #ffffff10}.bSlot.got{border-color:#ffd86b55}
+.bSlot img{width:3.6em;height:3.6em;image-rendering:pixelated}.bSlot i{display:block;height:2.4em;line-height:2.4em;font-size:1.5em;color:#5d5280;font-style:normal}
+.bSlot span{display:block;font-size:.55em;margin-top:.2em;color:var(--mut)}.bSlot.got span{color:#fff3d6}
+.feedGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(10em,1fr));gap:.5em;margin:.8em 0}.feedGrid img{width:1.4em;vertical-align:middle;image-rendering:pixelated}
+.evoRow{display:flex;justify-content:center;align-items:center;gap:1.4em;margin:1em 0}.evoRow img{width:6em;height:6em;image-rendering:pixelated}.evoRow span{font-size:2em}
+.evoNew{filter:drop-shadow(0 0 14px #ffe9a0);animation:evoP 1s ease-in-out infinite alternate}@keyframes evoP{from{transform:scale(1)}to{transform:scale(1.12)}}
+.wSteps{line-height:1.8;margin:.4em 0 .8em 1.4em}#book input{background:#120e1f;border:2px solid #4a3f72;color:#fff3d6;font-family:inherit;padding:.4em;border-radius:6px}
+#catch{position:absolute;left:50%;bottom:6%;transform:translateX(-50%);width:min(94%,34em);padding:1em 1.2em;display:none;z-index:45;cursor:pointer}#catch.on{display:block}
+.cHead{display:flex;gap:.9em;align-items:center}.cHead img{width:4.4em;height:4.4em;image-rendering:pixelated;border:3px solid;border-radius:8px;background:#2a2346}
+.cName{color:var(--gold);font-size:1.2em;margin-bottom:.3em}.cHint{margin:.9em 0 .6em}
+.cBar{position:relative;height:1.8em;background:#3a2f5c;border-radius:1em}.cZone{position:absolute;top:0;bottom:0;background:#8ee68a55;border:2px solid #8ee68a;border-radius:.8em}
+.cMark{position:absolute;top:-.35em;width:1.1em;height:2.5em;margin-left:-.55em;background:var(--gold);border-radius:.3em;box-shadow:0 0 .7em var(--gold)}.cMark.good{background:#8ee68a}.cMark.bad{background:#ff7a6e}
+.cFoot{display:flex;justify-content:space-between;align-items:center;margin-top:.8em;font-size:.75em;color:var(--mut)}
 #netErr{width:min(90%,26em);text-align:center;z-index:60}
 .phead{display:flex;gap:.9em;align-items:center}.phead canvas{width:4em;height:4em;image-rendering:pixelated;border:2px solid var(--gold);border-radius:6px;background:#2a2346}
 .phead a{color:var(--gold)}
@@ -167,7 +190,7 @@ body.dlgOn #hotbar,body.dlgOn #chainlog{display:none}
     <div class="box"><span>ENERGY</span><div class="debtbar"><div id="enFill" style="background:#78e678"></div></div></div>
   </div>
   <div id="objBox" class="ui box"><span id="obj"></span></div>
-  <div id="topR" class="ui"><button class="box" id="pBtn">PROFILE<span class="kh"> (P)</span></button><button class="box" id="jBtn">JOURNAL<span class="kh"> (J)</span></button><button class="box" id="fsBtn">FULL SCREEN</button><button class="box" id="mute">♪ ON</button></div>
+  <div id="topR" class="ui"><button class="box" id="sBtn">SPIRITS<span class="kh"> (B)</span></button><button class="box" id="pBtn">PROFILE<span class="kh"> (P)</span></button><button class="box" id="jBtn">JOURNAL<span class="kh"> (J)</span></button><button class="box" id="fsBtn">FULL SCREEN</button><button class="box" id="mute">♪ ON</button></div>
   <div id="zone" class="ui"></div>
   <div id="hint" class="ui box"></div>
   <div id="toast" class="ui box"></div>
@@ -182,6 +205,8 @@ body.dlgOn #hotbar,body.dlgOn #chainlog{display:none}
   <div id="journal" class="ui box panel"></div>
   <div id="profile" class="ui box panel"></div>
   <div id="netErr" class="ui box panel"></div>
+  <div id="book" class="ui box panel"></div>
+  <div id="catch" class="ui box"></div>
   <div id="cine"><canvas id="fxcv"></canvas><div class="lb top"></div><div class="lb bot"></div>
     <div id="cineTitle">CHAPTER 0 · THE NIGHT THE LANTERN WENT OUT</div><div id="cineN"></div>
     <button class="btn" id="cineSkip">SKIP ▸▸</button><div id="cineBox" class="box"></div></div>
@@ -204,4 +229,5 @@ body.dlgOn #hotbar,body.dlgOn #chainlog{display:none}
 <script src="game.js"></script>
 <script src="life.js"></script>
 <script src="panels.js"></script>
+<script src="spirits.js"></script>
 <script src="story.js"></script>

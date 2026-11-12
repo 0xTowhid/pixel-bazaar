@@ -132,6 +132,7 @@ async function boot() {
   if (p.finished) await mustDo('Starting a new season', () => Backend.call('start_season'), 'start_season');
   else if (p.asleep) { await mustDo('Finishing last night', () => Backend.settle(p.day), 'settle_day'); toast('You slept through the night.', 3); }
   await beginDay(true);
+  checkWalletLink();
   const firstTime = !safeGet('pb_intro|' + Backend.accountId);
   let tour = false;
   if (firstTime) { await playIntro(); tour = await showWelcome(); safeSet('pb_intro|' + Backend.accountId, '1'); }
@@ -176,6 +177,7 @@ async function sync() {
   S.bridge = !!bridge; S.boat = !!boat;
   if (S.chest) { World.P.chestProp.sx = 9; }
   S.player = p;
+  S.spirits = await Backend.spirits().catch(() => S.spirits || []);
   renderHotbar();
   return p;
 }
@@ -455,7 +457,7 @@ function advance() { S.step = Math.min(S.step + 1, STEPS.length - 1); sfx('ok');
 
 // ---------- UI ----------
 let dlg = null, cardCb = null;
-const uiOpen = () => !!dlg || (S && (S.fishing || S.story)) || ['trade', 'card', 'journal', 'profile', 'netErr'].some(id => $(id)?.classList.contains('on'));
+const uiOpen = () => !!dlg || (S && (S.fishing || S.story || S.catching)) || ['trade', 'card', 'journal', 'profile', 'netErr', 'book'].some(id => $(id)?.classList.contains('on'));
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 function toast(t, sec = 2.5) { const el = $('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => el.style.display = 'none', sec * 1000); }
 function hideToast() { $('toast').style.display = 'none'; }
@@ -609,7 +611,7 @@ function nearest() {
   const P = World.P, d2 = p => Math.hypot(player.x - p.x * TW, player.y - p.y * TW);
   let best = null, bd = 58;
   for (const n of Object.values(NPCS)) { const d = Math.hypot(n.x - player.x, n.y - player.y); if (d < bd) { bd = d; best = { kind: 'npc', n, label: 'TALK TO ' + n.name.toUpperCase() }; } }
-  for (const t of [farmTarget(), rockTarget(), fishTarget()]) if (t) { best = t; break; }
+  for (const t of [farmTarget(), rockTarget(), fishTarget(), wildTarget()]) if (t) { best = t; break; }
   if (!best) best = catTarget(); // Mochi follows you around, so people come first
   if (d2(P.board) < 44) best = { kind: 'board', label: 'TOWN BOARD: PROJECTS AND RECORDS' };
   if (d2(P.homeDoor) < 44) best = { kind: 'home', label: 'SLEEP (END DAY)' };
@@ -634,6 +636,7 @@ function interact() {
   else if (t.kind === 'rock') mine(t.i);
   else if (t.kind === 'fish') startFishing();
   else if (t.kind === 'cat') petCat(t);
+  else if (t.kind === 'wild') encounterWild(t);
   else if (t.kind === 'board') openTown();
   else if (t.kind === 'home') {
     const hour = 6 + S.t / DAY_SECONDS * 18;
@@ -667,10 +670,12 @@ addEventListener('keydown', e => {
   initAudio();
   if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
   if (window.storyKey && storyKey(e)) return; // the intro and the tour take the keyboard while they run
+  if (window.catchKey && catchKey(e)) return;  // so does catching a spirit
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; keys[k] = true;
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
   if (k === 'e' || k === ' ' || k === 'Enter') interact();
-  if (k === 'Escape') { closeTrade(); $('journal').classList.remove('on'); $('profile').classList.remove('on'); if (dlg) closeDlg(); }
+  if (k === 'Escape') { closeTrade(); $('journal').classList.remove('on'); $('profile').classList.remove('on'); $('book').classList.remove('on'); if (dlg) closeDlg(); }
+  if (k === 'b' && S && S.player && !dlg && !$('card').classList.contains('on')) $('book').classList.contains('on') ? $('book').classList.remove('on') : openBook();
   if (k === 'j' && !dlg && !$('card').classList.contains('on')) $('journal').classList.contains('on') ? $('journal').classList.remove('on') : openJournal();
   if (k === 'p' && S && !dlg && !(e.target && e.target.tagName === 'INPUT') && !$('card').classList.contains('on')) $('profile').classList.contains('on') ? $('profile').classList.remove('on') : openProfile();
   if (k === 'm') toggleMusic();
@@ -686,6 +691,7 @@ document.querySelectorAll('#pad button').forEach(b => {
 });
 $('mute').onclick = toggleMusic; $('jBtn').onclick = () => { initAudio(); if (S) openJournal(); };
 $('pBtn').onclick = () => { initAudio(); if (S) openProfile(); };
+$('sBtn').onclick = () => { initAudio(); if (S && S.player) openBook(); };
 // Full screen: the Fullscreen API where the browser has it (Android, desktop); on iPhone, add to the home screen.
 const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
 const standalone = () => matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone;
@@ -732,7 +738,7 @@ addEventListener('resize', () => { fit(); layoutTop(); }); fit(); setTimeout(lay
 let MINI, last = performance.now(), wx = [];
 for (let i = 0; i < 160; i++) wx.push({ x: Math.random() * VW, y: Math.random() * VH, s: .6 + Math.random() * .8 });
 function update(dt) {
-  const pOn = ['trade', 'card', 'journal', 'profile', 'netErr', 'cine', 'tour'].some(id => $(id)?.classList.contains('on'));
+  const pOn = ['trade', 'card', 'journal', 'profile', 'netErr', 'cine', 'tour', 'book', 'catch'].some(id => $(id)?.classList.contains('on'));
   document.body.classList.toggle('dlgOn', !!dlg);
   if ((layoutTop.n = (layoutTop.n || 0) + 1) % 20 === 0) layoutTop();
   if (pOn !== document.body.classList.contains('panelOn')) { document.body.classList.toggle('panelOn', pOn); if (pOn) for (const k in keys) keys[k] = false; }
@@ -762,7 +768,7 @@ function update(dt) {
     if (n.x === ox && n.y === oy) { n.target = null; n.pause = 1; }
     n.moving = true; n.anim += dt * 9; n.dir = Math.abs(vx) > Math.abs(vy) ? (vx > 0 ? 'right' : 'left') : (vy > 0 ? 'down' : 'up');
   }
-  updateCat(dt);
+  updateCat(dt); updateSpirits(dt);
   if (!busy) {
     S.t += dt;
     if (S.t > DAY_SECONDS * (16 / 18) && !S.warned) { S.warned = true; toast("It's 22:00. Head home before midnight.", 3); sfx('alert'); }
@@ -782,9 +788,11 @@ function draw() {
   for (const p of MAP.props) { const x = p.x * TW, y = p.y * TW; if (vis(x, y, p.w * TW, p.h * TW)) list.push({ base: p.flat ? -1 : (p.y + p.h) * TW, p }); }
   for (const c of Object.values(NPCS).concat(S.inside ? [] : player)) if (vis(c.x - 32, c.y - 60, 64, 64)) list.push({ base: c.y, c });
   if (cat) list.push({ base: cat.y, cat: true });
+  list.push(...spiritDrawables(camX, camY));
   list.sort((a, b) => a.base - b.base);
   for (const o of list) {
     if (o.cat) { drawCat(camX, camY); continue; }
+    if (o.draw) { o.draw(); continue; }
     if (o.p && o.p.rock !== undefined && rockMined(o.p.rock)) ctx.globalAlpha = .45;
     if (o.p) { const p = o.p; ctx.drawImage(IMG[p.img], p.sx * TS, p.sy * TS, p.w * TS, p.h * TS, p.x * TW - camX, p.y * TW - camY, p.w * TW, p.h * TW); }
     else drawChar(ctx, o.c, camX, camY);

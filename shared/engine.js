@@ -11,9 +11,11 @@
   const CROPS = [[4, 2, 6, 2, 0, true], [5, 3, 10, 3, 0, true], [6, 4, 22, 2, 0, true], [7, 3, 8, 3, 0, true], [8, 2, 6, 2, 0, true], [9, 3, 12, 2, 0, true], [0, 2, 5, 3, 0, true], [10, 4, 80, 3, 2, true], [2, 2, 60, 2, 2, false]];
   const ITEMS = { license_x5: 250, license_x10: 900, bridge: 600, boat: 300, stall: 1500 };
   const PROJECTS = [[[[1, 30], [11, 5]], 400], [[[12, 10], [11, 8]], 0], [[[0, 40]], 600]];
-  const BADGES = ['first_harvest', 'green_thumb', 'jade_hunter', 'angler', 'x10_survivor', 'faded_rita', 'beat_kaito', 'debt_free', 'early_bird', 'restorer', 'best_friend'];
+  const BADGES = ['first_harvest', 'green_thumb', 'jade_hunter', 'angler', 'x10_survivor', 'faded_rita', 'beat_kaito', 'debt_free', 'early_bird', 'restorer', 'best_friend', 'first_spirit', 'spirit_tamer', 'shiny_hunter', 'legend_tamer', 'wallet_linked'];
   const PLOT_COST = 120, MAX_PLOTS = 18, START_PLOTS = 6, BARN_CAP = 40, NPCS = 8, ROCKS = 8, ENERGY_MAX = 100;
 
+  const R = (typeof module !== 'undefined' && module.exports) ? require('./rules.js') : root.Rules;
+  const SP = R.SPECIES, SPAWN = R.SPAWN, WATER = 1, WIND = 2, EARTH = 3;
   const fail = m => { throw new Error(m); };
   const req = (c, m) => { if (!c) fail(m); };
   const emptyPlot = () => ({ crop: null, grown: 0, watered_day: 0 });
@@ -23,7 +25,8 @@
       asleep: false, passed_out: false, fish_day: 0, seer_day: 0, chest: false, finished: false, won: false, history: [],
       energy: ENERGY_MAX, plots: Array.from({ length: START_PLOTS }, emptyPlot), seeds, friendship: new Array(NPCS).fill(0), gift_day: new Array(NPCS).fill(0),
       projects: PROJECTS.map(() => false), donated: PROJECTS.map(() => new Array(NG + 1).fill(0)), mined_day: 0, mined: 0, catches_today: 0, cat_day: 0,
-      harvested: 0, jade_found: 0, fish_caught: 0, kaito_pnl: 0, start_coins: START_COINS, seasons_won: 0, best_score: 0 };
+      harvested: 0, jade_found: 0, fish_caught: 0, kaito_pnl: 0, start_coins: START_COINS, seasons_won: 0, best_score: 0,
+      lead: null, enc_today: 0, fed_today: 0, wild: null, wallet: null, book: 0, shards: 0 };
   };
   const preimage = (player, season, day, event, rumors, salt) => `${player}|${season}|${day}|${event}|${rumors}|${salt}`;
   function settle(pos, price) { const e = Math.max(1, pos.entry); const mv = Math.trunc((price - e) * 1e6 / e); return Math.trunc(pos.stake * pos.lev * mv * (pos.long ? 1 : -1) / 1e6); }
@@ -37,6 +40,7 @@
     constructor(operator, contractId, sha256hex) {
       this.operator = operator; this.contractId = contractId; this.sha = sha256hex || null;
       this.players = {}; this.balances = {}; this.supply = {}; this.npcs = {}; this.leaderboard = [];
+      this.tokens = {}; this.owners = {}; this.byOwner = {}; this.links = {}; this.nextToken = 0;
     }
     _p(a) { return this.players[a] || fail('not a player'); }
     _op(c) { if (c !== this.operator) fail('operator only'); }
@@ -45,7 +49,30 @@
     _burn(t, a, n) { const k = t + '|' + a; req((this.balances[k] || 0) >= n, 'not enough balance'); this.balances[k] -= n; this.supply[t] -= n; }
     _maxLev(a) { return this._bal('license_x10', a) ? 10 : this._bal('license_x5', a) ? 5 : 2; }
     _barnAdd(a, g, n) { const tot = GOODS.reduce((s, t) => s + this._bal(t, a), 0); req(tot + n <= BARN_CAP, 'your barn is full'); this._mint(GOODS[g], a, n); }
-    _badge(name, a) { const t = 'badge_' + name; if (this._bal(t, a)) return false; this._mint(t, a, 1); return true; }
+    _badge(name, a) { const t = 'badge_' + name; if (this._bal(t, a)) return false; this._mint(t, a, 1); const id = 'b' + (++this.nextToken); this.tokens[id] = { type: 'Badge', name }; this._give(id, a); return true; }
+    // ---- spirits and NFTs ----
+    _give(id, to) { this.owners[id] = to; (this.byOwner[to] = this.byOwner[to] || []).push(id); }
+    _move(id, from, to) { req(from !== to, 'already there'); this.byOwner[from] = (this.byOwner[from] || []).filter(t => t !== id); this._give(id, to); const p = this.players[from]; if (p && p.lead === id) p.lead = null; }
+    _mintSpirit(to, species, shiny) { const id = 's' + (++this.nextToken); this.tokens[id] = { type: 'Spirit', species, shiny, xp: 0 }; this._give(id, to); return id; }
+    _xp(id, n) { const t = this.tokens[id]; if (t && t.type === 'Spirit') t.xp = Math.min(800, t.xp + n); }
+    _ownsSpirit(c, id) { req(this.owners[id] === c, 'that spirit is not with you'); req(this.tokens[id] && this.tokens[id].type === 'Spirit', 'not a spirit'); }
+    _leadEl(c, p) { const t = p.lead && this.owners[p.lead] === c && this.tokens[p.lead]; return t && t.type === 'Spirit' ? SP[t.species].el : null; }
+    _ownsEl(c, el) { return (this.byOwner[c] || []).some(id => { const t = this.tokens[id]; return t && t.type === 'Spirit' && SP[t.species].el === el; }); }
+    _bookAdd(book, sp) { return Number(BigInt(book || 0) | (1n << BigInt(sp))); }
+    _bookCount(book) { let n = 0, b = BigInt(book || 0); while (b) { n += Number(b & 1n); b >>= 1n; } return n; }
+    link_wallet(c, { game_account }) { req(this.players[game_account], 'no trader with that name'); this.links[game_account] = c; }
+    get_link_request(game_account) { return this.links[game_account] || null; }
+    nft_transfer(c, { receiver_id, token_id }) { req(this.owners[token_id] === c, 'not the owner'); this._move(token_id, c, receiver_id); }
+    nft_token(token_id) { const o = this.owners[token_id]; if (!o) return null; const t = this.tokens[token_id];
+      return { token_id, owner_id: o, metadata: t.type === 'Spirit' ? { title: (t.shiny ? 'Shiny ' : '') + SP[t.species].name + ' (Lv ' + R.spiritLevel(t.xp) + ')', media: 'nft/spirits/' + SP[t.species].sprite + (t.shiny ? '_shiny' : '') + '.png' } : { title: 'Badge: ' + t.name.replace(/_/g, ' '), media: 'nft/badges/' + t.name + '.png' } }; }
+    nft_tokens_for_owner(account_id) { return (this.byOwner[account_id] || []).map(id => this.nft_token(id)); }
+    get_spirits(account_id) {
+      return (this.byOwner[account_id] || []).filter(id => this.tokens[id].type === 'Spirit').map(id => {
+        const t = this.tokens[id], sp = SP[t.species], lv = R.spiritLevel(t.xp);
+        return { token_id: id, species: t.species, name: sp.name, element: sp.el, rarity: sp.rar, shiny: t.shiny, xp: t.xp, level: lv,
+          hp: sp.hp + Math.floor(sp.hp * (lv - 1) / 20), atk: sp.atk + Math.floor(sp.atk * (lv - 1) / 20), spd: sp.spd + Math.floor(sp.spd * (lv - 1) / 25) };
+      });
+    }
     _roll(commit, who, what, n) { const s = `${commit}|${who}|${what}|${n}`; return this.sha ? parseInt(this.sha(s).slice(0, 2), 16) : fnv(s) & 255; }
     _rank(e) {
       const better = (a, b) => (a.won - b.won) || (a.score - b.score) || (b.day - a.day);
@@ -61,6 +88,7 @@
       p.plots = old.plots.map(pl => ({ ...pl, watered_day: 0 })); p.seeds = old.seeds; p.friendship = old.friendship; p.projects = old.projects; p.donated = old.donated;
       p.harvested = old.harvested; p.jade_found = old.jade_found; p.fish_caught = old.fish_caught;
       p.seasons_won = old.seasons_won; p.best_score = old.best_score;
+      p.lead = old.lead; p.wallet = old.wallet; p.book = old.book; p.shards = old.shards;
       this.players[c] = p;
     }
     open_position(c, { good, long, lev, stake }) {
@@ -86,12 +114,17 @@
     act(c, { actions }) {
       req(actions && actions.length > 0 && actions.length <= 60, '1 to 60 actions');
       const before = clone(this._p(c)), balBefore = { ...this.balances }, supBefore = { ...this.supply };
+      const nft = clone({ t: this.tokens, o: this.owners, b: this.byOwner, l: this.links, n: this.nextToken });
       try { this._act(c, actions); }
-      catch (e) { this.players[c] = before; this.balances = balBefore; this.supply = supBefore; throw e; }
+      catch (e) {
+        this.players[c] = before; this.balances = balBefore; this.supply = supBefore;
+        this.tokens = nft.t; this.owners = nft.o; this.byOwner = nft.b; this.links = nft.l; this.nextToken = nft.n; throw e;
+      }
     }
     _act(c, actions) {
       const p = this._p(c); req(!p.finished && !p.asleep, 'day is over'); req(p.commitment, 'the day has not started yet');
       const commit = p.commitment, roll = (what, n) => this._roll(commit, c, what, n);
+      const leadEl = this._leadEl(c, p);
       const energy = n => { req(p.energy >= n, 'you are too tired'); p.energy -= n; };
       const badges = [];
       for (const a of actions) {
@@ -112,16 +145,17 @@
             energy(8); req(a.rock < ROCKS, 'no such rock');
             if (p.mined_day !== p.day) { p.mined_day = p.day; p.mined = 0; }
             req(!(p.mined & (1 << a.rock)), 'already mined today'); p.mined |= 1 << a.rock;
-            const r = roll('mine', a.rock);
-            if (r < 64) { this._barnAdd(c, 11, 1); p.jade_found++; if (p.jade_found === 5) badges.push('jade_hunter'); }
+            const r = roll('mine', a.rock), jade = leadEl === EARTH ? 96 : 64;
+            if (r < jade) { this._barnAdd(c, 11, 1); p.jade_found++; if (p.jade_found === 5) badges.push('jade_hunter'); }
             else if (r < 200) this._barnAdd(c, 12, 1);
+            else if (r >= 250) p.shards++;
             else p.seeds[r % 7] += 2;
             break;
           }
           case 'Fish': {
             energy(4); req(p.catches_today < 6, 'the fish stopped biting for today');
             const r = roll('fish', p.catches_today); p.catches_today++;
-            if (a.ok && r < 179) { const n = p.projects[0] ? 2 : 1; this._barnAdd(c, 1, n); p.fish_caught += n; if (p.fish_caught >= 10 && p.fish_caught - n < 10) badges.push('angler'); }
+            if (a.ok && r < (leadEl === WATER ? 210 : 179)) { const n = p.projects[0] ? 2 : 1; this._barnAdd(c, 1, n); p.fish_caught += n; if (p.fish_caught >= 10 && p.fish_caught - n < 10) badges.push('angler'); }
             break;
           }
           case 'Cat': { req(p.cat_day !== p.day, 'Mochi already found something today'); p.cat_day = p.day; const r = roll('cat', 0); if (r < 128) p.coins += 1000; else p.seeds[r % 7] += 1; break; }
@@ -148,6 +182,46 @@
           }
           case 'BuySeed': { req(a.crop < CROPS.length && a.qty > 0 && a.qty <= 50, 'bad seed order'); const cost = CROPS[a.crop][2] * 100 * a.qty; req(p.coins >= cost, 'not enough coins'); p.coins -= cost; p.seeds[a.crop] += a.qty; break; }
           case 'BuyPlot': { req(p.plots.length < MAX_PLOTS, 'no more land'); req(p.coins >= PLOT_COST * 100, 'not enough coins'); p.coins -= PLOT_COST * 100; p.plots.push(emptyPlot()); break; }
+          case 'Encounter': {
+            energy(5); req(a.zone >= 0 && a.zone < SPAWN.length, 'no such place'); req(p.enc_today < R.ENCOUNTERS_A_DAY, 'the spirits are hiding until tomorrow');
+            if (a.zone === 2) req(this._ownsEl(c, WATER), 'you need a water spirit to dive to the shrine');
+            if (a.zone === 3) req(this._ownsEl(c, WIND), 'you need a wind spirit to glide to the sky');
+            const n = p.enc_today++; const table = SPAWN[a.zone], total = table.reduce((t, x) => t + x[1], 0);
+            let pick = (roll('enc', n) * 256 + roll('enc2', n)) % total, species = table[0][0];
+            for (const [sp, w] of table) { if (pick < w) { species = sp; break; } pick -= w; }
+            p.wild = { species, shiny: roll('shiny', n) < 4, zone: a.zone };
+            break;
+          }
+          case 'Catch': {
+            const w = p.wild || fail('there is no spirit here'); p.wild = null;
+            const sp = SP[w.species]; let chance = R.CATCH_CHANCE[sp.rar]; if (leadEl === sp.el) chance += 38;
+            if (a.ok && roll('catch', p.enc_today) < chance) {
+              this._mintSpirit(c, w.species, w.shiny); p.book = this._bookAdd(p.book, w.species);
+              const caught = this._bookCount(p.book);
+              if (caught === 1) badges.push('first_spirit'); if (caught === 10) badges.push('spirit_tamer'); if (w.shiny) badges.push('shiny_hunter');
+            }
+            break;
+          }
+          case 'SetLead': this._ownsSpirit(c, a.token); p.lead = a.token; break;
+          case 'Feed': {
+            this._ownsSpirit(c, a.token); req(p.fed_today < R.FEEDS_A_DAY, 'it is full for today');
+            req(a.good >= 0 && a.good < NG && this._bal(GOODS[a.good], c) >= 1, "you don't have that");
+            this._burn(GOODS[a.good], c, 1); p.fed_today++; this._xp(a.token, a.good === 11 ? 25 : [1, 2, 3].includes(a.good) ? 12 : 6);
+            break;
+          }
+          case 'Evolve': {
+            this._ownsSpirit(c, a.token); const t = this.tokens[a.token], sp = SP[t.species];
+            req(sp.evo >= 0, 'this is its final form'); req(R.spiritLevel(t.xp) >= sp.at, 'it needs a higher level');
+            if (sp.shard) { req(p.shards >= 1, 'it needs a lantern shard'); p.shards--; }
+            t.species = sp.evo; p.book = this._bookAdd(p.book, sp.evo); if (SP[sp.evo].rar === 3) badges.push('legend_tamer');
+            break;
+          }
+          case 'ConfirmWallet': req(this.links[c] === a.wallet, 'ask from your wallet first'); delete this.links[c]; p.wallet = a.wallet; badges.push('wallet_linked'); break;
+          case 'UnlinkWallet': p.wallet = null; break;
+          case 'SendToWallet': {
+            const to = p.wallet || fail('link a wallet first'); req(this.owners[a.token] === c, 'not yours');
+            if (p.lead === a.token) p.lead = null; this._move(a.token, c, to); break;
+          }
           default: fail('unknown action');
         }
       }
@@ -205,6 +279,8 @@
         if (m.npc.startsWith('kaito.')) p.kaito_pnl += pnl;
       }
       p.prices = prices; p.commitment = null; p.npc_moves = []; p.asleep = false; p.passed_out = false; p.energy = ENERGY_MAX; p.catches_today = 0;
+      p.enc_today = 0; p.fed_today = 0; p.wild = null;
+      if (p.lead && this.owners[p.lead] === player) this._xp(p.lead, 10);
       if (day >= SEASON_DAYS) {
         p.finished = true; p.won = p.coins >= DEBT; if (p.won) { p.coins -= DEBT; badges.push('debt_free'); }
         const score = p.won ? p.coins + DEBT : p.coins;

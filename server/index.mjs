@@ -211,7 +211,7 @@ const routes = {
 function txHash(r) { return r && typeof r === 'object' ? (r.transaction?.hash || r.transaction_outcome?.id || null) : null; }
 if (MOCK) {
   routes['POST /mock/call'] = async b => { mock[b.method](b.accountId, b.args || {}); return { ok: true }; };
-  routes['POST /mock/view'] = async b => b.method === 'get_inventory' ? mock.get_inventory(b.args.account_id) : view(b.method, b.args || {});
+  routes['POST /mock/view'] = async b => { const fn = mock[b.method]; if (!fn || b.method.startsWith('_')) throw new Error('no view ' + b.method); return fn.call(mock, ...Object.values(b.args || {})); };
 }
 
 process.on('unhandledRejection', e => console.error('unhandled', e && e.message || e));

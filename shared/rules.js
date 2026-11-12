@@ -65,8 +65,71 @@
     first_harvest: 'First harvest', green_thumb: 'Harvested 50 crops', jade_hunter: 'Mined 5 jade', angler: 'Caught 10 fish',
     x10_survivor: 'Won a x10 trade', faded_rita: 'Faded Rita and won', beat_kaito: 'Beat Kaito this season', debt_free: 'Paid the debt',
     early_bird: 'Paid the debt by day 6', restorer: 'Finished a town project', best_friend: '5 hearts with a local',
+    first_spirit: 'Caught your first spirit', spirit_tamer: 'Caught 10 kinds of spirit', shiny_hunter: 'Caught a shiny spirit',
+    legend_tamer: 'Raised a legendary spirit', wallet_linked: 'Linked a NEAR wallet',
   };
-  const ENERGY = { max: 100, plant: 2, water: 1, harvest: 1, mine: 8, fish: 4 };
+  // ---- spirits (same table as the contract) ----
+  const ELEMENTS = [
+    { id: 'fire', name: 'FIRE', color: '#ff7a3c', power: 'Lights dark places' }, { id: 'water', name: 'WATER', color: '#6bc8ff', power: 'Opens the Sunken Shrine, +fish' },
+    { id: 'wind', name: 'WIND', color: '#c9f0ff', power: 'Glides to the Clockwork Sky' }, { id: 'earth', name: 'EARTH', color: '#d9a066', power: '+jade when mining' },
+    { id: 'nature', name: 'NATURE', color: '#8ee68a', power: 'Calms nature spirits' }, { id: 'spirit', name: 'SPIRIT', color: '#b9a8e8', power: 'Sees ghost notes' },
+    { id: 'dark', name: 'DARK', color: '#9a6bd9', power: 'Stronger curses' },
+  ];
+  const RARITY = ['COMMON', 'UNCOMMON', 'RARE', 'LEGENDARY'];
+  const SPECIES = [
+    { sprite: 'Flam', name: 'Ember Kit', el: 0, rar: 0, hp: 30, atk: 12, spd: 10, evo: 1, at: 10, shard: false },
+    { sprite: 'Flam2', name: 'Blue Blaze', el: 0, rar: 1, hp: 40, atk: 16, spd: 13, evo: 2, at: 20, shard: true },
+    { sprite: 'GiantFlam', name: 'Inferno', el: 0, rar: 3, hp: 56, atk: 24, spd: 15, evo: -1, at: 0, shard: false },
+    { sprite: 'Axolot', name: 'Tide Axolot', el: 1, rar: 0, hp: 34, atk: 10, spd: 11, evo: 4, at: 10, shard: false },
+    { sprite: 'AxolotBlue', name: 'Deep Axolot', el: 1, rar: 1, hp: 44, atk: 14, spd: 14, evo: 5, at: 20, shard: false },
+    { sprite: 'KappaGreen', name: 'Kappa Sage', el: 1, rar: 2, hp: 58, atk: 18, spd: 16, evo: -1, at: 0, shard: false },
+    { sprite: 'Owl', name: 'Hoot', el: 2, rar: 1, hp: 30, atk: 11, spd: 15, evo: 7, at: 12, shard: false },
+    { sprite: 'Owl2', name: 'Storm Owl', el: 2, rar: 2, hp: 42, atk: 15, spd: 19, evo: 8, at: 22, shard: true },
+    { sprite: 'TenguBlue', name: 'Tengu', el: 2, rar: 3, hp: 54, atk: 22, spd: 22, evo: -1, at: 0, shard: false },
+    { sprite: 'Spirit', name: 'Wisp', el: 5, rar: 0, hp: 28, atk: 10, spd: 14, evo: 10, at: 10, shard: false },
+    { sprite: 'Spirit2', name: 'Ember Wisp', el: 5, rar: 1, hp: 38, atk: 14, spd: 17, evo: 11, at: 22, shard: true },
+    { sprite: 'GiantSpirit', name: 'Great Spirit', el: 5, rar: 3, hp: 60, atk: 20, spd: 18, evo: -1, at: 0, shard: false },
+    { sprite: 'Bamboo', name: 'Sprout', el: 4, rar: 0, hp: 32, atk: 10, spd: 9, evo: 13, at: 10, shard: false },
+    { sprite: 'BambooYellow', name: 'Bamboo Guard', el: 4, rar: 1, hp: 46, atk: 13, spd: 11, evo: -1, at: 0, shard: false },
+    { sprite: 'Mole', name: 'Digger', el: 3, rar: 0, hp: 34, atk: 11, spd: 8, evo: 15, at: 10, shard: false },
+    { sprite: 'Mole2', name: 'Rock Mole', el: 3, rar: 1, hp: 48, atk: 15, spd: 9, evo: -1, at: 0, shard: false },
+    { sprite: 'LanternGreen', name: 'Lantern Wisp', el: 5, rar: 1, hp: 36, atk: 12, spd: 13, evo: 17, at: 14, shard: false },
+    { sprite: 'LanternRed', name: 'Lantern Ghoul', el: 6, rar: 2, hp: 48, atk: 17, spd: 14, evo: -1, at: 0, shard: false },
+    { sprite: 'Mushroom', name: 'Shroomy', el: 4, rar: 0, hp: 30, atk: 9, spd: 8, evo: 19, at: 10, shard: false },
+    { sprite: 'Mushroom2', name: 'Sporecap', el: 4, rar: 1, hp: 42, atk: 13, spd: 10, evo: -1, at: 0, shard: false },
+    { sprite: 'Slime', name: 'Bubble Slime', el: 1, rar: 0, hp: 30, atk: 9, spd: 10, evo: 21, at: 8, shard: false },
+    { sprite: 'Slime2', name: 'Moss Slime', el: 4, rar: 0, hp: 38, atk: 12, spd: 11, evo: 22, at: 18, shard: false },
+    { sprite: 'Slime3', name: 'King Slime', el: 1, rar: 1, hp: 50, atk: 15, spd: 12, evo: -1, at: 0, shard: false },
+    { sprite: 'Butterfly', name: 'Flutter', el: 2, rar: 0, hp: 26, atk: 9, spd: 16, evo: 24, at: 10, shard: false },
+    { sprite: 'ButterflyBlue', name: 'Gale Moth', el: 2, rar: 1, hp: 36, atk: 13, spd: 19, evo: -1, at: 0, shard: false },
+    { sprite: 'Skull', name: 'Bones', el: 6, rar: 1, hp: 32, atk: 13, spd: 12, evo: 26, at: 14, shard: false },
+    { sprite: 'SkullBlue', name: 'Frost Bones', el: 6, rar: 2, hp: 44, atk: 17, spd: 14, evo: -1, at: 0, shard: false },
+    { sprite: 'Octopus', name: 'Inky', el: 1, rar: 0, hp: 34, atk: 11, spd: 10, evo: 28, at: 12, shard: false },
+    { sprite: 'Octopus2', name: 'Kraken Jr', el: 1, rar: 2, hp: 50, atk: 17, spd: 12, evo: -1, at: 0, shard: false },
+    { sprite: 'Racoon', name: 'Racoon', el: 3, rar: 0, hp: 32, atk: 11, spd: 13, evo: 30, at: 15, shard: false },
+    { sprite: 'GoldRacoon', name: 'Gold Racoon', el: 3, rar: 2, hp: 44, atk: 15, spd: 17, evo: -1, at: 0, shard: false },
+    { sprite: 'Lizard', name: 'Salamander', el: 0, rar: 0, hp: 32, atk: 12, spd: 12, evo: 32, at: 12, shard: false },
+    { sprite: 'Lizard2', name: 'Magma Lizard', el: 0, rar: 1, hp: 44, atk: 16, spd: 13, evo: -1, at: 0, shard: false },
+    { sprite: 'Eye', name: 'Seer Eye', el: 5, rar: 1, hp: 30, atk: 12, spd: 12, evo: 34, at: 14, shard: false },
+    { sprite: 'Eye2', name: 'Night Eye', el: 6, rar: 2, hp: 42, atk: 16, spd: 14, evo: -1, at: 0, shard: false },
+    { sprite: 'Snake', name: 'Hiss', el: 4, rar: 0, hp: 30, atk: 12, spd: 13, evo: 36, at: 12, shard: false },
+    { sprite: 'Snake2', name: 'Viper', el: 6, rar: 1, hp: 42, atk: 16, spd: 15, evo: -1, at: 0, shard: false },
+    { sprite: 'Dragon', name: 'Jade Dragon', el: 3, rar: 3, hp: 64, atk: 24, spd: 20, evo: -1, at: 0, shard: false },
+    { sprite: 'DragonYellow', name: 'Sun Drake', el: 0, rar: 3, hp: 62, atk: 26, spd: 18, evo: -1, at: 0, shard: false }
+  ];
+  // zones: 0 town and farm, 1 Whispering Woods, 2 Sunken Shrine, 3 Clockwork Sky, 4 Moon Market
+  const SPAWN = [
+    [[12, 22], [14, 20], [18, 22], [20, 22], [23, 16], [29, 12], [3, 6]],
+    [[0, 26], [9, 26], [31, 20], [35, 20], [6, 8]],
+    [[27, 30], [3, 30], [20, 20], [5, 3]],
+    [[23, 30], [6, 26], [24, 14], [7, 6], [38, 1]],
+    [[16, 34], [25, 28], [33, 22], [17, 4]]
+  ];
+  const ZONES = ['Town & Farm', 'Whispering Woods', 'Sunken Shrine', 'Clockwork Sky', 'Moon Market'];
+  const CATCH_CHANCE = [205, 154, 102, 38];
+  const ENCOUNTERS_A_DAY = 12, FEEDS_A_DAY = 5;
+  const spiritLevel = xp => Math.min(40, 1 + Math.floor(xp / 20));
+  const ENERGY = { max: 100, plant: 2, water: 1, harvest: 1, mine: 8, fish: 4, encounter: 5 };
   const evIndex = id => EVENTS.findIndex(e => e.id === id);
   const pick = (rng, a) => a[Math.floor(rng() * a.length)];
 
@@ -120,6 +183,6 @@
   function rumorRight(k, r, truth) { return r.quiet ? !SOURCES[k].domain.includes(EVENTS[truth].id) : r.ev === truth; }
   const hearts = f => Math.min(5, Math.floor((f || 0) / 20));
 
-  const Rules = { GOODS, CROPS, EVENTS, SOURCES, NPC_IDS, ITEMS, PROJECTS, BADGES, ENERGY, mulberry32, seasonAccuracy, planDay, encodeRumors, decodeRumors, rumorRight, evIndex, hearts };
+  const Rules = { GOODS, CROPS, EVENTS, SOURCES, NPC_IDS, ITEMS, PROJECTS, BADGES, ENERGY, ELEMENTS, RARITY, SPECIES, SPAWN, ZONES, CATCH_CHANCE, ENCOUNTERS_A_DAY, FEEDS_A_DAY, spiritLevel, mulberry32, seasonAccuracy, planDay, encodeRumors, decodeRumors, rumorRight, evIndex, hearts };
   if (typeof module !== 'undefined' && module.exports) module.exports = Rules; else root.Rules = Rules;
 })(typeof window !== 'undefined' ? window : globalThis);
