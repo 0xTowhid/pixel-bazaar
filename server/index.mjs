@@ -27,7 +27,10 @@ const CONTRACT = env.CONTRACT_ID || (MOCK ? 'bazaar.mock.testnet' : '');
 const OPERATOR = env.OPERATOR_ID || (MOCK ? 'operator.mock.testnet' : '');
 const OPERATOR_KEY = env.OPERATOR_KEY || '';
 const SECRET = env.GAME_SECRET || (MOCK ? 'mock-secret' : '');
-const PLAYER_FUNDING = env.PLAYER_FUNDING || '0.3'; // NEAR given to each new player account for gas
+const PLAYER_FUNDING = env.PLAYER_FUNDING || '0.05'; // NEAR given to each new player account for gas
+const TOPUP = env.PLAYER_TOPUP || '0.03';               // sent when a player's account runs low on gas money
+const TOPUP_BELOW = +(env.PLAYER_TOPUP_BELOW || 0.01);  // NEAR
+const MIN_RESERVE = +(env.OPERATOR_MIN_NEAR || 2);       // keep this much on the operator (and contract) for storage; refuse sign-ups below it
 const ALLOW_ORIGIN = env.ALLOW_ORIGIN || '*';
 if (!MOCK && (!CONTRACT || !OPERATOR || !OPERATOR_KEY || !SECRET)) {
   console.error('Missing env. Set CONTRACT_ID, OPERATOR_ID, OPERATOR_KEY and GAME_SECRET (or run with MOCK=1).');
@@ -37,7 +40,7 @@ const sha = s => createHash('sha256').update(s).digest('hex');
 const hmac = s => createHmac('sha256', SECRET).update(s).digest();
 
 // ---------- contract access ----------
-let view, operatorCall, hasKey;
+let view, operatorCall, hasKey, balanceOf, sendNear;
 const mockKeys = new Map();
 let mock;
 if (MOCK) {
@@ -45,6 +48,7 @@ if (MOCK) {
   mock.create_npc(OPERATOR, 'rita'); mock.create_npc(OPERATOR, 'kaito');
   view = async (method, args) => { const fn = mock[method]; if (!fn) throw new Error('no view ' + method); return method === 'get_player' ? fn.call(mock, args.account_id) : method === 'mt_balance_of' ? fn.call(mock, args.account_id, args.token_id) : fn.call(mock); };
   hasKey = async (account, pk) => mockKeys.get(account) === pk;
+  balanceOf = async () => 100; sendNear = async () => null;
   operatorCall = async (method, args) => {
     if (method === 'register_player') { const id = mock.register_player(OPERATOR, args.name); mockKeys.set(id, args.public_key); return id; }
     return mock[method](OPERATOR, args);
@@ -55,9 +59,17 @@ if (MOCK) {
   const operator = new Account(OPERATOR, provider, OPERATOR_KEY);
   view = (method, args = {}) => provider.callFunction({ contractId: CONTRACT, method, args });
   hasKey = async (account, pk) => { try { await provider.viewAccessKey({ accountId: account, publicKey: pk }); return true; } catch { return false; } };
-  const raw = (method, args, deposit) => operator.callFunction({ contractId: CONTRACT, methodName: method, args, gas: teraToGas('100'), deposit: nearToYocto(deposit) });
+  // free NEAR on an account (balance minus what its storage locks), in NEAR
+  balanceOf = async accountId => {
+    const a = await provider.viewAccount({ accountId });
+    const free = BigInt(a.amount) - BigInt(a.storage_usage) * 10n ** 19n;
+    return Number(free / 10n ** 18n) / 1e6;
+  };
+  sendNear = (receiverId, near) => queued(() => operator.transfer({ receiverId, amount: nearToYocto(near) }));
+  const raw = (method, args, deposit) => withTimeout(operator.callFunction({ contractId: CONTRACT, methodName: method, args, gas: teraToGas('100'), deposit: nearToYocto(deposit) }), 45000);
   // One operator key signs everything, so calls go out one at a time (no nonce clashes) and retry on network trouble.
   let chain = Promise.resolve();
+  const queued = fn => { const p = chain.then(fn, fn); chain = p.catch(() => {}); return p; };
   operatorCall = (method, args, deposit = '0') => {
     const run = async () => {
       for (let i = 0; ; i++) {
@@ -69,9 +81,10 @@ if (MOCK) {
         }
       }
     };
-    const p = chain.then(run, run); chain = p.catch(() => {}); return p;
+    return queued(run);
   };
 }
+function withTimeout(p, ms) { return Promise.race([p, new Promise((_, bad) => setTimeout(() => bad(new Error('NEAR took too long to answer')), ms))]); }
 // One request at a time per player, so a double tap cannot commit or settle twice.
 const locks = new Map();
 function withLock(key, fn) {
@@ -119,6 +132,7 @@ const routes = {
     if (!MOCK && limited(clientIp(req))) throw new Error('Too many new players from your network. Try again in an hour.');
     const accountId = `${name}.${CONTRACT}`;
     if (await view('get_player', { account_id: accountId })) throw new Error('That name is taken.');
+    if (!MOCK && (await balanceOf(OPERATOR)) < MIN_RESERVE + +PLAYER_FUNDING) { console.error('operator balance low: sign-ups paused'); throw new Error('New sign-ups are paused for a moment. Please try again later.'); }
     await operatorCall('register_player', { name, public_key: body.publicKey }, PLAYER_FUNDING);
     if (!(await view('get_player', { account_id: accountId }))) throw new Error('Account creation failed. Try another name.');
     return { accountId };
@@ -140,6 +154,8 @@ const routes = {
       try { tx = await operatorCall('commit_day', { player: body.accountId, day: p.day, commitment: d.commitment, weather: d.weather, npc_moves: d.npc_moves }); }
       catch (e) { p = await view('get_player', { account_id: body.accountId }); if (p.commitment !== d.commitment) throw e; }
     } else if (p.commitment !== d.commitment) throw new Error('commitment mismatch');
+    // keep the player's account able to pay gas (at most once a day, since this runs with the commit)
+    if (tx && !MOCK) { try { if ((await balanceOf(body.accountId)) < TOPUP_BELOW && (await balanceOf(OPERATOR)) > MIN_RESERVE) await sendNear(body.accountId, TOPUP); } catch (e) { console.error('top-up', errText(e)); } }
     // the restored lighthouse tells the truth about storms
     const stormWarning = p.projects && p.projects[1] ? d.truth === 0 : null;
     return { season: p.season, day: p.day, asleep: !!p.asleep, rumors: d.rumors, weather: d.weather, kaito: d.kaito, stormWarning, commitment: d.commitment, tx: txHash(tx) };
@@ -166,7 +182,9 @@ if (MOCK) {
   routes['POST /mock/view'] = async b => b.method === 'get_inventory' ? mock.get_inventory(b.args.account_id) : view(b.method, b.args || {});
 }
 
-http.createServer(async (req, res) => {
+process.on('unhandledRejection', e => console.error('unhandled', e && e.message || e));
+process.on('uncaughtException', e => console.error('uncaught', e && e.message || e));
+async function handle(req, res) {
   const url = new URL(req.url, 'http://x');
   if (req.method === 'OPTIONS') return json(res, 204, {});
   const route = routes[req.method + ' ' + url.pathname];
@@ -181,8 +199,13 @@ http.createServer(async (req, res) => {
       explorer: NETWORK === 'mainnet' ? 'https://nearblocks.io' : 'https://testnet.nearblocks.io' })};`);
   }
   // static files: only the game itself
-  let path = normalize(decodeURIComponent(url.pathname)).replace(/^([/\\])+/, '') || 'index.html';
+  let decoded; try { decoded = decodeURIComponent(url.pathname); } catch { res.writeHead(400); return res.end('bad request'); }
+  let path = normalize(decoded).replace(/^([/\\])+/, '') || 'index.html';
   if (!/^(index\.html|[a-z]+\.js|shared\/[a-z]+\.js|vendor\/[a-z-]+\.mjs|assets\/.+)$/.test(path.replace(/\\/g, '/'))) { res.writeHead(404); return res.end('not found'); }
   try { const data = await readFile(join(ROOT, path)); res.writeHead(200, { 'content-type': MIME[extname(path)] || 'application/octet-stream' }); res.end(data); }
   catch { res.writeHead(404); res.end('not found'); }
+}
+http.createServer(async (req, res) => {
+  try { await handle(req, res); }
+  catch (e) { console.error('request failed', req.url, e && e.message); if (!res.headersSent) { res.writeHead(400); res.end('bad request'); } }
 }).listen(PORT, () => console.log(`Pixel Bazaar ${MOCK ? 'MOCK' : NETWORK} server on http://localhost:${PORT}  contract=${CONTRACT}`));
