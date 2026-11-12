@@ -87,6 +87,22 @@ pub fn puzzle_order(commit: &str, who: &AccountId, k: u8) -> Vec<u8> {
     for i in (1..n as usize).rev() { let j = roll(commit, who, &format!("puzzle{k}"), i as u32) as usize % (i + 1); v.swap(i, j); }
     v
 }
+// ---------------- fate cards, daily quests, the story ----------------
+/// Madame Vey's three cards: one blessing, one curse, one secret. Effects last until you sleep.
+pub const BLESSINGS: [&str; 6] = ["The River", "The Mountain", "The Lantern", "The Hearth", "The Coin", "The Seed"];
+pub const CURSES: [&str; 5] = ["Mercury Retrograde", "The Crow", "Heavy Boots", "The Fog", "Butterfingers"];
+pub const SECRETS: [&str; 4] = ["The Hidden Door", "The Old Key", "The Whisper", "The Twin"];
+/// Daily quests: (counter index, target, reward in coins). Counters: 0 spirits caught, 1 fish, 2 crops harvested,
+/// 3 rocks mined, 4 gifts given, 5 puzzles solved, 6 meals fed.
+pub const QUESTS: [(u8, u8, u32); 8] = [(0, 2, 40), (1, 3, 30), (2, 5, 30), (3, 3, 25), (4, 1, 20), (5, 1, 60), (6, 2, 20), (0, 1, 20)];
+pub const STORY_CHAPTERS: u8 = 5;
+/// Today's quest in a slot (0-2): three different quests a day from the commitment.
+pub fn daily_quest(commit: &str, who: &AccountId, slot: u8) -> u8 {
+    let mut picked: Vec<u8> = vec![];
+    let mut i = 0u32;
+    while picked.len() <= slot as usize { let q = roll(commit, who, "quest", i) % QUESTS.len() as u8; if !picked.contains(&q) { picked.push(q); } i += 1; }
+    picked[slot as usize]
+}
 pub const NFT_BASE: &str = "https://raw.githubusercontent.com/0xTowhid/pixel-bazaar/main/nft";
 
 #[derive(BorshStorageKey)]
@@ -132,6 +148,7 @@ pub struct Player {
     pub lead: Option<String>, pub enc_today: u8, pub fed_today: u8, pub wild: Option<Wild>, pub wallet: Option<AccountId>,
     pub book: u64, pub shards: u16,
     pub clues: u32, pub solved_day: Vec<u8>,
+    pub fate_day: u8, pub fate: Vec<u8>, pub daily: Vec<u8>, pub quests_claimed: u8, pub chapter: u8, pub boss_wins: u32,
 }
 
 /// An NFT: a spirit, a badge or a legendary catch.
@@ -166,6 +183,8 @@ pub enum Action {
     ConfirmWallet { wallet: AccountId }, UnlinkWallet, SendToWallet { token: String },
     // world puzzles
     Solve { puzzle: u8, answer: Vec<u8> },
+    // Madame Vey, the quest board, the story
+    DrawFate, ClaimQuest { slot: u8 }, AdvanceStory,
 }
 
 #[near(serializers = [borsh, json])]
@@ -200,6 +219,7 @@ fn new_player(season: u32) -> Player {
         seasons_won: 0, best_score: 0,
         lead: None, enc_today: 0, fed_today: 0, wild: None, wallet: None, book: 0, shards: 0,
         clues: 0, solved_day: vec![0; PUZZLES.len()],
+        fate_day: 0, fate: vec![], daily: vec![0; 7], quests_claimed: 0, chapter: 1, boss_wins: 0,
     }
 }
 /// Commitment string the operator hashes on day start and reveals at settlement.
@@ -262,7 +282,7 @@ impl Contract {
         p.seeds = old.seeds; p.friendship = old.friendship; p.projects = old.projects; p.donated = old.donated;
         p.harvested = old.harvested; p.jade_found = old.jade_found; p.fish_caught = old.fish_caught;
         p.seasons_won = old.seasons_won; p.best_score = old.best_score;
-        p.lead = old.lead; p.wallet = old.wallet; p.book = old.book; p.shards = old.shards; p.clues = old.clues;
+        p.lead = old.lead; p.wallet = old.wallet; p.book = old.book; p.shards = old.shards; p.clues = old.clues; p.chapter = old.chapter; p.boss_wins = old.boss_wins;
         self.players.insert(id, p);
     }
 
@@ -315,6 +335,7 @@ impl Contract {
         let commit = p.commitment.clone().unwrap_or_else(|| env::panic_str("the day has not started yet"));
         let mut badges: Vec<&str> = vec![];
         let lead_el = self.lead_element(&id, &p);
+        let fate = |p: &Player, kind: usize, v: u8| p.fate_day == p.day && p.fate.len() == 3 && p.fate[kind] == v;
         for a in actions {
             match a {
                 Action::Plant { plot, crop } => {
@@ -338,18 +359,19 @@ impl Contract {
                     let (good, days, _, yld, regrow, _) = CROPS[pl.crop.unwrap() as usize];
                     self.barn_add(&id, good, yld);
                     p.plots[plot as usize] = if regrow > 0 { Plot { crop: pl.crop, grown: days - regrow, watered_day: pl.watered_day } } else { Plot::default() };
-                    p.harvested += yld;
+                    p.harvested += yld; p.daily[2] = p.daily[2].saturating_add(yld as u8);
                     if p.harvested == yld { badges.push("first_harvest"); }
                     if p.harvested >= 50 && p.harvested - yld < 50 { badges.push("green_thumb"); }
                 }
                 Action::Mine { rock } => {
-                    use_energy(&mut p, 8);
+                    let cost = if fate(&p, 1, 2) { 12 } else { 8 }; use_energy(&mut p, cost); // Heavy Boots
+                    p.daily[3] = p.daily[3].saturating_add(1);
                     require!(rock < ROCKS, "no such rock");
                     if p.mined_day != p.day { p.mined_day = p.day; p.mined = 0; }
                     require!(p.mined & (1 << rock) == 0, "already mined today");
                     p.mined |= 1 << rock;
                     let r = roll(&commit, &id, "mine", rock as u32);
-                    let jade = if lead_el == Some(EARTH) { 96 } else { 64 }; // an earth spirit digs better
+                    let jade = if lead_el == Some(EARTH) { 96 } else { 64 } + if fate(&p, 0, 1) { 32 } else { 0 }; // earth spirit, The Mountain
                     if r < jade { self.barn_add(&id, 11, 1); p.jade_found += 1; if p.jade_found == 5 { badges.push("jade_hunter"); } }
                     else if r < 200 { self.barn_add(&id, 12, 1); }
                     else if r >= 250 { p.shards += 1; } // a lantern shard, for the last evolutions
@@ -361,15 +383,16 @@ impl Contract {
                     let r = roll(&commit, &id, "fish", p.catches_today as u32);
                     p.catches_today += 1;
                     // the mini-game must be won, and then the catch is still decided on chain (7 in 10)
-                    let bite = if lead_el == Some(WATER) { 210 } else { 179 }; // a water spirit helps
+                    let bite = (if lead_el == Some(WATER) { 210i32 } else { 179 } + if fate(&p, 0, 0) { 40 } else { 0 } - if fate(&p, 1, 4) { 30 } else { 0 }).clamp(0, 255) as u8; // water spirit, The River, Butterfingers
                     if ok && r < bite {
                         let n = if p.projects[0] { 2 } else { 1 };
-                        self.barn_add(&id, 1, n); p.fish_caught += n;
+                        self.barn_add(&id, 1, n); p.fish_caught += n; p.daily[1] = p.daily[1].saturating_add(n as u8);
                         if p.fish_caught >= 10 && p.fish_caught - n < 10 { badges.push("angler"); }
                     }
                 }
                 Action::Cat => {
                     require!(p.cat_day != p.day, "Mochi already found something today");
+                    require!(!fate(&p, 1, 1), "The Crow scared Mochi today");
                     p.cat_day = p.day;
                     let r = roll(&commit, &id, "cat", 0);
                     if r < 128 { p.coins += 10 * 100; } else { p.seeds[(r % 7) as usize] += 1; }
@@ -390,7 +413,7 @@ impl Contract {
                     require!((good as usize) < NG, "no such good");
                     require!(self.bal(GOODS[good as usize], &id) >= 1, "you don't have that");
                     self.burn(GOODS[good as usize], &id, 1);
-                    p.gift_day[n] = p.day;
+                    p.gift_day[n] = p.day; p.daily[4] = p.daily[4].saturating_add(1);
                     let liked = if good >= 4 && good <= 10 { 15 } else { 10 };
                     let before = p.friendship[n];
                     p.friendship[n] = (p.friendship[n] as u16 + liked).min(100) as u8;
@@ -419,9 +442,9 @@ impl Contract {
                     p.coins -= PLOT_COST * 100; p.plots.push(Plot::default());
                 }
                 Action::Encounter { zone } => {
-                    use_energy(&mut p, 5);
+                    let cost = if fate(&p, 1, 0) { 8 } else { 5 }; use_energy(&mut p, cost); // Mercury Retrograde
                     require!((zone as usize) < SPAWN.len(), "no such place");
-                    require!(p.enc_today < ENCOUNTERS_A_DAY, "the spirits are hiding until tomorrow");
+                    require!(p.enc_today < ENCOUNTERS_A_DAY + if fate(&p, 2, 0) { 1 } else { 0 }, "the spirits are hiding until tomorrow"); // The Hidden Door
                     if zone == 2 { require!(self.owns_element(&id, WATER), "you need a water spirit to dive to the shrine"); }
                     if zone == 3 { require!(self.owns_element(&id, WIND), "you need a wind spirit to glide to the sky"); }
                     let n = p.enc_today as u32; p.enc_today += 1;
@@ -430,16 +453,17 @@ impl Contract {
                     let mut pick = (roll(&commit, &id, "enc", n) as u32 * 256 + roll(&commit, &id, "enc2", n) as u32) % total;
                     let mut species = table[0].0;
                     for &(sp, w) in table { if pick < w as u32 { species = sp; break; } pick -= w as u32; }
-                    let shiny = roll(&commit, &id, "shiny", n) < 4; // 1 in 64
+                    let shiny = roll(&commit, &id, "shiny", n) < if fate(&p, 2, 3) { 16 } else { 4 }; // 1 in 64 (1 in 16 with The Twin)
                     p.wild = Some(Wild { species, shiny, zone });
                 }
                 Action::Catch { ok } => {
                     let w = p.wild.take().unwrap_or_else(|| env::panic_str("there is no spirit here"));
                     let sp = SPECIES[w.species as usize];
-                    let mut chance = CATCH_CHANCE[sp.3 as usize];
+                    let mut chance = CATCH_CHANCE[sp.3 as usize] + if fate(&p, 0, 2) { 26 } else { 0 }; // The Lantern
+                    if fate(&p, 1, 3) { chance = chance.saturating_sub(20); } // The Fog
                     if lead_el == Some(sp.2) { chance += 38; } // a spirit of the same element calms it
                     if ok && (roll(&commit, &id, "catch", p.enc_today as u32) as u16) < chance {
-                        self.mint_spirit(&id, w.species, w.shiny);
+                        self.mint_spirit(&id, w.species, w.shiny); p.daily[0] = p.daily[0].saturating_add(1);
                         p.book |= 1u64 << w.species;
                         let caught = p.book.count_ones();
                         if caught == 1 { badges.push("first_spirit"); }
@@ -452,7 +476,7 @@ impl Contract {
                     self.assert_owns_spirit(&id, &token);
                     require!(p.fed_today < FEEDS_A_DAY, "it is full for today");
                     require!((good as usize) < NG && self.bal(GOODS[good as usize], &id) >= 1, "you don't have that");
-                    self.burn(GOODS[good as usize], &id, 1); p.fed_today += 1;
+                    self.burn(GOODS[good as usize], &id, 1); p.fed_today += 1; p.daily[6] = p.daily[6].saturating_add(1);
                     let xp = match good { 11 => 25, 1 | 2 | 3 => 12, _ => 6 };
                     self.add_xp(&token, xp);
                 }
@@ -474,13 +498,41 @@ impl Contract {
                     self.links.remove(&id); p.wallet = Some(wallet); badges.push("wallet_linked");
                 }
                 Action::UnlinkWallet => { p.wallet = None; }
+                Action::DrawFate => {
+                    require!(p.fate_day != p.day, "Madame Vey: come back tomorrow, dear");
+                    p.fate_day = p.day;
+                    p.fate = vec![roll(&commit, &id, "fate", 0) % BLESSINGS.len() as u8, roll(&commit, &id, "fate", 1) % CURSES.len() as u8, roll(&commit, &id, "fate", 2) % SECRETS.len() as u8];
+                    match p.fate[0] { 3 => p.energy = (p.energy + 20).min(ENERGY_MAX + 20), 4 => p.coins += 30 * 100, 5 => p.seeds[(roll(&commit, &id, "fate", 3) % 7) as usize] += 3, _ => {} }
+                }
+                Action::ClaimQuest { slot } => {
+                    require!(slot < 3, "no such quest");
+                    require!(p.quests_claimed & (1 << slot) == 0, "already claimed");
+                    let q = QUESTS[daily_quest(&commit, &id, slot) as usize];
+                    require!(p.daily[q.0 as usize] >= q.1, "not done yet");
+                    p.quests_claimed |= 1 << slot; p.coins += q.2 as u64 * 100;
+                    if let Some(t) = p.lead.clone() { if self.owners.get(&t) == Some(&id) { self.add_xp(&t, 5); } }
+                }
+                Action::AdvanceStory => {
+                    require!(p.chapter <= STORY_CHAPTERS, "the story is complete");
+                    let done = match p.chapter {
+                        1 => p.book != 0 && p.harvested >= 5,          // The Debt: meet the spirits, work the land
+                        2 => p.clues & 1 != 0,                          // Whispers in the Woods: the brazier puzzle
+                        3 => p.clues & 2 != 0,                          // The Sunken Shrine: the bell puzzle
+                        4 => p.clues & 4 != 0,                          // The Clockwork Sky: the gear puzzle
+                        _ => p.boss_wins & 1 != 0,                      // Who Stole the Lantern?: beat the Great Spirit
+                    };
+                    require!(done, "this chapter is not finished yet");
+                    p.chapter += 1;
+                    match p.chapter { 2 | 3 | 4 => { p.shards += 1; p.coins += 100 * 100; } 5 => { p.shards += 2; p.coins += 200 * 100; } _ => {} }
+                    if p.chapter > STORY_CHAPTERS { badges.push("lantern_keeper"); self.mint_spirit(&id, 37, false); p.book |= 1u64 << 37; } // the Jade Dragon
+                }
                 Action::Solve { puzzle, answer } => {
                     require!((puzzle as usize) < PUZZLES.len(), "no such puzzle");
                     if puzzle == 1 { require!(self.owns_element(&id, WATER), "the shrine is under water"); }
                     if puzzle == 2 { require!(self.owns_element(&id, WIND), "the sky is out of reach"); }
                     require!(p.solved_day[puzzle as usize] != p.day, "already solved today");
                     require!(answer == puzzle_order(&commit, &id, puzzle), "that is not the right order");
-                    p.solved_day[puzzle as usize] = p.day; p.shards += 1;
+                    p.solved_day[puzzle as usize] = p.day; p.shards += if fate(&p, 2, 1) { 2 } else { 1 }; p.daily[5] = p.daily[5].saturating_add(1); // The Old Key
                     let first = p.clues & (1 << puzzle) == 0; p.clues |= 1 << puzzle;
                     if first && p.clues & 0b111 == 0b111 { badges.push("lantern_seeker"); }
                 }
@@ -593,6 +645,7 @@ impl Contract {
         }
         p.prices = prices.clone(); p.commitment = None; p.npc_moves = vec![]; p.asleep = false; p.passed_out = false;
         p.energy = ENERGY_MAX; p.catches_today = 0; p.enc_today = 0; p.fed_today = 0; p.wild = None;
+        p.daily = vec![0; 7]; p.quests_claimed = 0;
         if let Some(t) = p.lead.clone() { if self.owners.get(&t) == Some(&player) { self.add_xp(&t, 10); } } // your companion grows with you
         if day >= SEASON_DAYS {
             p.finished = true; p.won = p.coins >= DEBT;
@@ -825,8 +878,8 @@ impl Contract {
     }
 }
 
-pub const BADGES: [&str; 17] = ["first_harvest", "green_thumb", "jade_hunter", "angler", "x10_survivor", "faded_rita", "beat_kaito", "debt_free", "early_bird", "restorer", "best_friend",
-    "first_spirit", "spirit_tamer", "shiny_hunter", "legend_tamer", "wallet_linked", "lantern_seeker"];
+pub const BADGES: [&str; 18] = ["first_harvest", "green_thumb", "jade_hunter", "angler", "x10_survivor", "faded_rita", "beat_kaito", "debt_free", "early_bird", "restorer", "best_friend",
+    "first_spirit", "spirit_tamer", "shiny_hunter", "legend_tamer", "wallet_linked", "lantern_seeker", "lantern_keeper"];
 fn use_energy(p: &mut Player, n: u16) { require!(p.energy >= n, "you are too tired"); p.energy -= n; }
 
 #[cfg(test)]
@@ -1162,4 +1215,39 @@ mod tests {
     #[test]
     #[should_panic(expected = "under water")]
     fn shrine_puzzle_needs_a_water_spirit() { let mut c = setup(); commit(&mut c, 1, 2, "s"); c.act(vec![Action::Solve { puzzle: 1, answer: vec![0, 1, 2] }]); }
+
+    #[test]
+    fn fate_once_a_day_with_effects() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        c.act(vec![Action::DrawFate]);
+        let p = c.get_player(pl()).unwrap(); assert_eq!(p.fate.len(), 3); assert_eq!(p.fate_day, 1);
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::DrawFate]))).is_err());
+        night(&mut c, 1, 2); commit(&mut c, 2, 2, "s"); c.act(vec![Action::DrawFate]); // a new day, new cards
+    }
+    #[test]
+    fn quests_pay_when_done_once() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        let commitment = c.get_player(pl()).unwrap().commitment.unwrap();
+        let q = QUESTS[daily_quest(&commitment, &pl(), 0) as usize];
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::ClaimQuest { slot: 0 }]))).is_err(), "not done yet");
+        c.players.get_mut(&pl()).unwrap().daily[q.0 as usize] = q.1;
+        let before = c.get_player(pl()).unwrap().coins;
+        c.act(vec![Action::ClaimQuest { slot: 0 }]);
+        assert_eq!(c.get_player(pl()).unwrap().coins, before + q.2 as u64 * 100);
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::ClaimQuest { slot: 0 }]))).is_err(), "once");
+        let qs: Vec<u8> = (0..3).map(|k| daily_quest(&commitment, &pl(), k)).collect();
+        assert!(qs[0] != qs[1] && qs[1] != qs[2] && qs[0] != qs[2], "three different quests");
+    }
+    #[test]
+    fn story_chapters_follow_the_game_and_end_with_the_jade_dragon() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::AdvanceStory]))).is_err());
+        { let p = c.players.get_mut(&pl()).unwrap(); p.book = 1; p.harvested = 5; }
+        c.act(vec![Action::AdvanceStory]); assert_eq!(c.get_player(pl()).unwrap().chapter, 2);
+        { let p = c.players.get_mut(&pl()).unwrap(); p.clues = 7; p.boss_wins = 1; }
+        for _ in 0..4 { c.act(vec![Action::AdvanceStory]); }
+        let p = c.get_player(pl()).unwrap(); assert_eq!(p.chapter, 6);
+        assert!(c.get_spirits(pl()).iter().any(|s| s.species == 37), "the Jade Dragon joins you");
+        assert_eq!(c.mt_balance_of(pl(), "badge_lantern_keeper".into()).0, 1);
+    }
 }

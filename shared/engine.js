@@ -11,7 +11,7 @@
   const CROPS = [[4, 2, 6, 2, 0, true], [5, 3, 10, 3, 0, true], [6, 4, 22, 2, 0, true], [7, 3, 8, 3, 0, true], [8, 2, 6, 2, 0, true], [9, 3, 12, 2, 0, true], [0, 2, 5, 3, 0, true], [10, 4, 80, 3, 2, true], [2, 2, 60, 2, 2, false]];
   const ITEMS = { license_x5: 250, license_x10: 900, bridge: 600, boat: 300, stall: 1500 };
   const PROJECTS = [[[[1, 30], [11, 5]], 400], [[[12, 10], [11, 8]], 0], [[[0, 40]], 600]];
-  const BADGES = ['first_harvest', 'green_thumb', 'jade_hunter', 'angler', 'x10_survivor', 'faded_rita', 'beat_kaito', 'debt_free', 'early_bird', 'restorer', 'best_friend', 'first_spirit', 'spirit_tamer', 'shiny_hunter', 'legend_tamer', 'wallet_linked', 'lantern_seeker'];
+  const BADGES = ['first_harvest', 'green_thumb', 'jade_hunter', 'angler', 'x10_survivor', 'faded_rita', 'beat_kaito', 'debt_free', 'early_bird', 'restorer', 'best_friend', 'first_spirit', 'spirit_tamer', 'shiny_hunter', 'legend_tamer', 'wallet_linked', 'lantern_seeker', 'lantern_keeper'];
   const PLOT_COST = 120, MAX_PLOTS = 18, START_PLOTS = 6, BARN_CAP = 40, NPCS = 8, ROCKS = 8, ENERGY_MAX = 100;
 
   const R = (typeof module !== 'undefined' && module.exports) ? require('./rules.js') : root.Rules;
@@ -26,7 +26,8 @@
       energy: ENERGY_MAX, plots: Array.from({ length: START_PLOTS }, emptyPlot), seeds, friendship: new Array(NPCS).fill(0), gift_day: new Array(NPCS).fill(0),
       projects: PROJECTS.map(() => false), donated: PROJECTS.map(() => new Array(NG + 1).fill(0)), mined_day: 0, mined: 0, catches_today: 0, cat_day: 0,
       harvested: 0, jade_found: 0, fish_caught: 0, kaito_pnl: 0, start_coins: START_COINS, seasons_won: 0, best_score: 0,
-      lead: null, enc_today: 0, fed_today: 0, wild: null, wallet: null, book: 0, shards: 0, clues: 0, solved_day: [0, 0, 0] };
+      lead: null, enc_today: 0, fed_today: 0, wild: null, wallet: null, book: 0, shards: 0, clues: 0, solved_day: [0, 0, 0],
+      fate_day: 0, fate: [], daily: [0, 0, 0, 0, 0, 0, 0], quests_claimed: 0, chapter: 1, boss_wins: 0 };
   };
   const preimage = (player, season, day, event, rumors, salt) => `${player}|${season}|${day}|${event}|${rumors}|${salt}`;
   function settle(pos, price) { const e = Math.max(1, pos.entry); const mv = Math.trunc((price - e) * 1e6 / e); return Math.trunc(pos.stake * pos.lev * mv * (pos.long ? 1 : -1) / 1e6); }
@@ -60,6 +61,7 @@
     _ownsEl(c, el) { return (this.byOwner[c] || []).some(id => { const t = this.tokens[id]; return t && t.type === 'Spirit' && SP[t.species].el === el; }); }
     _bookAdd(book, sp) { return Number(BigInt(book || 0) | (1n << BigInt(sp))); }
     _bookCount(book) { let n = 0, b = BigInt(book || 0); while (b) { n += Number(b & 1n); b >>= 1n; } return n; }
+    daily_quest(commit, who, slot) { const picked = []; for (let i = 0; picked.length <= slot; i++) { const q = this._roll(commit, who, 'quest', i) % R.QUESTS.length; if (!picked.includes(q)) picked.push(q); } return picked[slot]; }
     puzzle_order(commit, who, k) { const n = PUZZLES[k], v = [...Array(n).keys()]; for (let i = n - 1; i >= 1; i--) { const j = this._roll(commit, who, 'puzzle' + k, i) % (i + 1); [v[i], v[j]] = [v[j], v[i]]; } return v; }
     link_wallet(c, { game_account }) { req(this.players[game_account], 'no trader with that name'); this.links[game_account] = c; }
     get_link_request(game_account) { return this.links[game_account] || null; }
@@ -89,7 +91,7 @@
       p.plots = old.plots.map(pl => ({ ...pl, watered_day: 0 })); p.seeds = old.seeds; p.friendship = old.friendship; p.projects = old.projects; p.donated = old.donated;
       p.harvested = old.harvested; p.jade_found = old.jade_found; p.fish_caught = old.fish_caught;
       p.seasons_won = old.seasons_won; p.best_score = old.best_score;
-      p.lead = old.lead; p.wallet = old.wallet; p.book = old.book; p.shards = old.shards; p.clues = old.clues;
+      p.lead = old.lead; p.wallet = old.wallet; p.book = old.book; p.shards = old.shards; p.clues = old.clues; p.chapter = old.chapter; p.boss_wins = old.boss_wins;
       this.players[c] = p;
     }
     open_position(c, { good, long, lev, stake }) {
@@ -126,6 +128,7 @@
       const p = this._p(c); req(!p.finished && !p.asleep, 'day is over'); req(p.commitment, 'the day has not started yet');
       const commit = p.commitment, roll = (what, n) => this._roll(commit, c, what, n);
       const leadEl = this._leadEl(c, p);
+      const fate = (k, v) => p.fate_day === p.day && p.fate.length === 3 && p.fate[k] === v, inc = i => { p.daily[i] = Math.min(255, p.daily[i] + 1); };
       const energy = n => { req(p.energy >= n, 'you are too tired'); p.energy -= n; };
       const badges = [];
       for (const a of actions) {
@@ -137,16 +140,16 @@
             const [good, days, , yld, regrow] = CROPS[pl.crop];
             this._barnAdd(c, good, yld);
             p.plots[a.plot] = regrow ? { crop: pl.crop, grown: days - regrow, watered_day: pl.watered_day } : emptyPlot();
-            p.harvested += yld;
+            p.harvested += yld; p.daily[2] = Math.min(255, p.daily[2] + yld);
             if (p.harvested === yld) badges.push('first_harvest');
             if (p.harvested >= 50 && p.harvested - yld < 50) badges.push('green_thumb');
             break;
           }
           case 'Mine': {
-            energy(8); req(a.rock < ROCKS, 'no such rock');
+            energy(fate(1, 2) ? 12 : 8); req(a.rock < ROCKS, 'no such rock'); inc(3);
             if (p.mined_day !== p.day) { p.mined_day = p.day; p.mined = 0; }
             req(!(p.mined & (1 << a.rock)), 'already mined today'); p.mined |= 1 << a.rock;
-            const r = roll('mine', a.rock), jade = leadEl === EARTH ? 96 : 64;
+            const r = roll('mine', a.rock), jade = (leadEl === EARTH ? 96 : 64) + (fate(0, 1) ? 32 : 0);
             if (r < jade) { this._barnAdd(c, 11, 1); p.jade_found++; if (p.jade_found === 5) badges.push('jade_hunter'); }
             else if (r < 200) this._barnAdd(c, 12, 1);
             else if (r >= 250) p.shards++;
@@ -156,10 +159,10 @@
           case 'Fish': {
             energy(4); req(p.catches_today < 6, 'the fish stopped biting for today');
             const r = roll('fish', p.catches_today); p.catches_today++;
-            if (a.ok && r < (leadEl === WATER ? 210 : 179)) { const n = p.projects[0] ? 2 : 1; this._barnAdd(c, 1, n); p.fish_caught += n; if (p.fish_caught >= 10 && p.fish_caught - n < 10) badges.push('angler'); }
+            if (a.ok && r < Math.max(0, Math.min(255, (leadEl === WATER ? 210 : 179) + (fate(0, 0) ? 40 : 0) - (fate(1, 4) ? 30 : 0)))) { const n = p.projects[0] ? 2 : 1; this._barnAdd(c, 1, n); p.fish_caught += n; p.daily[1] = Math.min(255, p.daily[1] + n); if (p.fish_caught >= 10 && p.fish_caught - n < 10) badges.push('angler'); }
             break;
           }
-          case 'Cat': { req(p.cat_day !== p.day, 'Mochi already found something today'); p.cat_day = p.day; const r = roll('cat', 0); if (r < 128) p.coins += 1000; else p.seeds[r % 7] += 1; break; }
+          case 'Cat': { req(p.cat_day !== p.day, 'Mochi already found something today'); req(!fate(1, 1), 'The Crow scared Mochi today'); p.cat_day = p.day; const r = roll('cat', 0); if (r < 128) p.coins += 1000; else p.seeds[r % 7] += 1; break; }
           case 'Sell': {
             const g = a.good; req(g >= 0 && g < NG && g !== 3 && a.qty > 0, 'cannot sell that'); req(this._bal(GOODS[g], c) >= a.qty, 'not enough in your barn');
             this._burn(GOODS[g], c, a.qty); const bonus = g === 0 && p.projects[2] ? 115 : 100;
@@ -168,7 +171,7 @@
           }
           case 'Gift': {
             const n = a.npc; req(n >= 0 && n < NPCS, 'no such person'); req(p.gift_day[n] !== p.day, 'one gift a day'); req(a.good >= 0 && a.good < NG, 'no such good'); req(this._bal(GOODS[a.good], c) >= 1, "you don't have that");
-            this._burn(GOODS[a.good], c, 1); p.gift_day[n] = p.day;
+            this._burn(GOODS[a.good], c, 1); p.gift_day[n] = p.day; inc(4);
             const before = p.friendship[n]; p.friendship[n] = Math.min(100, p.friendship[n] + (a.good >= 4 && a.good <= 10 ? 15 : 10));
             if (before < 100 && p.friendship[n] >= 100) badges.push('best_friend');
             break;
@@ -184,20 +187,20 @@
           case 'BuySeed': { req(a.crop < CROPS.length && a.qty > 0 && a.qty <= 50, 'bad seed order'); const cost = CROPS[a.crop][2] * 100 * a.qty; req(p.coins >= cost, 'not enough coins'); p.coins -= cost; p.seeds[a.crop] += a.qty; break; }
           case 'BuyPlot': { req(p.plots.length < MAX_PLOTS, 'no more land'); req(p.coins >= PLOT_COST * 100, 'not enough coins'); p.coins -= PLOT_COST * 100; p.plots.push(emptyPlot()); break; }
           case 'Encounter': {
-            energy(5); req(a.zone >= 0 && a.zone < SPAWN.length, 'no such place'); req(p.enc_today < R.ENCOUNTERS_A_DAY, 'the spirits are hiding until tomorrow');
+            energy(fate(1, 0) ? 8 : 5); req(a.zone >= 0 && a.zone < SPAWN.length, 'no such place'); req(p.enc_today < R.ENCOUNTERS_A_DAY + (fate(2, 0) ? 1 : 0), 'the spirits are hiding until tomorrow');
             if (a.zone === 2) req(this._ownsEl(c, WATER), 'you need a water spirit to dive to the shrine');
             if (a.zone === 3) req(this._ownsEl(c, WIND), 'you need a wind spirit to glide to the sky');
             const n = p.enc_today++; const table = SPAWN[a.zone], total = table.reduce((t, x) => t + x[1], 0);
             let pick = (roll('enc', n) * 256 + roll('enc2', n)) % total, species = table[0][0];
             for (const [sp, w] of table) { if (pick < w) { species = sp; break; } pick -= w; }
-            p.wild = { species, shiny: roll('shiny', n) < 4, zone: a.zone };
+            p.wild = { species, shiny: roll('shiny', n) < (fate(2, 3) ? 16 : 4), zone: a.zone };
             break;
           }
           case 'Catch': {
             const w = p.wild || fail('there is no spirit here'); p.wild = null;
-            const sp = SP[w.species]; let chance = R.CATCH_CHANCE[sp.rar]; if (leadEl === sp.el) chance += 38;
+            const sp = SP[w.species]; let chance = R.CATCH_CHANCE[sp.rar] + (fate(0, 2) ? 26 : 0); if (fate(1, 3)) chance = Math.max(0, chance - 20); if (leadEl === sp.el) chance += 38;
             if (a.ok && roll('catch', p.enc_today) < chance) {
-              this._mintSpirit(c, w.species, w.shiny); p.book = this._bookAdd(p.book, w.species);
+              this._mintSpirit(c, w.species, w.shiny); inc(0); p.book = this._bookAdd(p.book, w.species);
               const caught = this._bookCount(p.book);
               if (caught === 1) badges.push('first_spirit'); if (caught === 10) badges.push('spirit_tamer'); if (w.shiny) badges.push('shiny_hunter');
             }
@@ -207,7 +210,7 @@
           case 'Feed': {
             this._ownsSpirit(c, a.token); req(p.fed_today < R.FEEDS_A_DAY, 'it is full for today');
             req(a.good >= 0 && a.good < NG && this._bal(GOODS[a.good], c) >= 1, "you don't have that");
-            this._burn(GOODS[a.good], c, 1); p.fed_today++; this._xp(a.token, a.good === 11 ? 25 : [1, 2, 3].includes(a.good) ? 12 : 6);
+            this._burn(GOODS[a.good], c, 1); p.fed_today++; inc(6); this._xp(a.token, a.good === 11 ? 25 : [1, 2, 3].includes(a.good) ? 12 : 6);
             break;
           }
           case 'Evolve': {
@@ -219,13 +222,33 @@
           }
           case 'ConfirmWallet': req(this.links[c] === a.wallet, 'ask from your wallet first'); delete this.links[c]; p.wallet = a.wallet; badges.push('wallet_linked'); break;
           case 'UnlinkWallet': p.wallet = null; break;
+          case 'DrawFate': {
+            req(p.fate_day !== p.day, 'Madame Vey: come back tomorrow, dear'); p.fate_day = p.day;
+            p.fate = [roll('fate', 0) % 6, roll('fate', 1) % 5, roll('fate', 2) % 4];
+            if (p.fate[0] === 3) p.energy = Math.min(ENERGY_MAX + 20, p.energy + 20); if (p.fate[0] === 4) p.coins += 3000; if (p.fate[0] === 5) p.seeds[roll('fate', 3) % 7] += 3;
+            break;
+          }
+          case 'ClaimQuest': {
+            req(a.slot >= 0 && a.slot < 3, 'no such quest'); req(!(p.quests_claimed & (1 << a.slot)), 'already claimed');
+            const q = R.QUESTS[this.daily_quest(commit, c, a.slot)]; req(p.daily[q[0]] >= q[1], 'not done yet');
+            p.quests_claimed |= 1 << a.slot; p.coins += q[2] * 100; if (p.lead && this.owners[p.lead] === c) this._xp(p.lead, 5);
+            break;
+          }
+          case 'AdvanceStory': {
+            req(p.chapter <= 5, 'the story is complete');
+            const done = [null, p.book && p.harvested >= 5, p.clues & 1, p.clues & 2, p.clues & 4, p.boss_wins & 1][p.chapter];
+            req(done, 'this chapter is not finished yet'); p.chapter++;
+            if (p.chapter >= 2 && p.chapter <= 4) { p.shards++; p.coins += 10000; } if (p.chapter === 5) { p.shards += 2; p.coins += 20000; }
+            if (p.chapter > 5) { badges.push('lantern_keeper'); this._mintSpirit(c, 37, false); p.book = this._bookAdd(p.book, 37); }
+            break;
+          }
           case 'Solve': {
             req(a.puzzle >= 0 && a.puzzle < PUZZLES.length, 'no such puzzle');
             if (a.puzzle === 1) req(this._ownsEl(c, WATER), 'the shrine is under water');
             if (a.puzzle === 2) req(this._ownsEl(c, WIND), 'the sky is out of reach');
             req(p.solved_day[a.puzzle] !== p.day, 'already solved today');
             req(JSON.stringify(a.answer) === JSON.stringify(this.puzzle_order(commit, c, a.puzzle)), 'that is not the right order');
-            p.solved_day[a.puzzle] = p.day; p.shards++;
+            p.solved_day[a.puzzle] = p.day; p.shards += fate(2, 1) ? 2 : 1; inc(5);
             const first = !(p.clues & (1 << a.puzzle)); p.clues |= 1 << a.puzzle;
             if (first && (p.clues & 7) === 7) badges.push('lantern_seeker');
             break;
@@ -291,7 +314,7 @@
         if (m.npc.startsWith('kaito.')) p.kaito_pnl += pnl;
       }
       p.prices = prices; p.commitment = null; p.npc_moves = []; p.asleep = false; p.passed_out = false; p.energy = ENERGY_MAX; p.catches_today = 0;
-      p.enc_today = 0; p.fed_today = 0; p.wild = null;
+      p.enc_today = 0; p.fed_today = 0; p.wild = null; p.daily = [0, 0, 0, 0, 0, 0, 0]; p.quests_claimed = 0;
       if (p.lead && this.owners[p.lead] === player) this._xp(p.lead, 10);
       if (day >= SEASON_DAYS) {
         p.finished = true; p.won = p.coins >= DEBT; if (p.won) { p.coins -= DEBT; badges.push('debt_free'); }

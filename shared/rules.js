@@ -66,7 +66,7 @@
     x10_survivor: 'Won a x10 trade', faded_rita: 'Faded Rita and won', beat_kaito: 'Beat Kaito this season', debt_free: 'Paid the debt',
     early_bird: 'Paid the debt by day 6', restorer: 'Finished a town project', best_friend: '5 hearts with a local',
     first_spirit: 'Caught your first spirit', spirit_tamer: 'Caught 10 kinds of spirit', shiny_hunter: 'Caught a shiny spirit',
-    legend_tamer: 'Raised a legendary spirit', wallet_linked: 'Linked a NEAR wallet', lantern_seeker: 'Solved all three world puzzles',
+    legend_tamer: 'Raised a legendary spirit', wallet_linked: 'Linked a NEAR wallet', lantern_seeker: 'Solved all three world puzzles', lantern_keeper: 'Brought the Lantern back',
   };
   // ---- spirits (same table as the contract) ----
   const ELEMENTS = [
@@ -124,6 +124,28 @@
     [[27, 30], [3, 30], [20, 20], [5, 3]],
     [[23, 30], [6, 26], [24, 14], [7, 6], [38, 1]],
     [[16, 34], [25, 28], [33, 22], [17, 4]]
+  ];
+  // ---- Madame Vey's fate cards (same order as the contract) ----
+  const FATE = [
+    [{ name: 'The River', text: 'Fish bite more often today.', icon: 'Fish' }, { name: 'The Mountain', text: 'More jade in the rocks today.', icon: 'Mole' },
+     { name: 'The Lantern', text: 'Spirits are easier to calm today.', icon: 'LanternGreen' }, { name: 'The Hearth', text: '+20 energy right now.', icon: 'Flam' },
+     { name: 'The Coin', text: '+30 coins in your pocket.', icon: 'GoldRacoon' }, { name: 'The Seed', text: '+3 seeds of a random crop.', icon: 'Bamboo' }],
+    [{ name: 'Mercury Retrograde', text: 'Meeting a spirit costs 3 more energy.', icon: 'Eye2' }, { name: 'The Crow', text: 'Mochi is too scared to bring gifts.', icon: 'Owl2' },
+     { name: 'Heavy Boots', text: 'Mining costs 4 more energy.', icon: 'Mole2' }, { name: 'The Fog', text: 'Spirits are harder to calm today.', icon: 'SkullBlue' },
+     { name: 'Butterfingers', text: 'Fish slip off the hook more.', icon: 'Octopus' }],
+    [{ name: 'The Hidden Door', text: 'One more spirit will show itself to you today.', icon: 'Spirit' }, { name: 'The Old Key', text: 'A world puzzle gives two lantern shards today.', icon: 'GoldRacoon' },
+     { name: 'The Whisper', text: 'Madame Vey tells you whether Rita lies today.', icon: 'Snake' }, { name: 'The Twin', text: 'Shiny spirits are four times as likely today.', icon: 'Butterfly' }],
+  ];
+  // ---- daily quests: [counter, target, coins] (counters: spirits, fish, crops, rocks, gifts, puzzles, meals) ----
+  const QUESTS = [[0, 2, 40, 'Catch 2 spirits'], [1, 3, 30, 'Catch 3 fish'], [2, 5, 30, 'Harvest 5 crops'], [3, 3, 25, 'Mine 3 rocks'], [4, 1, 20, 'Give someone a gift'],
+    [5, 1, 60, 'Solve a world puzzle'], [6, 2, 20, 'Feed your companion twice'], [0, 1, 20, 'Catch a spirit']];
+  // ---- the story ----
+  const CHAPTERS = [
+    { n: 1, title: 'The Debt', goal: 'Catch your first spirit and harvest 5 crops', story: 'The Lantern is out and you owe the Harbor Master. Get on your feet first.' },
+    { n: 2, title: 'Whispers in the Woods', goal: 'Solve the brazier puzzle in the Whispering Woods', story: 'Ghost lights lead north. Someone passed through the woods carrying a flame.' },
+    { n: 3, title: 'The Sunken Shrine', goal: 'Find a water spirit, then solve the bell puzzle in the Sunken Shrine', story: 'Footprints end at the sea. The shrine keeper saw something, before the water rose.' },
+    { n: 4, title: 'The Clockwork Sky', goal: 'Find a wind spirit, then solve the gear puzzle in the Clockwork Sky', story: 'A thief with wings? The clock above the clouds stopped the night the Lantern went out.' },
+    { n: 5, title: 'Who Stole the Lantern?', goal: 'Beat the Great Spirit at the old gate in the Whispering Woods', story: 'All the clues point to the old spirit gate. Something big is guarding the flame.' },
   ];
   const ZONES = ['Town & Farm', 'Whispering Woods', 'Sunken Shrine', 'Clockwork Sky', 'Moon Market'];
   const CATCH_CHANCE = [205, 154, 102, 38];
@@ -183,6 +205,6 @@
   function rumorRight(k, r, truth) { return r.quiet ? !SOURCES[k].domain.includes(EVENTS[truth].id) : r.ev === truth; }
   const hearts = f => Math.min(5, Math.floor((f || 0) / 20));
 
-  const Rules = { GOODS, CROPS, EVENTS, SOURCES, NPC_IDS, ITEMS, PROJECTS, BADGES, ENERGY, ELEMENTS, RARITY, SPECIES, SPAWN, ZONES, CATCH_CHANCE, ENCOUNTERS_A_DAY, FEEDS_A_DAY, spiritLevel, mulberry32, seasonAccuracy, planDay, encodeRumors, decodeRumors, rumorRight, evIndex, hearts };
+  const Rules = { GOODS, CROPS, EVENTS, SOURCES, NPC_IDS, ITEMS, PROJECTS, BADGES, ENERGY, ELEMENTS, RARITY, SPECIES, SPAWN, ZONES, CATCH_CHANCE, ENCOUNTERS_A_DAY, FEEDS_A_DAY, spiritLevel, FATE, QUESTS, CHAPTERS, mulberry32, seasonAccuracy, planDay, encodeRumors, decodeRumors, rumorRight, evIndex, hearts };
   if (typeof module !== 'undefined' && module.exports) module.exports = Rules; else root.Rules = Rules;
 })(typeof window !== 'undefined' ? window : globalThis);

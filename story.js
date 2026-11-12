@@ -117,7 +117,7 @@ function showWelcome() {
 const domTarget = sel => () => { const e = typeof sel === 'string' ? document.querySelector(sel) : sel(); if (!e) return null; const r = e.getBoundingClientRect(), st = $('stage').getBoundingClientRect(); return { x: r.left - st.left, y: r.top - st.top, w: r.width, h: r.height }; };
 const worldTarget = (fn, w = 90, h = 110) => () => { const p = fn(); if (!p) return null; const s = toScreen(p.x, p.y); return { x: s.x - w * s.k / 2, y: s.y - h * s.k * .75, w: w * s.k, h: h * s.k }; };
 const TOUR = [
-  { t: 'YOUR GOAL', d: 'Your current goal is always written here, and a yellow arrow on screen points the way.', at: domTarget('#objBox') },
+  { t: 'YOUR GOAL', d: 'Your current goal is always written here, and a yellow arrow on screen points the way. Tap it (or press Q) for the story and the daily quests.', at: domTarget('#objBox') },
   { t: 'THAT IS YOU', d: 'Move with the arrow keys or WASD (on phones, the pad). Press E or Space (A on phones) to talk, farm, fish and catch spirits.', at: worldTarget(() => player) },
   { t: 'COINS AND DEBT', d: 'You start with 300 coins and owe the Harbor Master 5,000. This bar fills as you get closer. Chapter 1 ends when you pay him.', at: domTarget(() => $('hudL').children[2]) },
   { t: 'ENERGY', d: 'Farming, mining, fishing and catching spirits use energy. It refills every night when you sleep.', at: domTarget(() => $('hudL').children[3]) },

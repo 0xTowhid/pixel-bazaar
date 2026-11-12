@@ -49,7 +49,7 @@ for sprite, name, el, rar in SPECIES:
 BADGES = dict(re.findall(r"(\w+): '([^']+)'", src[src.index('const BADGES = {'):src.index('};', src.index('const BADGES = {'))]))
 ICON = {'first_harvest': 'Mushroom', 'green_thumb': 'Bamboo', 'jade_hunter': 'Mole', 'angler': 'Octopus', 'x10_survivor': 'Flam2', 'faded_rita': 'Snake2', 'beat_kaito': 'GoldRacoon',
         'debt_free': 'Racoon', 'early_bird': 'Owl', 'restorer': 'KappaGreen', 'best_friend': 'Spirit', 'first_spirit': 'Spirit', 'spirit_tamer': 'LanternGreen', 'shiny_hunter': 'Butterfly',
-        'legend_tamer': 'GiantSpirit', 'wallet_linked': 'Eye', 'lantern_seeker': 'LanternRed'}
+        'legend_tamer': 'GiantSpirit', 'wallet_linked': 'Eye', 'lantern_seeker': 'LanternRed', 'lantern_keeper': 'Dragon'}
 for key, title in BADGES.items():
     im = bg((255, 216, 107)); d = ImageDraw.Draw(im)
     d.ellipse((76, 36, 436, 396), fill=(255, 216, 107)); d.ellipse((96, 56, 416, 376), fill=(42, 35, 70))

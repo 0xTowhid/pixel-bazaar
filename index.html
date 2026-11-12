@@ -93,6 +93,24 @@ body:not(.ingame) #hudL,body:not(.ingame) #objBox,body:not(.ingame) #topR,body:n
 .wItem{display:flex;gap:.8em;align-items:center}.wItem img{width:3.4em;height:3.4em;image-rendering:pixelated}
 .wItem b{display:block;color:var(--gold);font-weight:normal}.wItem span{font-size:.75em;color:var(--mut)}
 @media (max-width:700px){.wGrid{grid-template-columns:1fr}}
+#quests{width:min(96%,62em);max-height:92%;overflow:auto}
+.qCols{display:grid;grid-template-columns:1fr 1fr;gap:1em}@media (max-width:760px){.qCols{grid-template-columns:1fr}}
+.chRow{border-left:4px solid #5d5280;padding:.5em .8em;margin-bottom:.6em;background:#ffffff08;border-radius:0 8px 8px 0}
+.chRow.now{border-color:#8ee68a}.chRow.done{border-color:var(--gold)}.chRow.locked{opacity:.55}.chT{margin:.25em 0;font-size:1.05em}
+.clueRow{display:flex;gap:.4em;margin-top:.4em}.clueRow span{width:2.4em;height:2.4em;border-radius:8px;background:#2a2346;display:flex;align-items:center;justify-content:center;color:var(--gold)}
+.qBoard{background:#3a2a1a;border:3px solid #c99a5b;border-radius:10px;padding:.8em}
+.qNote{background:#f3e3c3;color:#3a2a1a;border-radius:4px;padding:.6em .7em;margin-bottom:.7em;box-shadow:3px 3px 0 #0005}.qNote:nth-child(odd){transform:rotate(-.6deg)}.qNote:nth-child(even){transform:rotate(.5deg)}
+.qNote.done{opacity:.6}.qNote.ghost{background:#e8d9b5}.sub2{display:flex;justify-content:space-between;font-size:.65em;color:#8a5a2a}.qT{margin:.3em 0}.qR{font-size:.65em;color:#2f7a3a}
+.chNext{border:2px solid #4a3f72;border-radius:8px;padding:.8em;margin:.6em 0;background:#ffffff08}
+#fate{width:min(96%,60em);text-align:center;background:radial-gradient(circle at 50% 30%,#3b2160,#1c1630 75%)}
+.fRow{display:flex;gap:1.2em;justify-content:center;margin:1.2em 0;flex-wrap:wrap;perspective:900px}
+.fCard{width:13em;height:19em;position:relative;transform-style:preserve-3d}.fCard.flip{animation:fFlip .9s ease both}
+@keyframes fFlip{from{transform:rotateY(180deg)}to{transform:rotateY(0)}}
+.fFront,.fBack{position:absolute;inset:0;border-radius:14px;backface-visibility:hidden;border:3px solid var(--col)}
+.fBack{background:repeating-linear-gradient(45deg,#2a1f4e 0 10px,#33275c 10px 20px);transform:rotateY(180deg)}
+.fFront{background:linear-gradient(170deg,#2a1f4e,#120e1f);box-shadow:0 0 24px color-mix(in srgb,var(--col) 40%,transparent);padding:1em .8em;display:flex;flex-direction:column;align-items:center}
+.fKind{font-size:.8em}.fFront img{width:6.5em;height:6.5em;image-rendering:pixelated;margin:.8em 0}.fName{color:var(--gold);margin-bottom:.5em}.fText{font-size:.75em;line-height:1.6}
+#objBox{pointer-events:auto!important;cursor:pointer}
 #fade{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .35s;z-index:65}#fade.on{opacity:1}
 #book{width:min(96%,62em);max-height:92%;overflow:auto}
 .sGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(13em,1fr));gap:.8em;margin-top:.6em}
@@ -213,6 +231,8 @@ body.dlgOn #hotbar,body.dlgOn #chainlog{display:none}
   <div id="netErr" class="ui box panel"></div>
   <div id="book" class="ui box panel"></div>
   <div id="fade"></div>
+  <div id="quests" class="ui box panel"></div>
+  <div id="fate" class="ui box panel"></div>
   <div id="catch" class="ui box"></div>
   <div id="cine"><canvas id="fxcv"></canvas><div class="lb top"></div><div class="lb bot"></div>
     <div id="cineTitle">CHAPTER 0 · THE NIGHT THE LANTERN WENT OUT</div><div id="cineN"></div>
@@ -239,6 +259,7 @@ body.dlgOn #hotbar,body.dlgOn #chainlog{display:none}
 <script src="panels.js"></script>
 <script src="spirits.js"></script>
 <script src="worldplay.js"></script>
+<script src="quests.js"></script>
 <script src="story.js"></script>
 </body>
 </html>

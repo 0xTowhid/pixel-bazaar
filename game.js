@@ -179,6 +179,7 @@ async function sync() {
   if (S.chest) { World.P.chestProp.sx = 9; }
   S.player = p;
   S.spirits = await Backend.spirits().catch(() => S.spirits || []);
+  setTimeout(checkProgress, 50);
   renderHotbar();
   return p;
 }
@@ -453,13 +454,13 @@ const STEPS = [
   { text: 'Plant a seed behind your house and water it', target: () => at({ x: World.P.plots[0].x + .5, y: World.P.plots[0].y + .8 }) },
   { text: "Open a trade at Tomo's stall", target: () => NPCS.tomo },
   { text: 'Go home and sleep after 18:00', target: () => at(World.P.homeDoor) },
-  { text: 'Reach 5,000 coins, then see the Harbor Master', target: () => S.coins >= DEBT ? NPCS.master : null },
+  { text: 'Reach 5,000 coins, then see the Harbor Master', target: () => S.coins >= DEBT ? NPCS.master : null, chapter: true },
 ];
 function advance() { S.step = Math.min(S.step + 1, STEPS.length - 1); sfx('ok'); saveMem(); }
 
 // ---------- UI ----------
 let dlg = null, cardCb = null;
-const uiOpen = () => !!dlg || (S && (S.fishing || S.story || S.catching)) || ['trade', 'card', 'journal', 'profile', 'netErr', 'book'].some(id => $(id)?.classList.contains('on'));
+const uiOpen = () => !!dlg || (S && (S.fishing || S.story || S.catching)) || ['trade', 'card', 'journal', 'profile', 'netErr', 'book', 'quests', 'fate'].some(id => $(id)?.classList.contains('on'));
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 function toast(t, sec = 2.5) { const el = $('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => el.style.display = 'none', sec * 1000); }
 function hideToast() { $('toast').style.display = 'none'; }
@@ -500,10 +501,12 @@ function hear(k) {
 function talkTo(n) {
   n.dir = faceToward(n, player);
   if (n.src === 'seer') {
-    if (S.heard.seer || S.seerDay === S.day) { S.heard.seer = true; hear('seer'); return; }
-    say(n, 'Cross my palm with 40 coins and I will tell you what tomorrow brings. Mostly.', [
-      { t: 'PAY 40', fn: async () => { closeDlg(); if (S.coins < 40) { toast('Not enough coins.', 2); return; } if (await claim('seer', 'Paying Madame Vey')) hear('seer'); } },
-      { t: 'NO THANKS', fn: closeDlg }]);
+    const fateDone = S.player.fate_day === S.day;
+    const rumor = S.heard.seer || S.seerDay === S.day
+      ? { t: "TOMORROW'S RUMOR", fn: () => { closeDlg(); S.heard.seer = true; hear('seer'); } }
+      : { t: "TOMORROW'S RUMOR (40)", fn: async () => { closeDlg(); if (S.coins < 40) { toast('Not enough coins.', 2); return; } if (await claim('seer', 'Paying Madame Vey')) hear('seer'); } };
+    say(n, fateDone ? 'Your cards are drawn for today, dear. Shall I show them again?' : 'Sit, sit. Three cards a day, free for a friend of the spirits. Or 40 coins and I tell you tomorrow.', [
+      { t: fateDone ? 'SHOW MY CARDS' : 'READ MY FATE', fn: () => { closeDlg(); readFate(); } }, rumor, { t: 'LEAVE', fn: closeDlg }]);
     return;
   }
   if (n.src) { hear(n.src); return; }
@@ -602,7 +605,7 @@ function hud() {
   $('clock').style.color = mins >= 22 * 60 ? 'var(--bad)' : 'var(--gold)';
   $('debtFill').style.width = Math.min(100, worth() / DEBT * 100) + '%';
   if (S.player) { $('enFill').style.width = (S.player.energy / Rules.ENERGY.max * 100) + '%'; $('enFill').style.background = S.player.energy < 20 ? 'var(--bad)' : '#78e678'; }
-  $('obj').textContent = STEPS[S.step].text;
+  $('obj').textContent = STEPS[S.step].chapter && S.player && S.player.chapter <= 5 ? `CH.${S.player.chapter} · ${Rules.CHAPTERS[S.player.chapter - 1].goal}` : STEPS[S.step].text;
   if (WD.id !== 'town') { $('zone').textContent = WD.w.name; return; }
   const z = World.zone(Math.floor(player.x / TW), Math.floor(player.y / TW));
   $('zone').textContent = World.ZONE_NAME[z] || '';
@@ -683,7 +686,8 @@ addEventListener('keydown', e => {
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; keys[k] = true;
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
   if (k === 'e' || k === ' ' || k === 'Enter') interact();
-  if (k === 'Escape') { closeTrade(); $('journal').classList.remove('on'); $('profile').classList.remove('on'); $('book').classList.remove('on'); if (dlg) closeDlg(); }
+  if (k === 'Escape') { closeTrade(); $('journal').classList.remove('on'); $('profile').classList.remove('on'); $('book').classList.remove('on'); $('quests').classList.remove('on'); if (dlg) closeDlg(); }
+  if (k === 'q' && S && S.player && !dlg && !$('card').classList.contains('on')) $('quests').classList.contains('on') ? $('quests').classList.remove('on') : openQuests();
   if (k === 'b' && S && S.player && !dlg && !$('card').classList.contains('on')) $('book').classList.contains('on') ? $('book').classList.remove('on') : openBook();
   if (k === 'j' && !dlg && !$('card').classList.contains('on')) $('journal').classList.contains('on') ? $('journal').classList.remove('on') : openJournal();
   if (k === 'p' && S && !dlg && !(e.target && e.target.tagName === 'INPUT') && !$('card').classList.contains('on')) $('profile').classList.contains('on') ? $('profile').classList.remove('on') : openProfile();
@@ -701,6 +705,7 @@ document.querySelectorAll('#pad button').forEach(b => {
 $('mute').onclick = toggleMusic; $('jBtn').onclick = () => { initAudio(); if (S) openJournal(); };
 $('pBtn').onclick = () => { initAudio(); if (S) openProfile(); };
 $('sBtn').onclick = () => { initAudio(); if (S && S.player) openBook(); };
+$('objBox').onclick = () => { initAudio(); if (S && S.player) openQuests(); };
 // Full screen: the Fullscreen API where the browser has it (Android, desktop); on iPhone, add to the home screen.
 const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
 const standalone = () => matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone;
@@ -747,7 +752,7 @@ addEventListener('resize', () => { fit(); layoutTop(); }); fit(); setTimeout(lay
 let MINI, last = performance.now(), wx = [];
 for (let i = 0; i < 160; i++) wx.push({ x: Math.random() * VW, y: Math.random() * VH, s: .6 + Math.random() * .8 });
 function update(dt) {
-  const pOn = ['trade', 'card', 'journal', 'profile', 'netErr', 'cine', 'tour', 'book', 'catch'].some(id => $(id)?.classList.contains('on'));
+  const pOn = ['trade', 'card', 'journal', 'profile', 'netErr', 'cine', 'tour', 'book', 'catch', 'quests', 'fate'].some(id => $(id)?.classList.contains('on'));
   document.body.classList.toggle('dlgOn', !!dlg);
   if ((layoutTop.n = (layoutTop.n || 0) + 1) % 20 === 0) layoutTop();
   if (pOn !== document.body.classList.contains('panelOn')) { document.body.classList.toggle('panelOn', pOn); if (pOn) for (const k in keys) keys[k] = false; }
