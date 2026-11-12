@@ -18,7 +18,7 @@ echo "2/5 Creating $ACCOUNT with testnet NEAR from the faucet"
 near account create-account sponsor-by-faucet-service "$ACCOUNT" autogenerate-new-keypair save-to-legacy-keychain network-config testnet create
 
 echo "3/5 Creating the operator account $OPS (the server holds only this key, never the contract's)"
-near account create-account fund-myself "$OPS" '4 NEAR' autogenerate-new-keypair save-to-legacy-keychain \
+near account create-account fund-myself "$OPS" '3 NEAR' autogenerate-new-keypair save-to-legacy-keychain \
   sign-as "$ACCOUNT" network-config testnet sign-with-legacy-keychain send
 
 echo "4/5 Deploying and initialising with $OPS as the operator"

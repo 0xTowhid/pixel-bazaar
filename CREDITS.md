@@ -2,7 +2,7 @@
 
 ## Tiles, items, music and sounds: Ninja Adventure Asset Pack
 By Pixel-boy and AAA, released under CC0 (public domain). https://pixel-boy.itch.io/ninja-adventure-asset-pack
-Files: `assets/tiles`, `assets/items`, `assets/audio`, `assets/fonts`, `assets/spirits` (monsters and bosses used as spirits), `assets/music` (Story, Mystical, Aquatic, Ascension, Chill, Fight, Tension). Original license text: `assets/NINJA-ADVENTURE-LICENSE.md`.
+Files: `assets/tiles`, `assets/items`, `assets/audio`, `assets/fonts`, `assets/spirits` (monsters and bosses used as spirits; the legendary fish are the pack's fish faces, some recoloured), `assets/music` (Story, Mystical, Aquatic, Ascension, Chill, Fight, Tension). Original license text: `assets/NINJA-ADVENTURE-LICENSE.md`.
 
 ## Characters: Liberated Pixel Cup (LPC) Universal Spritesheet Character Generator
 Layers by many artists, licensed CC-BY-SA 3.0 / GPL 3.0 / OGA-BY 3.0 (per layer).
