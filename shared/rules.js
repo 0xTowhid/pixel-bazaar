@@ -66,7 +66,7 @@
     x10_survivor: 'Won a x10 trade', faded_rita: 'Faded Rita and won', beat_kaito: 'Beat Kaito this season', debt_free: 'Paid the debt',
     early_bird: 'Paid the debt by day 6', restorer: 'Finished a town project', best_friend: '5 hearts with a local',
     first_spirit: 'Caught your first spirit', spirit_tamer: 'Caught 10 kinds of spirit', shiny_hunter: 'Caught a shiny spirit',
-    legend_tamer: 'Raised a legendary spirit', wallet_linked: 'Linked a NEAR wallet', lantern_seeker: 'Solved all three world puzzles', lantern_keeper: 'Brought the Lantern back', spirit_champion: 'Beat the Great Spirit in a duel',
+    legend_tamer: 'Raised a legendary spirit', wallet_linked: 'Linked a NEAR wallet', lantern_seeker: 'Solved all three world puzzles', lantern_keeper: 'Brought the Lantern back', spirit_champion: 'Beat the Great Spirit in a duel', fishing_legend: 'Caught all five legendary fish',
   };
   // ---- spirits (same table as the contract) ----
   const ELEMENTS = [
@@ -236,6 +236,14 @@
     }
     return { won: at[1] === side[1].length, log, side };
   }
-  const Rules = { FOES, DUEL_ENERGY, beats, fighter, duel, GOODS, CROPS, EVENTS, SOURCES, NPC_IDS, ITEMS, PROJECTS, BADGES, ENERGY, ELEMENTS, RARITY, SPECIES, SPAWN, ZONES, CATCH_CHANCE, ENCOUNTERS_A_DAY, FEEDS_A_DAY, spiritLevel, FATE, QUESTS, CHAPTERS, mulberry32, seasonAccuracy, planDay, encodeRumors, decodeRumors, rumorRight, evIndex, hearts };
+  // ---- fishing legends (same as the contract): each one bites only when its riddle is true ----
+  const LEGENDS = [
+    { name: 'Ember Koi', chance: 12, tint: '#ff7a3c', riddle: 'It only rises for a friend of fire.' },
+    { name: 'Tide King', chance: 12, tint: '#6bc8ff', riddle: 'The king of the tide wakes late in the season, and only for a water friend.' },
+    { name: 'Storm Eel', chance: 16, tint: '#c9f0ff', riddle: 'It swims on days the River blesses you.' },
+    { name: 'Ghost Carp', chance: 12, tint: '#b9a8e8', riddle: 'It appears once the clock in the sky turns again.' },
+    { name: 'Jade Leviathan', chance: 8, tint: '#8ee68a', riddle: 'The old ones say: hold the other four, and the sea gives up its king.' },
+  ];
+  const Rules = { LEGENDS, FOES, DUEL_ENERGY, beats, fighter, duel, GOODS, CROPS, EVENTS, SOURCES, NPC_IDS, ITEMS, PROJECTS, BADGES, ENERGY, ELEMENTS, RARITY, SPECIES, SPAWN, ZONES, CATCH_CHANCE, ENCOUNTERS_A_DAY, FEEDS_A_DAY, spiritLevel, FATE, QUESTS, CHAPTERS, mulberry32, seasonAccuracy, planDay, encodeRumors, decodeRumors, rumorRight, evIndex, hearts };
   if (typeof module !== 'undefined' && module.exports) module.exports = Rules; else root.Rules = Rules;
 })(typeof window !== 'undefined' ? window : globalThis);

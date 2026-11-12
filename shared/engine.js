@@ -11,11 +11,11 @@
   const CROPS = [[4, 2, 6, 2, 0, true], [5, 3, 10, 3, 0, true], [6, 4, 22, 2, 0, true], [7, 3, 8, 3, 0, true], [8, 2, 6, 2, 0, true], [9, 3, 12, 2, 0, true], [0, 2, 5, 3, 0, true], [10, 4, 80, 3, 2, true], [2, 2, 60, 2, 2, false]];
   const ITEMS = { license_x5: 250, license_x10: 900, bridge: 600, boat: 300, stall: 1500 };
   const PROJECTS = [[[[1, 30], [11, 5]], 400], [[[12, 10], [11, 8]], 0], [[[0, 40]], 600]];
-  const BADGES = ['first_harvest', 'green_thumb', 'jade_hunter', 'angler', 'x10_survivor', 'faded_rita', 'beat_kaito', 'debt_free', 'early_bird', 'restorer', 'best_friend', 'first_spirit', 'spirit_tamer', 'shiny_hunter', 'legend_tamer', 'wallet_linked', 'lantern_seeker', 'lantern_keeper', 'spirit_champion'];
+  const BADGES = ['first_harvest', 'green_thumb', 'jade_hunter', 'angler', 'x10_survivor', 'faded_rita', 'beat_kaito', 'debt_free', 'early_bird', 'restorer', 'best_friend', 'first_spirit', 'spirit_tamer', 'shiny_hunter', 'legend_tamer', 'wallet_linked', 'lantern_seeker', 'lantern_keeper', 'spirit_champion', 'fishing_legend'];
   const PLOT_COST = 120, MAX_PLOTS = 18, START_PLOTS = 6, BARN_CAP = 40, NPCS = 8, ROCKS = 8, ENERGY_MAX = 100;
 
   const R = (typeof module !== 'undefined' && module.exports) ? require('./rules.js') : root.Rules;
-  const SP = R.SPECIES, SPAWN = R.SPAWN, WATER = 1, WIND = 2, EARTH = 3, PUZZLES = [4, 3, 4];
+  const SP = R.SPECIES, SPAWN = R.SPAWN, FIRE = 0, WATER = 1, WIND = 2, EARTH = 3, PUZZLES = [4, 3, 4];
   const fail = m => { throw new Error(m); };
   const req = (c, m) => { if (!c) fail(m); };
   const emptyPlot = () => ({ crop: null, grown: 0, watered_day: 0 });
@@ -27,7 +27,7 @@
       projects: PROJECTS.map(() => false), donated: PROJECTS.map(() => new Array(NG + 1).fill(0)), mined_day: 0, mined: 0, catches_today: 0, cat_day: 0,
       harvested: 0, jade_found: 0, fish_caught: 0, kaito_pnl: 0, start_coins: START_COINS, seasons_won: 0, best_score: 0,
       lead: null, enc_today: 0, fed_today: 0, wild: null, wallet: null, book: 0, shards: 0, clues: 0, solved_day: [0, 0, 0],
-      fate_day: 0, fate: [], daily: [0, 0, 0, 0, 0, 0, 0], quests_claimed: 0, chapter: 1, boss_wins: 0, duel_day: [0, 0, 0], duel_wins: 0 };
+      fate_day: 0, fate: [], daily: [0, 0, 0, 0, 0, 0, 0], quests_claimed: 0, chapter: 1, boss_wins: 0, duel_day: [0, 0, 0], duel_wins: 0, legends: 0 };
   };
   const preimage = (player, season, day, event, rumors, salt) => `${player}|${season}|${day}|${event}|${rumors}|${salt}`;
   function settle(pos, price) { const e = Math.max(1, pos.entry); const mv = Math.trunc((price - e) * 1e6 / e); return Math.trunc(pos.stake * pos.lev * mv * (pos.long ? 1 : -1) / 1e6); }
@@ -67,7 +67,7 @@
     get_link_request(game_account) { return this.links[game_account] || null; }
     nft_transfer(c, { receiver_id, token_id }) { req(this.owners[token_id] === c, 'not the owner'); this._move(token_id, c, receiver_id); }
     nft_token(token_id) { const o = this.owners[token_id]; if (!o) return null; const t = this.tokens[token_id];
-      return { token_id, owner_id: o, metadata: t.type === 'Spirit' ? { title: (t.shiny ? 'Shiny ' : '') + SP[t.species].name + ' (Lv ' + R.spiritLevel(t.xp) + ')', media: 'nft/spirits/' + SP[t.species].sprite + (t.shiny ? '_shiny' : '') + '.png' } : { title: 'Badge: ' + t.name.replace(/_/g, ' '), media: 'nft/badges/' + t.name + '.png' } }; }
+      return { token_id, owner_id: o, metadata: t.type === 'Spirit' ? { title: (t.shiny ? 'Shiny ' : '') + SP[t.species].name + ' (Lv ' + R.spiritLevel(t.xp) + ')', media: 'nft/spirits/' + SP[t.species].sprite + (t.shiny ? '_shiny' : '') + '.png' } : t.type === 'Fish' ? { title: 'Legendary fish: ' + R.LEGENDS[t.kind].name, media: 'nft/fish/' + t.kind + '.png' } : { title: 'Badge: ' + t.name.replace(/_/g, ' '), media: 'nft/badges/' + t.name + '.png' } }; }
     nft_tokens_for_owner(account_id) { return (this.byOwner[account_id] || []).map(id => this.nft_token(id)); }
     get_spirits(account_id) {
       return (this.byOwner[account_id] || []).filter(id => this.tokens[id].type === 'Spirit').map(id => {
@@ -91,7 +91,7 @@
       p.plots = old.plots.map(pl => ({ ...pl, watered_day: 0 })); p.seeds = old.seeds; p.friendship = old.friendship; p.projects = old.projects; p.donated = old.donated;
       p.harvested = old.harvested; p.jade_found = old.jade_found; p.fish_caught = old.fish_caught;
       p.seasons_won = old.seasons_won; p.best_score = old.best_score;
-      p.lead = old.lead; p.wallet = old.wallet; p.book = old.book; p.shards = old.shards; p.clues = old.clues; p.chapter = old.chapter; p.boss_wins = old.boss_wins; p.duel_wins = old.duel_wins;
+      p.lead = old.lead; p.wallet = old.wallet; p.book = old.book; p.shards = old.shards; p.clues = old.clues; p.chapter = old.chapter; p.boss_wins = old.boss_wins; p.duel_wins = old.duel_wins; p.legends = old.legends;
       this.players[c] = p;
     }
     open_position(c, { good, long, lev, stake }) {
@@ -159,7 +159,13 @@
           case 'Fish': {
             energy(4); req(p.catches_today < 6, 'the fish stopped biting for today');
             const r = roll('fish', p.catches_today); p.catches_today++;
-            if (a.ok && r < Math.max(0, Math.min(255, (leadEl === WATER ? 210 : 179) + (fate(0, 0) ? 40 : 0) - (fate(1, 4) ? 30 : 0)))) { const n = p.projects[0] ? 2 : 1; this._barnAdd(c, 1, n); p.fish_caught += n; p.daily[1] = Math.min(255, p.daily[1] + n); if (p.fish_caught >= 10 && p.fish_caught - n < 10) badges.push('angler'); }
+            if (a.ok && r < Math.max(0, Math.min(255, (leadEl === WATER ? 210 : 179) + (fate(0, 0) ? 40 : 0) - (fate(1, 4) ? 30 : 0)))) { const n = p.projects[0] ? 2 : 1; this._barnAdd(c, 1, n); p.fish_caught += n; p.daily[1] = Math.min(255, p.daily[1] + n); if (p.fish_caught >= 10 && p.fish_caught - n < 10) badges.push('angler');
+              const season = [leadEl === FIRE, leadEl === WATER && p.day >= 5, fate(0, 0), p.chapter >= 5, (p.legends & 15) === 15];
+              const k = R.LEGENDS.findIndex((_, k) => season[k] && !(p.legends & (1 << k)));
+              if (k >= 0 && roll('legend', p.catches_today) < R.LEGENDS[k].chance) {
+                p.legends |= 1 << k; const id = 'f' + (++this.nextToken); this.tokens[id] = { type: 'Fish', kind: k }; this._give(id, c);
+                if (p.legends === 31) badges.push('fishing_legend');
+              } }
             break;
           }
           case 'Cat': { req(p.cat_day !== p.day, 'Mochi already found something today'); req(!fate(1, 1), 'The Crow scared Mochi today'); p.cat_day = p.day; const r = roll('cat', 0); if (r < 128) p.coins += 1000; else p.seeds[r % 7] += 1; break; }

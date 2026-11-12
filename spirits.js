@@ -177,10 +177,10 @@ async function openBook(tab) {
   }).join('');
   const count = Rules.SPECIES.filter((_, i) => (caughtBits >> BigInt(i)) & 1n).length;
   el.innerHTML = `<div class="gname">SPIRITS</div>
-    <div class="tabs"><button class="tab ${bookTab === 'mine' ? 'on' : ''}" data-tab="mine">MY SPIRITS · ${sps.length}</button><button class="tab ${bookTab === 'book' ? 'on' : ''}" data-tab="book">SPIRIT BOOK · ${count} / ${Rules.SPECIES.length}</button></div>
+    <div class="tabs"><button class="tab ${bookTab === 'mine' ? 'on' : ''}" data-tab="mine">MY SPIRITS · ${sps.length}</button><button class="tab ${bookTab === 'book' ? 'on' : ''}" data-tab="book">SPIRIT BOOK · ${count} / ${Rules.SPECIES.length}</button><button class="tab ${bookTab === 'fish' ? 'on' : ''}" data-tab="fish">LEGENDS · ${popcount(S.player.legends || 0)} / 5</button></div>
     ${bookTab === 'mine' ? (sps.length ? `<div class="sub" style="margin:.4em 0">Your companion follows you and grows every night. Lantern shards: ${S.player.shards || 0}. Feed: up to ${Rules.FEEDS_A_DAY} a day (crops +6 XP, fish/honey/sushi +12, jade +25).</div><div class="sGrid">${sps.map(card).join('')}</div>`
       : '<div class="sub" style="margin:1em 0;line-height:1.7">No spirits yet. Look for glowing wisps around the farm, the town, and the Whispering Woods (north). Walk up and press E / A.</div>')
-      : `<div class="bGrid">${book}</div>`}
+      : bookTab === 'fish' ? await legendsHTML() : `<div class="bGrid">${book}</div>`}
     <div style="margin-top:1em;display:flex;gap:.5em;flex-wrap:wrap"><button class="btn" id="bWallet">${S.player.wallet ? 'WALLET: ' + S.player.wallet : 'LINK A NEAR WALLET'}</button><button class="btn big" id="bClose">CLOSE (B)</button></div>`;
   el.classList.add('on'); sfx('menu');
   el.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => openBook(b.dataset.tab));
@@ -188,6 +188,7 @@ async function openBook(tab) {
   el.querySelectorAll('[data-evo]').forEach(b => b.onclick = () => evolve(b.dataset.evo));
   el.querySelectorAll('[data-feed]').forEach(b => b.onclick = () => feedMenu(b.dataset.feed));
   el.querySelectorAll('[data-send]').forEach(b => b.onclick = () => sendToWallet(b.dataset.send));
+  el.querySelectorAll('[data-sendf]').forEach(b => b.onclick = () => { queue({ t: 'SendToWallet', token: b.dataset.sendf }, 'send to wallet', true); flush.after = () => { sfx('success'); toast(`Sent to your wallet ${S.player.wallet}.`, 4); openBook('fish'); }; });
   $('bClose').onclick = () => el.classList.remove('on');
   $('bWallet').onclick = () => walletPanel();
 }
@@ -257,6 +258,28 @@ async function connectWallet() {
     if (selector.isSignedIn()) await go();
     else { modal.show(); selector.on('signedIn', () => { modal.hide(); go().catch(e => toast(e.message || String(e), 4)); }); }
   } catch (e) { $('busy').style.display = 'none'; toast('Wallet: ' + (e.message || e), 4); }
+}
+const popcount = n => { let c = 0; for (; n; n &= n - 1) c++; return c; };
+// the five legendary fish: riddles until you catch one, then the NFT itself
+async function legendsHTML() {
+  let mine = [];
+  try { mine = (await Backend.nfts()).filter(t => t.metadata.title.startsWith('Legendary fish')); } catch (e) {}
+  const got = S.player.legends || 0;
+  return `<div class="sub" style="margin:.4em 0;line-height:1.6">Five legends live off the pier. Each bites only when its riddle is true, and only once for you. Every one is a one-of-one NFT.</div>
+    <div class="sGrid">${Rules.LEGENDS.map((L, k) => {
+      const has = got & (1 << k), tok = mine.find(t => t.metadata.title.endsWith(L.name));
+      return `<div class="sCard" style="border-color:${has ? L.tint : '#4a3f72'}"><div class="sTop"><b>${has ? L.name.toUpperCase() : '???'}</b><span style="background:${L.tint}">LEGEND</span></div>
+        ${has ? `<img src="nft/fish/${k}.png" alt="" style="width:8em;height:8em;border-radius:8px">` : `<div style="font-size:3.4em;text-align:center;color:#5d5280;margin:.25em 0">?</div>`}
+        <div class="sub" style="line-height:1.6;min-height:3.2em">"${L.riddle}"</div>
+        <div class="sBtns">${has ? (tok ? `<span class="up">✓ CAUGHT</span>${S.player.wallet ? `<button class="btn" data-sendf="${tok.token_id}">TO WALLET</button>` : ''}<span class="sNft">NFT #${tok.token_id}</span>` : '<span class="up">✓ CAUGHT · IN YOUR WALLET</span>') : '<span class="sub">not caught yet</span>'}</div></div>`;
+    }).join('')}</div>`;
+}
+function showLegend(k) {
+  const L = Rules.LEGENDS[k]; sfx('success');
+  openCard(`<div class="ntitle" style="color:${L.tint}">LEGENDARY CATCH!</div>
+    <div style="text-align:center;margin:.6em 0"><img src="nft/fish/${k}.png" alt="" style="width:14em;max-width:70vw;border-radius:12px;box-shadow:0 0 30px ${L.tint}88" class="evoNew"></div>
+    <div style="text-align:center;line-height:1.7">You pulled up the <b class="gold">${L.name.toUpperCase()}</b>. Nobody else has yours: it is a one-of-one NFT on NEAR.<br>${popcount(S.player.legends)} of 5 legends caught. Press B to see the others' riddles.</div>
+    <div style="text-align:center;margin-top:1em"><button class="btn big gold" id="cardBtn">WHAT A FISH!</button></div>`);
 }
 function sendToWallet(token) {
   const s = S.spirits.find(x => x.token_id === token);

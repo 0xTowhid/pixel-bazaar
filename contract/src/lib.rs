@@ -145,6 +145,11 @@ pub fn duel(team: &[(u8, u8)], foe: &[(u8, u8)], next: &mut dyn FnMut() -> u8) -
     }
     at[1] == b.len()
 }
+// ---------------- fishing legends ----------------
+/// Five legendary fish, each an NFT you can catch once. (name, chance out of 256 on a good catch while it is in season)
+/// 0 Ember Koi: fish with a fire companion. 1 Tide King: a water companion, from day 5 on. 2 Storm Eel: on a day of The River.
+/// 3 Ghost Carp: after the Clockwork Sky (story chapter 5). 4 Jade Leviathan: once you hold the other four.
+pub const LEGENDS: [(&str, u8); 5] = [("Ember Koi", 12), ("Tide King", 12), ("Storm Eel", 16), ("Ghost Carp", 12), ("Jade Leviathan", 8)];
 pub const NFT_BASE: &str = "https://raw.githubusercontent.com/0xTowhid/pixel-bazaar/main/nft";
 
 #[derive(BorshStorageKey)]
@@ -192,6 +197,7 @@ pub struct Player {
     pub clues: u32, pub solved_day: Vec<u8>,
     pub fate_day: u8, pub fate: Vec<u8>, pub daily: Vec<u8>, pub quests_claimed: u8, pub chapter: u8, pub boss_wins: u32,
     pub duel_day: Vec<u8>, pub duel_wins: u32,
+    pub legends: u8,
 }
 
 /// An NFT: a spirit, a badge or a legendary catch.
@@ -265,7 +271,7 @@ fn new_player(season: u32) -> Player {
         lead: None, enc_today: 0, fed_today: 0, wild: None, wallet: None, book: 0, shards: 0,
         clues: 0, solved_day: vec![0; PUZZLES.len()],
         fate_day: 0, fate: vec![], daily: vec![0; 7], quests_claimed: 0, chapter: 1, boss_wins: 0,
-        duel_day: vec![0; FOES.len()], duel_wins: 0,
+        duel_day: vec![0; FOES.len()], duel_wins: 0, legends: 0,
     }
 }
 /// Commitment string the operator hashes on day start and reveals at settlement.
@@ -328,7 +334,7 @@ impl Contract {
         p.seeds = old.seeds; p.friendship = old.friendship; p.projects = old.projects; p.donated = old.donated;
         p.harvested = old.harvested; p.jade_found = old.jade_found; p.fish_caught = old.fish_caught;
         p.seasons_won = old.seasons_won; p.best_score = old.best_score;
-        p.lead = old.lead; p.wallet = old.wallet; p.book = old.book; p.shards = old.shards; p.clues = old.clues; p.chapter = old.chapter; p.boss_wins = old.boss_wins; p.duel_wins = old.duel_wins;
+        p.lead = old.lead; p.wallet = old.wallet; p.book = old.book; p.shards = old.shards; p.clues = old.clues; p.chapter = old.chapter; p.boss_wins = old.boss_wins; p.duel_wins = old.duel_wins; p.legends = old.legends;
         self.players.insert(id, p);
     }
 
@@ -434,6 +440,16 @@ impl Contract {
                         let n = if p.projects[0] { 2 } else { 1 };
                         self.barn_add(&id, 1, n); p.fish_caught += n; p.daily[1] = p.daily[1].saturating_add(n as u8);
                         if p.fish_caught >= 10 && p.fish_caught - n < 10 { badges.push("angler"); }
+                        // a legend on the line? the first one in season you don't have yet
+                        let season = [lead_el == Some(FIRE), lead_el == Some(WATER) && p.day >= 5, fate(&p, 0, 0), p.chapter >= 5, p.legends & 0b1111 == 0b1111];
+                        if let Some(k) = (0..LEGENDS.len()).find(|&k| season[k] && p.legends & (1 << k) == 0) {
+                            if roll(&commit, &id, "legend", p.catches_today as u32) < LEGENDS[k].1 {
+                                p.legends |= 1 << k;
+                                let tid = self.new_token_id("f"); self.tokens.insert(tid.clone(), Tok::Fish { kind: k as u8 }); self.give_token(&tid, &id);
+                                if p.legends == 0b11111 { badges.push("fishing_legend"); }
+                                log!("legendary catch: {}", LEGENDS[k].0);
+                            }
+                        }
                     }
                 }
                 Action::Cat => {
@@ -932,8 +948,8 @@ impl Contract {
             }
             Some(Tok::Badge { name }) => TokenMetadata { title: format!("Badge: {}", name.replace('_', " ")), description: "An achievement badge from Pixel Bazaar on NEAR.".into(),
                 media: format!("{NFT_BASE}/badges/{name}.png"), copies: 1, extra: format!(r#"{{"badge":"{name}"}}"#) },
-            Some(Tok::Fish { kind }) => TokenMetadata { title: format!("Legendary fish #{kind}"), description: "A legendary catch from the Lantern Isles.".into(),
-                media: format!("{NFT_BASE}/fish/{kind}.png"), copies: 1, extra: format!(r#"{{"fish":{kind}}}"#) },
+            Some(Tok::Fish { kind }) => TokenMetadata { title: format!("Legendary fish: {}", LEGENDS[*kind as usize].0), description: "A legendary catch from the Lantern Isles. Only one per player, ever.".into(),
+                media: format!("{NFT_BASE}/fish/{kind}.png"), copies: 1, extra: format!(r#"{{"fish":"{}"}}"#, LEGENDS[*kind as usize].0) },
             None => env::panic_str("no such token"),
         }
     }
@@ -947,8 +963,8 @@ impl Contract {
     }
 }
 
-pub const BADGES: [&str; 19] = ["first_harvest", "green_thumb", "jade_hunter", "angler", "x10_survivor", "faded_rita", "beat_kaito", "debt_free", "early_bird", "restorer", "best_friend",
-    "first_spirit", "spirit_tamer", "shiny_hunter", "legend_tamer", "wallet_linked", "lantern_seeker", "lantern_keeper", "spirit_champion"];
+pub const BADGES: [&str; 20] = ["first_harvest", "green_thumb", "jade_hunter", "angler", "x10_survivor", "faded_rita", "beat_kaito", "debt_free", "early_bird", "restorer", "best_friend",
+    "first_spirit", "spirit_tamer", "shiny_hunter", "legend_tamer", "wallet_linked", "lantern_seeker", "lantern_keeper", "spirit_champion", "fishing_legend"];
 fn use_energy(p: &mut Player, n: u16) { require!(p.energy >= n, "you are too tired"); p.energy -= n; }
 
 #[cfg(test)]
@@ -1346,5 +1362,21 @@ mod tests {
         assert!(matches!(c.tokens.get(&t), Some(Tok::Spirit { xp: 6, .. })));
         // the element wheel matters
         assert!(beats(WATER, FIRE) && !beats(FIRE, WATER));
+    }
+    #[test]
+    fn legends_bite_only_in_season_and_once() {
+        let mut got = None;
+        for k in 0..60 {
+            let mut c = setup(); commit(&mut c, 1, 2, &format!("s{k}"));
+            let t = c.mint_spirit(&pl(), 0, false); // a fire companion: the Ember Koi is in season
+            c.act(vec![Action::SetLead { token: t }]);
+            for _ in 0..6 { c.act(vec![Action::Fish { ok: true }]); }
+            let p = c.get_player(pl()).unwrap();
+            assert_eq!(p.legends & !1, 0, "only the Ember Koi is in season");
+            if p.legends & 1 != 0 { got = Some(c); break; }
+        }
+        let c = got.expect("the Ember Koi bites sometimes");
+        let fish: Vec<_> = c.nft_tokens_for_owner(pl(), None, None).into_iter().filter(|t| t.metadata.title.starts_with("Legendary")).collect();
+        assert_eq!(fish.len(), 1); assert!(fish[0].metadata.title.contains("Ember Koi"));
     }
 }

@@ -49,7 +49,7 @@ for sprite, name, el, rar in SPECIES:
 BADGES = dict(re.findall(r"(\w+): '([^']+)'", src[src.index('const BADGES = {'):src.index('};', src.index('const BADGES = {'))]))
 ICON = {'first_harvest': 'Mushroom', 'green_thumb': 'Bamboo', 'jade_hunter': 'Mole', 'angler': 'Octopus', 'x10_survivor': 'Flam2', 'faded_rita': 'Snake2', 'beat_kaito': 'GoldRacoon',
         'debt_free': 'Racoon', 'early_bird': 'Owl', 'restorer': 'KappaGreen', 'best_friend': 'Spirit', 'first_spirit': 'Spirit', 'spirit_tamer': 'LanternGreen', 'shiny_hunter': 'Butterfly',
-        'legend_tamer': 'GiantSpirit', 'wallet_linked': 'Eye', 'lantern_seeker': 'LanternRed', 'lantern_keeper': 'Dragon', 'spirit_champion': 'Spirit2'}
+        'legend_tamer': 'GiantSpirit', 'wallet_linked': 'Eye', 'lantern_seeker': 'LanternRed', 'lantern_keeper': 'Dragon', 'spirit_champion': 'Spirit2', 'fishing_legend': 'Legend4'}
 for key, title in BADGES.items():
     im = bg((255, 216, 107)); d = ImageDraw.Draw(im)
     d.ellipse((76, 36, 436, 396), fill=(255, 216, 107)); d.ellipse((96, 56, 416, 376), fill=(42, 35, 70))
@@ -60,3 +60,20 @@ for key, title in BADGES.items():
     f3 = F(14); w = 'BADGE · PIXEL BAZAAR ON NEAR'; d.text(((S - d.textlength(w, font=f3)) / 2, 462), w, font=f3, fill=(185, 168, 232))
     im.save(os.path.join(ROOT, 'nft/badges', key + '.png'), optimize=True)
 print(len(SPECIES), 'spirits', len(BADGES), 'badges')
+
+# legendary fish
+LEG = re.findall(r"\{ name: '([^']+)', chance: \d+, tint: '#(\w{6})'", src)
+os.makedirs(os.path.join(ROOT, 'nft/fish'), exist_ok=True)
+for k, (name, tint) in enumerate(LEG):
+    col = tuple(int(tint[i:i + 2], 16) for i in (0, 2, 4))
+    im = bg(col); d = ImageDraw.Draw(im)
+    glow = Image.new('RGBA', (S, S), (0, 0, 0, 0)); gd = ImageDraw.Draw(glow); gd.ellipse((96, 46, 416, 366), fill=col + (110,))
+    im.paste(glow.filter(ImageFilter.GaussianBlur(34)), (0, 0), glow.filter(ImageFilter.GaussianBlur(34)))
+    fc = face('Legend%d' % k, 304); im.paste(fc, ((S - 304) // 2, 50), fc)
+    d.rounded_rectangle((8, 8, S - 9, S - 9), radius=28, outline=(255, 216, 107), width=10)
+    t = name.upper(); f = F(34 if len(t) < 14 else 28)
+    d.text(((S - d.textlength(t, font=f)) / 2, 378), t, font=f, fill=(255, 243, 214))
+    f2 = F(16); sub = 'LEGENDARY FISH · ONE OF ONE'; d.text(((S - d.textlength(sub, font=f2)) / 2, 428), sub, font=f2, fill=col)
+    f3 = F(14); w = 'LANTERN ISLES · PIXEL BAZAAR'; d.text(((S - d.textlength(w, font=f3)) / 2, 466), w, font=f3, fill=(185, 168, 232))
+    im.save(os.path.join(ROOT, 'nft/fish', '%d.png' % k), optimize=True)
+print(len(LEG), 'fish')

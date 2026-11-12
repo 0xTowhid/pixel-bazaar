@@ -152,7 +152,11 @@ function stopFishing() {
   // the catch itself is decided on chain (7 in 10 once you win the mini-game); the popup comes when NEAR answers
   if (ok) {
     sfx('ok'); popup(wx, wy, 'Reeling in...', '#8fe0ff');
-    flush.after = before => { reportFinds(before, wx, wy); if ((S.barn[1] || 0) <= (before.barn[1] || 0)) popup(wx, wy, 'It slipped off the hook!', '#ff9a8a'); else sfx('success'); };
+    const legBefore = S.player.legends || 0;
+    flush.after = before => {
+      reportFinds(before, wx, wy); if ((S.barn[1] || 0) <= (before.barn[1] || 0)) popup(wx, wy, 'It slipped off the hook!', '#ff9a8a'); else sfx('success');
+      const k = Rules.LEGENDS.findIndex((_, k) => (S.player.legends & (1 << k)) && !(legBefore & (1 << k))); if (k >= 0) showLegend(k);
+    };
   }
   else { sfx('alert'); popup(wx, wy, 'It got away...', '#ff9a8a'); }
   queue({ t: 'Fish', ok }, ok ? 'fish caught' : 'fish missed', true);
