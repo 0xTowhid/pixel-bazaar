@@ -103,7 +103,10 @@
     // Kaito the Whale reads the market right about two times in three
     const kev = rng() < .65 ? truth : Math.floor(rng() * EVENTS.length);
     const kaito = { good: EVENTS[kev].fx[0][0], long: EVENTS[kev].up };
-    return { truth, rumors, kaito };
+    // the evening sky is a hint, not a certainty: rain or snow usually means storm or cold, but not always
+    const w = rng();
+    const weather = truth === 0 ? (w < .75 ? 'rain' : null) : truth === 5 ? (w < .75 ? 'snow' : null) : (w < .1 ? 'rain' : w < .18 ? 'snow' : null);
+    return { truth, rumors, kaito, weather };
   }
   function encodeRumors(r) { return Object.keys(SOURCES).map(k => k + ':' + (r[k].quiet ? 'q' : r[k].ev + (r[k].lying ? '!' : '')) + (r[k].sure ? 's' : 'u')).join(','); }
   function decodeRumors(s) {

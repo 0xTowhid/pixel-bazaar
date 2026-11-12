@@ -25,7 +25,12 @@ async function flush() {
   try {
     const tx = await Backend.call('act', { actions: batch });
     chainLog(what, true, tx);
-  } catch (e) { chainLog(what, false); sfx('alert'); toast(e.message || String(e), 3.5); }
+  } catch (e) {
+    chainLog(what, false); sfx('alert');
+    const m = String(e.message || e).replace(/^.*panicked:\s*/is, '');
+    if (/has not started/.test(m)) { toast('Today was not on NEAR yet. Fixing that, try again in a moment.', 3.5); recoverDay(); }
+    else toast(m, 3.5);
+  }
   Q.sending = false;
   await sync();
   flush.after && flush.after(before);
@@ -144,7 +149,11 @@ function stopFishing() {
   const ok = f.pos >= f.zone && f.pos <= f.zone + f.w;
   S.player.energy -= EN.fish; S.player.catches_today = (S.player.catches_today || 0) + 1;
   const wx = player.x, wy = player.y - 70;
-  if (ok) { sfx('success'); popup(wx, wy, S.player.projects[0] ? '+2 FISH!' : '+1 FISH!', '#8fe0ff'); S.barn[1] += S.player.projects[0] ? 2 : 1; }
+  // the catch itself is decided on chain (7 in 10 once you win the mini-game); the popup comes when NEAR answers
+  if (ok) {
+    sfx('ok'); popup(wx, wy, 'Reeling in...', '#8fe0ff');
+    flush.after = before => { reportFinds(before, wx, wy); if ((S.barn[1] || 0) <= (before.barn[1] || 0)) popup(wx, wy, 'It slipped off the hook!', '#ff9a8a'); else sfx('success'); };
+  }
   else { sfx('alert'); popup(wx, wy, 'It got away...', '#ff9a8a'); }
   queue({ t: 'Fish', ok }, ok ? 'fish caught' : 'fish missed', true);
   setTimeout(() => { S.fishing = null; }, 500);

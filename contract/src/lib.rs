@@ -75,13 +75,13 @@ pub struct DayLog {
 #[derive(Clone)]
 pub struct Player {
     pub season: u32, pub day: u8, pub coins: u64, pub prices: Vec<u64>, pub positions: Vec<Position>,
-    pub commitment: Option<String>, pub weather: Option<String>, pub npc_moves: Vec<NpcMove>,
+    pub commitment: Option<String>, pub npc_moves: Vec<NpcMove>,
     pub asleep: bool, pub passed_out: bool, pub fish_day: u8, pub seer_day: u8, pub chest: bool, pub finished: bool, pub won: bool,
     pub history: Vec<DayLog>,
     // farm and life sim (kept between seasons)
     pub energy: u16, pub plots: Vec<Plot>, pub seeds: Vec<u16>, pub friendship: Vec<u8>, pub gift_day: Vec<u8>,
     pub projects: Vec<bool>, pub donated: Vec<Vec<u32>>, pub mined_day: u8, pub mined: u32, pub catches_today: u8, pub cat_day: u8,
-    pub harvested: u32, pub jade_found: u32, pub fish_caught: u32, pub kaito_start: i64, pub start_coins: u64,
+    pub harvested: u32, pub jade_found: u32, pub fish_caught: u32, pub kaito_pnl: i64, pub start_coins: u64,
     pub seasons_won: u32, pub best_score: u64,
 }
 
@@ -110,13 +110,13 @@ pub struct Contract {
 
 fn new_player(season: u32) -> Player {
     Player {
-        season, day: 1, coins: START_COINS, prices: BASE.to_vec(), positions: vec![], commitment: None, weather: None, npc_moves: vec![],
+        season, day: 1, coins: START_COINS, prices: BASE.to_vec(), positions: vec![], commitment: None, npc_moves: vec![],
         asleep: false, passed_out: false, fish_day: 0, seer_day: 0, chest: false, finished: false, won: false, history: vec![],
         energy: ENERGY_MAX, plots: vec![Plot::default(); START_PLOTS], seeds: {
             let mut s = vec![0u16; CROPS.len()]; s[0] = 4; s[4] = 2; s // a few carrot and corn seeds to start
         },
         friendship: vec![0; NPCS], gift_day: vec![0; NPCS], projects: vec![false; PROJECTS.len()], donated: vec![vec![0; NG + 1]; PROJECTS.len()],
-        mined_day: 0, mined: 0, catches_today: 0, cat_day: 0, harvested: 0, jade_found: 0, fish_caught: 0, kaito_start: 0, start_coins: START_COINS,
+        mined_day: 0, mined: 0, catches_today: 0, cat_day: 0, harvested: 0, jade_found: 0, fish_caught: 0, kaito_pnl: 0, start_coins: START_COINS,
         seasons_won: 0, best_score: 0,
     }
 }
@@ -126,10 +126,14 @@ pub fn commit_preimage(player: &AccountId, season: u32, day: u8, event: u8, rumo
 }
 /// Profit or loss of a position at a new price (cents, before liquidation clamp).
 pub fn settle(p: &Position, price: u64) -> i64 {
-    let mv = (price as i128 - p.entry as i128) * 1_000_000 / p.entry as i128;
+    let entry = p.entry.max(1) as i128;
+    let mv = (price as i128 - entry) * 1_000_000 / entry;
     let dir = if p.long { 1 } else { -1 };
     (p.stake as i128 * p.lev as i128 * mv * dir / 1_000_000) as i64
 }
+/// A roll for mining, fishing and the cat, fixed by the day's commitment: resubmitting a reverted transaction gives
+/// the same result, so a script cannot retry until it gets lucky.
+fn roll(commitment: &str, who: &AccountId, what: &str, n: u32) -> u8 { env::sha256(format!("{commitment}|{who}|{what}|{n}").as_bytes())[0] }
 fn ripe(pl: &Plot) -> bool { pl.crop.map(|c| pl.grown >= CROPS[c as usize].1).unwrap_or(false) }
 
 #[near]
@@ -139,8 +143,6 @@ impl Contract {
         Self { operator, players: LookupMap::new(Key::Players), balances: LookupMap::new(Key::Balances), supply: LookupMap::new(Key::Supply), npcs: IterableMap::new(Key::Npcs), leaderboard: vec![] }
     }
     fn assert_operator(&self) { require!(env::predecessor_account_id() == self.operator, "operator only"); }
-    fn kaito(&self) -> AccountId { format!("kaito.{}", env::current_account_id()).parse().unwrap() }
-    fn kaito_ledger(&self) -> i64 { self.npcs.get(&self.kaito()).copied().unwrap_or(0) }
 
     // ---------------- accounts ----------------
     #[payable]
@@ -155,12 +157,8 @@ impl Contract {
     #[private]
     pub fn on_register(&mut self, id: AccountId, #[callback_result] created: Result<(), PromiseError>) -> bool {
         let ok = created.is_ok();
-        if ok { let mut p = new_player(1); p.kaito_start = self.kaito_ledger(); self.players.insert(id.clone(), p); log!("player {} joined", id); }
+        if ok { self.players.insert(id.clone(), new_player(1)); log!("player {} joined", id); }
         ok
-    }
-    pub fn join(&mut self) {
-        let id = env::predecessor_account_id();
-        if !self.players.contains_key(&id) { let mut p = new_player(1); p.kaito_start = self.kaito_ledger(); self.players.insert(id, p); }
     }
     #[payable]
     pub fn create_npc(&mut self, name: String) -> Promise {
@@ -174,12 +172,12 @@ impl Contract {
     /// New season: coins, debt and prices reset. Farm, seeds, friends, projects, items and badges are kept.
     pub fn start_season(&mut self) {
         let id = env::predecessor_account_id();
-        let k = self.kaito_ledger();
         let old = self.players.get(&id).cloned().unwrap_or_else(|| env::panic_str("not a player"));
+        require!(old.finished, "finish this season first");
         let mut p = new_player(old.season + 1);
         p.plots = old.plots.into_iter().map(|mut pl| { pl.watered_day = 0; pl }).collect();
         p.seeds = old.seeds; p.friendship = old.friendship; p.projects = old.projects; p.donated = old.donated;
-        p.harvested = old.harvested; p.jade_found = old.jade_found; p.fish_caught = old.fish_caught; p.kaito_start = k;
+        p.harvested = old.harvested; p.jade_found = old.jade_found; p.fish_caught = old.fish_caught;
         p.seasons_won = old.seasons_won; p.best_score = old.best_score;
         self.players.insert(id, p);
     }
@@ -230,9 +228,9 @@ impl Contract {
         require!(!actions.is_empty() && actions.len() <= 60, "1 to 60 actions");
         let mut p = self.players.get(&id).cloned().unwrap_or_else(|| env::panic_str("not a player"));
         require!(!p.finished && !p.asleep, "day is over");
-        let seed = env::random_seed();
+        let commit = p.commitment.clone().unwrap_or_else(|| env::panic_str("the day has not started yet"));
         let mut badges: Vec<&str> = vec![];
-        for (i, a) in actions.into_iter().enumerate() {
+        for a in actions {
             match a {
                 Action::Plant { plot, crop } => {
                     use_energy(&mut p, 2);
@@ -265,7 +263,7 @@ impl Contract {
                     if p.mined_day != p.day { p.mined_day = p.day; p.mined = 0; }
                     require!(p.mined & (1 << rock) == 0, "already mined today");
                     p.mined |= 1 << rock;
-                    let r = seed[(rock as usize + i) % 32];
+                    let r = roll(&commit, &id, "mine", rock as u32);
                     if r < 64 { self.barn_add(&id, 11, 1); p.jade_found += 1; if p.jade_found == 5 { badges.push("jade_hunter"); } }
                     else if r < 200 { self.barn_add(&id, 12, 1); }
                     else { p.seeds[(r % 7) as usize] += 2; }
@@ -273,8 +271,10 @@ impl Contract {
                 Action::Fish { ok } => {
                     use_energy(&mut p, 4);
                     require!(p.catches_today < 6, "the fish stopped biting for today");
+                    let r = roll(&commit, &id, "fish", p.catches_today as u32);
                     p.catches_today += 1;
-                    if ok {
+                    // the mini-game must be won, and then the catch is still decided on chain (7 in 10)
+                    if ok && r < 179 {
                         let n = if p.projects[0] { 2 } else { 1 };
                         self.barn_add(&id, 1, n); p.fish_caught += n;
                         if p.fish_caught >= 10 && p.fish_caught - n < 10 { badges.push("angler"); }
@@ -283,7 +283,7 @@ impl Contract {
                 Action::Cat => {
                     require!(p.cat_day != p.day, "Mochi already found something today");
                     p.cat_day = p.day;
-                    let r = seed[(i + 7) % 32];
+                    let r = roll(&commit, &id, "cat", 0);
                     if r < 128 { p.coins += 10 * 100; } else { p.seeds[(r % 7) as usize] += 1; }
                 }
                 Action::Sell { good, qty } => {
@@ -293,12 +293,13 @@ impl Contract {
                     let bonus = if g == 0 && p.projects[2] { 115 } else { 100 };
                     for _ in 0..qty {
                         p.coins += p.prices[g] / 10 * bonus / 100; // milli-coins -> cents
-                        p.prices[g] = p.prices[g] * 98 / 100;
+                        p.prices[g] = (p.prices[g] * 98 / 100).max(1);
                     }
                 }
                 Action::Gift { npc, good } => {
                     let n = npc as usize; require!(n < NPCS, "no such person");
                     require!(p.gift_day[n] != p.day, "one gift a day");
+                    require!((good as usize) < NG, "no such good");
                     require!(self.bal(GOODS[good as usize], &id) >= 1, "you don't have that");
                     self.burn(GOODS[good as usize], &id, 1);
                     p.gift_day[n] = p.day;
@@ -340,16 +341,15 @@ impl Contract {
         let p = self.player_mut(&id);
         require!(!p.finished && !p.asleep, "already asleep");
         require!(p.commitment.is_some(), "the day has not started yet");
-        p.asleep = true; p.passed_out = passed_out;
+        p.asleep = true; p.passed_out = passed_out; // shown on the night card only: a caller-chosen flag cannot carry a penalty
     }
 
     pub fn pay_debt(&mut self) {
         let id = env::predecessor_account_id();
-        let k = self.kaito_ledger();
         let p = self.player_mut(&id);
         require!(!p.finished && p.coins >= DEBT, "not enough coins");
         p.coins -= DEBT; p.finished = true; p.won = true; p.seasons_won += 1; p.best_score = p.best_score.max(p.coins + DEBT);
-        let (season, coins, day, beat) = (p.season, p.coins, p.day, (p.coins + DEBT) as i64 - p.start_coins as i64 > k - p.kaito_start);
+        let (season, coins, day, beat) = (p.season, p.coins, p.day, (p.coins + DEBT) as i64 - p.start_coins as i64 > p.kaito_pnl);
         self.badge("debt_free", &id);
         if day <= 6 { self.badge("early_bird", &id); }
         if beat { self.badge("beat_kaito", &id); }
@@ -357,7 +357,7 @@ impl Contract {
     }
 
     // ---------------- operator: commit and reveal ----------------
-    pub fn commit_day(&mut self, player: AccountId, day: u8, commitment: String, weather: Option<String>, npc_moves: Vec<NpcMove>) {
+    pub fn commit_day(&mut self, player: AccountId, day: u8, commitment: String, npc_moves: Vec<NpcMove>) {
         self.assert_operator();
         require!(commitment.len() == 64, "commitment must be a sha256 hex");
         let p = self.player_mut(&player);
@@ -365,7 +365,7 @@ impl Contract {
         require!(p.commitment.is_none(), "already committed");
         if p.mined_day != day { p.mined = 0; }
         p.catches_today = 0;
-        p.commitment = Some(commitment); p.weather = weather; p.npc_moves = npc_moves;
+        p.commitment = Some(commitment); p.npc_moves = npc_moves;
     }
 
     pub fn settle_day(&mut self, player: AccountId, day: u8, event: u8, rumors: String, salt: String) -> DayLog {
@@ -386,13 +386,15 @@ impl Contract {
             x = x * (1000 + (seed[i % 32] as i128 % 101) - 50) / 1000;
             prices[i] = x.max(1) as u64;
         }
-        for &(g, m) in EVENTS[event as usize] { prices[g] = prices[g] * m / 1000; }
+        // trades pay on the event only: the overnight drift and noise (and your own selling during the day) do not count
+        let pre = prices.clone();
+        for &(g, m) in EVENTS[event as usize] { prices[g] = (prices[g] * m / 1000).max(1); }
 
         // positions
         let mut results = vec![]; let mut badges: Vec<&str> = vec![];
         let rita: Option<NpcMove> = p.npc_moves.iter().find(|m| m.npc.as_str().starts_with("rita.")).cloned();
         for pos in p.positions.drain(..) {
-            let pnl = settle(&pos, prices[pos.good as usize]);
+            let pnl = settle(&Position { entry: pre[pos.good as usize], ..pos.clone() }, prices[pos.good as usize]);
             let liquidated = pnl <= -(pos.stake as i64);
             let pnl = if liquidated { -(pos.stake as i64) } else { pnl };
             p.coins = (p.coins as i64 + pos.stake as i64 + pnl).max(0) as u64;
@@ -418,25 +420,26 @@ impl Contract {
                 if let Some(g) = best { self.burn(GOODS[g], &player, 1); let v = prices[g] / 10 * 110 / 100; p.coins += v; stall_sold += v; }
             }
         }
-        let loss = if p.passed_out { p.coins / 10 } else { 0 };
-        p.coins -= loss;
+        let loss = 0;
         // NPC trades settle against the same prices
         for m in p.npc_moves.clone() {
             let stake = if m.npc.as_str().starts_with("kaito.") { 200 * 100 } else { 100 * 100 };
             if let Some(led) = self.npcs.get_mut(&m.npc) {
-                let pos = Position { good: m.good, long: m.long, lev: 5, stake, entry: p.prices[m.good as usize] };
-                *led += settle(&pos, prices[m.good as usize]).max(-(pos.stake as i64));
+                let pos = Position { good: m.good, long: m.long, lev: 5, stake, entry: pre[m.good as usize] };
+                let pnl = settle(&pos, prices[m.good as usize]).max(-(pos.stake as i64));
+                *led += pnl;
+                if m.npc.as_str().starts_with("kaito.") { p.kaito_pnl += pnl; } // Kaito's result on YOUR days only
             }
         }
-        p.prices = prices.clone(); p.commitment = None; p.weather = None; p.npc_moves = vec![]; p.asleep = false; p.passed_out = false;
-        p.energy = ENERGY_MAX;
+        p.prices = prices.clone(); p.commitment = None; p.npc_moves = vec![]; p.asleep = false; p.passed_out = false;
+        p.energy = ENERGY_MAX; p.catches_today = 0;
         if day >= SEASON_DAYS {
             p.finished = true; p.won = p.coins >= DEBT;
             if p.won { p.coins -= DEBT; badges.push("debt_free"); }
             let score = if p.won { p.coins + DEBT } else { p.coins };
             if p.won { p.seasons_won += 1; }
             p.best_score = p.best_score.max(score);
-            if score as i64 - p.start_coins as i64 > self.kaito_ledger() - p.kaito_start { badges.push("beat_kaito"); }
+            if score as i64 - p.start_coins as i64 > p.kaito_pnl { badges.push("beat_kaito"); }
             self.rank(Entry { account: player.clone(), season: p.season, score, day, won: p.won });
         } else { p.day += 1; }
         let mut minted = vec![];
@@ -448,7 +451,24 @@ impl Contract {
         log
     }
 
+    /// Escape hatch: if a day can never be revealed (the server lost its secret), the operator cancels it.
+    /// Open trades are refunded and the same day starts again.
+    pub fn void_day(&mut self, player: AccountId) {
+        self.assert_operator();
+        let p = self.player_mut(&player);
+        require!(!p.finished && p.commitment.is_some(), "nothing to cancel");
+        let refund: u64 = p.positions.drain(..).map(|x| x.stake).sum();
+        p.coins += refund; p.commitment = None; p.npc_moves = vec![]; p.asleep = false; p.passed_out = false;
+        log!("day {} of {} cancelled by the operator", p.day, player);
+    }
+
+    /// One row per account (its best), top 20.
     fn rank(&mut self, e: Entry) {
+        let better = |a: &Entry, b: &Entry| (a.won, a.score, std::cmp::Reverse(a.day)) > (b.won, b.score, std::cmp::Reverse(b.day));
+        if let Some(i) = self.leaderboard.iter().position(|x| x.account == e.account) {
+            if !better(&e, &self.leaderboard[i]) { return; }
+            self.leaderboard.remove(i);
+        }
         self.leaderboard.push(e);
         self.leaderboard.sort_by(|a, b| b.won.cmp(&a.won).then(b.score.cmp(&a.score)).then(a.day.cmp(&b.day)));
         self.leaderboard.truncate(20);
@@ -488,12 +508,21 @@ impl Contract {
         token_ids.into_iter().map(|t| U128(self.bal(&t, &account_id))).collect()
     }
     pub fn mt_supply(&self, token_id: String) -> Option<U128> { self.supply.get(&token_id).map(|s| U128(*s)) }
-    /// Goods, items and badges are tradeable (badges too, if you insist). Needs 1 yoctoNEAR (wallet signature).
+    /// NEP-245 transfer of goods and items between traders (badges are soulbound). Needs 1 yoctoNEAR, so it takes a
+    /// full-access key: the in-game key cannot attach a deposit, so the game itself does not offer trading between players.
     #[payable]
     pub fn mt_transfer(&mut self, receiver_id: AccountId, token_id: String, amount: U128, approval: Option<(AccountId, u64)>, memo: Option<String>) {
         require!(env::attached_deposit() == NearToken::from_yoctonear(1), "requires 1 yoctoNEAR");
         require!(approval.is_none(), "approvals not supported");
         let from = env::predecessor_account_id();
+        require!(!token_id.starts_with("badge_"), "badges stay with the player who earned them");
+        require!(self.players.contains_key(&receiver_id) && receiver_id != from, "the receiver is not a trader");
+        if let Some(g) = GOODS.iter().position(|t| *t == token_id) {
+            let _ = g; let total: u128 = (0..NG).map(|x| self.bal(GOODS[x], &receiver_id)).sum();
+            require!(total + amount.0 <= BARN_CAP, "their barn is full");
+        } else {
+            require!(amount.0 == 1 && self.bal(&token_id, &receiver_id) == 0, "they already have that item");
+        }
         let k = format!("{token_id}|{from}"); let bal = *self.balances.get(&k).unwrap_or(&0);
         require!(bal >= amount.0 && amount.0 > 0, "not enough balance");
         self.balances.insert(k, bal - amount.0);
@@ -530,11 +559,11 @@ mod tests {
     fn ctx(who: AccountId) { testing_env!(VMContextBuilder::new().current_account_id("bazaar.testnet".parse().unwrap()).predecessor_account_id(who).build()); }
     fn op() -> AccountId { accounts(0) }
     fn pl() -> AccountId { accounts(1) }
-    fn setup() -> Contract { ctx(op()); let mut c = Contract::new(op()); ctx(pl()); c.join(); c }
+    fn setup() -> Contract { ctx(op()); let mut c = Contract::new(op()); c.players.insert(pl(), new_player(1)); ctx(pl()); c }
     fn commit(c: &mut Contract, day: u8, event: u8, salt: &str) {
         let season = c.get_player(pl()).unwrap().season;
         let h = hex::encode(env::sha256(commit_preimage(&pl(), season, day, event, "r", salt).as_bytes()));
-        ctx(op()); c.commit_day(pl(), day, h, None, vec![]); ctx(pl());
+        ctx(op()); c.commit_day(pl(), day, h, vec![]); ctx(pl());
     }
     fn night(c: &mut Contract, day: u8, event: u8) -> DayLog { c.sleep(false); ctx(op()); let l = c.settle_day(pl(), day, event, "r".into(), "s".into()); ctx(pl()); l }
 
@@ -638,4 +667,105 @@ mod tests {
         c.start_season(); assert_eq!(c.get_player(pl()).unwrap().seasons_won, 1);
         assert_eq!(c.mt_balance_of(pl(), "badge_early_bird".into()).0, 1);
     }
+
+    // ---------- regression tests for the security audit ----------
+    #[test]
+    #[should_panic(expected = "finish this season first")]
+    fn audit_no_restart_mid_season() { let mut c = setup(); c.start_season(); }
+
+    #[test]
+    #[should_panic(expected = "not started")]
+    fn audit_no_actions_before_commit() { let mut c = setup(); c.act(vec![Action::Fish { ok: true }]); }
+
+    #[test]
+    fn audit_fishing_limit_holds_across_nights() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        c.act((0..6).map(|_| Action::Fish { ok: true }).collect());
+        night(&mut c, 1, 2); commit(&mut c, 2, 2, "s");
+        c.act((0..6).map(|_| Action::Fish { ok: true }).collect());
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::Fish { ok: true }])));
+        assert!(r.is_err(), "a 7th cast on day 2 must fail");
+        assert!(c.mt_balance_of(pl(), "fish".into()).0 <= 12);
+    }
+
+    #[test]
+    fn audit_fishing_is_decided_on_chain() {
+        let mut c = setup(); c.players.get_mut(&pl()).unwrap().energy = 100;
+        commit(&mut c, 1, 2, "s");
+        c.act((0..6).map(|_| Action::Fish { ok: false }).collect());
+        assert_eq!(c.mt_balance_of(pl(), "fish".into()).0, 0, "a lost mini-game never catches");
+    }
+
+    #[test]
+    fn audit_rolls_are_fixed_for_the_day() {
+        // the same mining move gives the same result whatever block it lands in: no rerolling by reverting
+        let a = roll(&"a".repeat(64), &pl(), "mine", 3);
+        testing_env!(VMContextBuilder::new().random_seed([9; 32]).build());
+        assert_eq!(a, roll(&"a".repeat(64), &pl(), "mine", 3));
+    }
+
+    #[test]
+    fn audit_selling_does_not_make_trades_profitable() {
+        let mut c = setup(); c.players.get_mut(&pl()).unwrap().coins = 2000 * 100;
+        c.buy_item("license_x5".into()); c.buy_item("license_x10".into());
+        commit(&mut c, 1, 2, "s");
+        c.barn_add(&pl(), 10, 30);
+        c.act(vec![Action::Sell { good: 10, qty: 30 }]);              // pushes the apple price down
+        c.open_position(10, true, 10, 1000 * 100);
+        let log = night(&mut c, 1, 2);                                  // tea event: apples do not move
+        assert_eq!(log.results[0].pnl, 0, "only the event pays");
+    }
+
+    #[test]
+    fn audit_no_weather_on_chain_and_no_join() {
+        let mut c = setup(); commit(&mut c, 1, 0, "s");
+        let v = near_sdk::serde_json::to_value(c.get_player(pl()).unwrap()).unwrap();
+        assert!(v.get("weather").is_none());
+    }
+
+    #[test]
+    fn audit_transfer_rules() {
+        let mut c = setup();
+        let b = accounts(2); c.players.insert(b.clone(), new_player(1));
+        c.barn_add(&pl(), 11, 5); c.barn_add(&b, 12, 38);
+        c.badge("angler", &pl());
+        let send = |c: &mut Contract, t: &str, n: u128| {
+            testing_env!(VMContextBuilder::new().current_account_id("bazaar.testnet".parse().unwrap()).predecessor_account_id(pl()).attached_deposit(NearToken::from_yoctonear(1)).build());
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.mt_transfer(b.clone(), t.into(), U128(n), None, None))).is_ok()
+        };
+        assert!(send(&mut c, "jade", 2));                // fits: 38 + 2 = 40
+        assert!(!send(&mut c, "jade", 1));               // barn full
+        assert!(!send(&mut c, "badge_angler", 1));       // soulbound
+    }
+
+    #[test]
+    fn audit_kaito_is_per_player_and_leaderboard_has_one_row_each() {
+        let mut c = setup();
+        c.npcs.insert("kaito.bazaar.testnet".parse().unwrap(), 0);
+        let season = c.get_player(pl()).unwrap().season;
+        let h = hex::encode(env::sha256(commit_preimage(&pl(), season, 1, 0, "r", "s").as_bytes()));
+        ctx(op()); c.commit_day(pl(), 1, h, vec![NpcMove { npc: "kaito.bazaar.testnet".parse().unwrap(), good: 1, long: true }]); ctx(pl());
+        night(&mut c, 1, 0);
+        let p = c.get_player(pl()).unwrap(); assert!(p.kaito_pnl > 0);
+        c.rank(Entry { account: pl(), season: 1, score: 10, day: 10, won: false });
+        c.rank(Entry { account: pl(), season: 2, score: 50, day: 10, won: false });
+        c.rank(Entry { account: pl(), season: 3, score: 20, day: 10, won: false });
+        let lb = c.get_leaderboard(); assert_eq!(lb.len(), 1); assert_eq!(lb[0].score, 50);
+    }
+
+    #[test]
+    fn audit_void_day_refunds_and_restarts_the_day() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        c.open_position(1, true, 2, 100 * 100); c.sleep(false);
+        ctx(op()); c.void_day(pl()); ctx(pl());
+        let p = c.get_player(pl()).unwrap();
+        assert!(p.commitment.is_none() && !p.asleep && p.positions.is_empty() && p.coins == START_COINS && p.day == 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "no such good")]
+    fn audit_gift_checks_the_good() { let mut c = setup(); commit(&mut c, 1, 2, "s"); c.act(vec![Action::Gift { npc: 0, good: 99 }]); }
+
+    #[test]
+    fn audit_passing_out_costs_nothing_hidden() { let mut c = setup(); commit(&mut c, 1, 2, "s"); c.sleep(true); ctx(op()); let l = c.settle_day(pl(), 1, 2, "r".into(), "s".into()); assert_eq!(l.passed_out_loss, 0); }
 }

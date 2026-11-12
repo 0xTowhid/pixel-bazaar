@@ -37,9 +37,9 @@ On phones, tap **FULL SCREEN** at the top (on iPhone, use Share → Add to Home 
 | Log in anywhere (password or 12-word code) | `backend.js`, `vendor/keys.mjs` | Your name and password derive your key: PBKDF2 (210k rounds) turns them into a standard 12-word NEAR seed phrase (BIP39 + SLIP-10, `m/44'/397'/0'`). The same password or the recovery code rebuilds the key on any device, and the server checks it against the account's access keys. The server stores no secret of yours. |
 | Commit-reveal settlement | `commit_day` / `settle_day`, `server/index.mjs` | Each morning the operator commits `sha256(event, rumors, salt)` before you can act. At night it reveals, and the contract rejects any reveal that does not match. So the event cannot be chosen after seeing your trades (test `operator_cannot_change_the_event`). |
 | Contract-run economy | `act`, `open_position`, `settle_day` | The contract holds coins, prices, leveraged trades, liquidations, farm plots, seeds, watering, growth, energy, mining and fishing results, friendships and town projects. Many small moves (water 10 plots, harvest, sell) are batched into one `act` transaction. |
-| NEP-245 multi-token | `mt_balance_of`, `mt_batch_balance_of`, `mt_transfer`, `get_inventory` | Barn goods (13 kinds), items (leverage licenses, bridge, boat pass, your stall) and 11 achievement badges are NEP-245 tokens. Minting and burning them emits `mt_mint` / `mt_burn` events. |
+| NEP-245 multi-token | `mt_balance_of`, `mt_batch_balance_of`, `mt_transfer`, `get_inventory` | Barn goods (13 kinds), items (leverage licenses, bridge, boat pass, your stall) and 11 achievement badges are NEP-245 tokens. Minting and burning them emits `mt_mint` / `mt_burn` events. Badges are soulbound. `mt_transfer` moves goods and items between traders (respecting the 40-item barn) but needs a 1 yoctoNEAR deposit, which the in-game key cannot attach, so the game itself has no player-to-player trading. |
 | NPC accounts | `create_npc`, `get_npcs` | Kaito the Whale opens a public x5 trade every morning. Rita shorts the good she talks up on the days she lies. Their trades are committed with the day and settle against the same prices as yours. |
-| On-chain randomness | `env::random_seed` in `act` and `settle_day` | Mining finds, gifts from Mochi the cat, daily price noise. |
+| On-chain rolls | `roll()` and `env::random_seed` in `contract/src/lib.rs` | Mining finds, fishing catches and Mochi's gifts are rolled from the day's commitment, so a script cannot revert and retry until it gets lucky. Daily price noise uses `env::random_seed`. |
 | Leaderboard and profile stats | `get_leaderboard`, `Player.best_score`, `Player.seasons_won` | Finished seasons are ranked first by whether the debt was paid, then by coins. Your best season and seasons won stay on your account. |
 
 ## The game
@@ -47,9 +47,9 @@ On phones, tap **FULL SCREEN** at the top (on iPhone, use Share → Add to Home 
 | Do | See |
 |---|---|
 | Farm (plots behind your house; keys 1-9 pick the seed) | 9 crops (carrot, strawberry, pumpkin, tomato, corn, eggplant, tea, apple trees that regrow, beehives). Water them daily. Rain waters them for you; frost and blight kill unripe crops. |
-| Mine boulders in the Frost Camp, fish on the lake pier | Jade, ore and fish go into your barn. Fishing is a timing mini-game. Each action uses energy. |
+| Mine boulders in the Frost Camp, fish on the lake pier | Jade, ore and fish go into your barn. Fishing is a timing mini-game: win it, and the contract decides the catch (7 in 10). Each action uses energy. |
 | Talk to locals, give gifts | Hearts fill up. At 2 hearts locals tell you how sure they are; at 4 they write to you in the morning paper. |
-| Tomo: TRADE / SELL / SEEDS | Go long or short on 12 goods with x1-x10 leverage, sell your harvest, buy seeds, apple saplings and beehives. Licenses for x5 and x10 and your own stall are upgrades you keep. |
+| Tomo: TRADE / SELL / SEEDS | Go long or short on 12 goods with x1-x10 leverage (trades pay on the night's event only), sell your harvest, buy seeds, apple saplings and beehives. Licenses for x5 and x10 and your own stall are upgrades you keep. |
 | Town board (by the market) | Donate goods and coins to rebuild the pier (double fish), fix the lighthouse (storm warnings in the paper) and open the tea house (tea sells for 15% more). |
 | Pay the Harbor Master 5,000 | Badges, the leaderboard and a share image of your season. Your farm, seeds, friends and items carry into the next season. |
 | P: Profile, J: Journal | Profile: account, rank, best season, seasons won, crops, jade, fish, badges (locked ones show what earns them), items, best friends, SHARE PROFILE image, LOG OUT. Journal: today's rumors, who has been right, friends, barn, recent transactions. |
@@ -60,6 +60,16 @@ Controls: arrows or WASD to move, E or Space to interact, 1-9 seeds, P Profile, 
 - If the morning commit or the night reveal fails, the game retries and then shows **TRY AGAIN**. It never lets you play a day that is not on chain.
 - If you close the tab while asleep, that night is settled the next time you open the game.
 - The operator signs its transactions one at a time, so many players at once cannot cause nonce errors. A double tap cannot commit or settle a day twice.
+- If a day can never be revealed (the server's secret changed), the operator cancels it on chain with `void_day`, refunds open trades and starts the day again.
+- New players get 0.05 NEAR for gas and are topped up when they run low. Sign-ups pause by themselves if the operator or the contract runs low on NEAR.
+
+### Security notes (from an audit on 2026-11-12)
+- Every move needs the day to be committed first; seasons can only be restarted once finished; the daily fishing limit holds across nights.
+- Trades pay on the event only. Your own selling, the overnight drift and the noise do not move your trade, so there is no risk-free trade.
+- The evening sky is a hint, not a certainty, and is no longer stored on chain. How sure a local sounds is only sent once you are friends.
+- The server: no crash on malformed URLs, same-origin API (no CORS), rate limits per address and for all sign-ups, listens on 127.0.0.1 behind Caddy, 45 s timeout on every NEAR call.
+- The server holds only the operator key (`ops.<contract>`), never the contract's own key.
+- The player key is kept in the browser's local storage. It can only play this game; it cannot move NEAR.
 
 ## Run it yourself
 
@@ -72,11 +82,13 @@ Open http://localhost:8000. `config.js` says `mode: 'local'`, so a JavaScript co
 ### 2. Against the real contract on testnet
 You need Rust (`rustup`), `cargo-near`, `near-cli-rs`, Node 20+ and `jq`. The install lines are at the top of `scripts/deploy-testnet.sh`.
 ```
-ACCOUNT=pixelbazaar-yourname.testnet ./scripts/deploy-testnet.sh   # builds, deploys, creates rita.<account> and kaito.<account>
+ACCOUNT=pixelbazaar-yourname.testnet ./scripts/deploy-testnet.sh   # builds, deploys, creates ops.<account> (the operator), rita.<account> and kaito.<account>
 npm install --prefix server --omit=dev
 CONTRACT_ID=... OPERATOR_ID=... OPERATOR_KEY=... GAME_SECRET=... node server/index.mjs   # the script prints this line
 ```
 Open http://localhost:8080. The login needs https or localhost. The public server runs the same command as a systemd service behind Caddy for https.
+
+Optional server settings: `PLAYER_FUNDING` (0.05), `PLAYER_TOPUP` (0.03), `OPERATOR_MIN_NEAR` (0.5), `CONTRACT_MIN_NEAR` (1), `SIGNUPS_PER_HOUR` (60), `HOST` (127.0.0.1), `ALLOW_ORIGIN` (empty = same origin only).
 
 ### 3. Server without NEAR (testing the server code)
 ```
@@ -87,7 +99,7 @@ npm install --prefix server && MOCK=1 node server/index.mjs
 ```
 cd contract && cargo test
 ```
-There are 13 contract unit tests:
+There are 25 contract unit tests:
 - winning long
 - x10 liquidation
 - operator cannot change the event
@@ -101,6 +113,10 @@ There are 13 contract unit tests:
 - the stall sells overnight (NEP-245)
 - the farm is kept across seasons
 - early payoff with badges, seasons won and best score
+- 12 audit regression tests: no restart mid-season, no moves before the commit, the fishing limit across nights,
+  catches decided on chain, rolls fixed for the day, selling cannot make a trade profitable, no weather on chain,
+  transfer rules (barn cap, soulbound badges), per-player Kaito and one leaderboard row per player, `void_day`,
+  gift checks, no hidden pass-out penalty
 
 I also played the browser game end to end in headless Chromium on desktop and phone screen sizes. The runs covered:
 - logging in, a wrong password, and logging in on a new device
@@ -128,7 +144,7 @@ tools/                  sprite builders (characters from LPC layers, crops and i
 - The operator knows tonight's event, because it has to in order to commit it.
 - What the chain guarantees is that the operator cannot change the event after you act.
 - Settlement, liquidation, farming and items follow the contract's rules.
-- Fishing success is reported by your browser.
+- Winning the fishing mini-game is reported by your browser; the catch itself is rolled on chain.
 - Everything runs on testnet with play coins. There is no real money.
 
 ## Hackathon notes

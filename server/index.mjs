@@ -30,8 +30,11 @@ const SECRET = env.GAME_SECRET || (MOCK ? 'mock-secret' : '');
 const PLAYER_FUNDING = env.PLAYER_FUNDING || '0.05'; // NEAR given to each new player account for gas
 const TOPUP = env.PLAYER_TOPUP || '0.03';               // sent when a player's account runs low on gas money
 const TOPUP_BELOW = +(env.PLAYER_TOPUP_BELOW || 0.01);  // NEAR
-const MIN_RESERVE = +(env.OPERATOR_MIN_NEAR || 2);       // keep this much on the operator (and contract) for storage; refuse sign-ups below it
-const ALLOW_ORIGIN = env.ALLOW_ORIGIN || '*';
+const MIN_RESERVE = +(env.OPERATOR_MIN_NEAR || 0.5);     // operator keeps this much; sign-ups pause below it
+const CONTRACT_MIN = +(env.CONTRACT_MIN_NEAR || 1);      // the contract pays for every player's storage; sign-ups pause below this
+const ALLOW_ORIGIN = env.ALLOW_ORIGIN || ''; // empty: same-origin only (no CORS header)
+const HOST = env.HOST || '127.0.0.1';         // behind Caddy; set HOST=0.0.0.0 only if you really want the raw port public
+const SIGNUPS_PER_HOUR = +(env.SIGNUPS_PER_HOUR || 60); // across everyone
 if (!MOCK && (!CONTRACT || !OPERATOR || !OPERATOR_KEY || !SECRET)) {
   console.error('Missing env. Set CONTRACT_ID, OPERATOR_ID, OPERATOR_KEY and GAME_SECRET (or run with MOCK=1).');
   process.exit(1);
@@ -99,11 +102,10 @@ function plan(account, season, day) {
   const seedBytes = hmac(`${account}|${season}|${day}`), accBytes = hmac(`${account}|${season}|acc`);
   const rng = Rules.mulberry32(seedBytes.readUInt32LE(0));
   const acc = Rules.seasonAccuracy(Rules.mulberry32(accBytes.readUInt32LE(0)));
-  const { truth, rumors, kaito } = Rules.planDay(rng, acc);
+  const { truth, rumors, kaito, weather } = Rules.planDay(rng, acc);
   const rumorText = Rules.encodeRumors(rumors);
   const salt = hmac(`${account}|${season}|${day}|salt`).toString('hex');
   const commitment = sha(`${account}|${season}|${day}|${truth}|${rumorText}|${salt}`);
-  const weather = Rules.EVENTS[truth].weather || null;
   const r = rumors.rita;
   const npc_moves = [{ npc: `kaito.${CONTRACT}`, good: kaito.good, long: kaito.long }];
   if (r.lying) npc_moves.push({ npc: `rita.${CONTRACT}`, good: Rules.EVENTS[r.ev].fx[0][0], long: false });
@@ -112,56 +114,85 @@ function plan(account, season, day) {
 
 // ---------- http ----------
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.png': 'image/png', '.ttf': 'font/ttf', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.json': 'application/json', '.css': 'text/css' };
-const recent = new Map(); // ip -> registrations in the last hour
 // Behind a local reverse proxy (Caddy) every request comes from 127.0.0.1, so use the address it forwards.
+// IPv6 addresses are grouped by their /64, since one home connection gets a whole /64.
 function clientIp(req) {
   const a = req.socket.remoteAddress || '';
   const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  return (/^(::1|127\.|::ffff:127\.)/.test(a) && fwd) ? fwd : a;
+  const ip = (/^(::1|127\.|::ffff:127\.)/.test(a) && fwd) ? fwd : a;
+  return ip.includes(':') && !ip.startsWith('::ffff:') ? ip.split(':').slice(0, 4).join(':') + '::/64' : ip;
 }
-function limited(ip) { const now = Date.now(), list = (recent.get(ip) || []).filter(t => now - t < 3600e3); recent.set(ip, list); if (list.length >= 10) return true; list.push(now); return false; }
-const json = (res, code, body) => { res.writeHead(code, { 'content-type': 'application/json', 'access-control-allow-origin': ALLOW_ORIGIN, 'access-control-allow-headers': 'content-type' }); res.end(JSON.stringify(body)); };
+// Sliding-window counters: key -> timestamps
+const buckets = new Map();
+function over(key, max, ms) {
+  const now = Date.now(), list = (buckets.get(key) || []).filter(t => now - t < ms);
+  if (list.length >= max) { buckets.set(key, list); return true; }
+  list.push(now); buckets.set(key, list); return false;
+}
+setInterval(() => { const now = Date.now(); for (const [k, l] of buckets) if (!l.length || now - l[l.length - 1] > 3600e3) buckets.delete(k); }, 600e3).unref();
+const limited = ip => over('reg|' + ip, 10, 3600e3) || over('reg|all', SIGNUPS_PER_HOUR, 3600e3);
+const json = (res, code, body) => {
+  const h = { 'content-type': 'application/json', 'cache-control': 'no-store' };
+  if (ALLOW_ORIGIN) { h['access-control-allow-origin'] = ALLOW_ORIGIN; h['access-control-allow-headers'] = 'content-type'; }
+  res.writeHead(code, h); res.end(JSON.stringify(body));
+};
 const readBody = req => new Promise((ok, bad) => { let b = ''; req.on('data', c => { b += c; if (b.length > 1e5) req.destroy(); }); req.on('end', () => { try { ok(b ? JSON.parse(b) : {}); } catch (e) { bad(e); } }); });
 const errText = e => String(e && (e.message || e)).replace(/^.*Smart contract panicked: /s, '').slice(0, 300);
 
+// Only accounts this game can have created: name.<contract>
+function checkId(id) { if (typeof id !== 'string' || !id.endsWith('.' + CONTRACT) || !/^[a-z0-9_-]{2,31}$/.test(id.slice(0, -CONTRACT.length - 1))) throw new Error('not a player'); return true; }
 const routes = {
   'POST /api/register': async (body, req) => {
     const name = String(body.name || '').toLowerCase();
     if (!/^[a-z0-9](?:[a-z0-9_-]{1,30})$/.test(name)) throw new Error('Names use 2-31 lowercase letters, numbers, - or _.');
     if (!/^ed25519:[1-9A-HJ-NP-Za-km-z]{40,50}$/.test(body.publicKey || '')) throw new Error('bad public key');
+    if (/[-_]{2}|[-_]$/.test(name)) throw new Error('Names cannot end with - or _ or have two in a row.');
     if (!MOCK && limited(clientIp(req))) throw new Error('Too many new players from your network. Try again in an hour.');
     const accountId = `${name}.${CONTRACT}`;
     if (await view('get_player', { account_id: accountId })) throw new Error('That name is taken.');
-    if (!MOCK && (await balanceOf(OPERATOR)) < MIN_RESERVE + +PLAYER_FUNDING) { console.error('operator balance low: sign-ups paused'); throw new Error('New sign-ups are paused for a moment. Please try again later.'); }
+    if (!MOCK && ((await balanceOf(OPERATOR)) < MIN_RESERVE + +PLAYER_FUNDING || (await balanceOf(CONTRACT)) < CONTRACT_MIN)) { console.error('operator balance low: sign-ups paused'); throw new Error('New sign-ups are paused for a moment. Please try again later.'); }
     await operatorCall('register_player', { name, public_key: body.publicKey }, PLAYER_FUNDING);
     if (!(await view('get_player', { account_id: accountId }))) throw new Error('Account creation failed. Try another name.');
     return { accountId };
   },
   // Log in on a new device: is this the right key for this account?
   'POST /api/check-key': async body => {
+    checkId(body.accountId);
     if (!(await view('get_player', { account_id: body.accountId }))) throw new Error('No trader with that name.');
     if (!(await hasKey(body.accountId, body.publicKey))) throw new Error('Wrong password or recovery code.');
     return { ok: true };
   },
   // Start (or resume) the player's current day: commit it on chain, return the rumors.
-  'POST /api/day': body => withLock(body.accountId, async () => {
+  'POST /api/day': body => checkId(body.accountId) && withLock(body.accountId, async () => {
     let p = await view('get_player', { account_id: body.accountId });
     if (!p) throw new Error('not a player');
     if (p.finished) return { finished: true };
     const d = plan(body.accountId, p.season, p.day);
     let tx = null;
     if (!p.commitment) {
-      try { tx = await operatorCall('commit_day', { player: body.accountId, day: p.day, commitment: d.commitment, weather: d.weather, npc_moves: d.npc_moves }); }
+      try { tx = await operatorCall('commit_day', { player: body.accountId, day: p.day, commitment: d.commitment, npc_moves: d.npc_moves }); }
       catch (e) { p = await view('get_player', { account_id: body.accountId }); if (p.commitment !== d.commitment) throw e; }
-    } else if (p.commitment !== d.commitment) throw new Error('commitment mismatch');
+    } else if (p.commitment !== d.commitment) {
+      // this day can never be revealed (GAME_SECRET changed): cancel it on chain, refund the trades, commit it again
+      console.error('commitment mismatch for', body.accountId, '- voiding the day');
+      await operatorCall('void_day', { player: body.accountId });
+      tx = await operatorCall('commit_day', { player: body.accountId, day: p.day, commitment: d.commitment, npc_moves: d.npc_moves });
+      p = await view('get_player', { account_id: body.accountId });
+    }
     // keep the player's account able to pay gas (at most once a day, since this runs with the commit)
     if (tx && !MOCK) { try { if ((await balanceOf(body.accountId)) < TOPUP_BELOW && (await balanceOf(OPERATOR)) > MIN_RESERVE) await sendNear(body.accountId, TOPUP); } catch (e) { console.error('top-up', errText(e)); } }
     // the restored lighthouse tells the truth about storms
     const stormWarning = p.projects && p.projects[1] ? d.truth === 0 : null;
-    return { season: p.season, day: p.day, asleep: !!p.asleep, rumors: d.rumors, weather: d.weather, kaito: d.kaito, stormWarning, commitment: d.commitment, tx: txHash(tx) };
+    // how sure a local sounds is only told to friends (2+ hearts), as in the game
+    const rumors = {};
+    for (const [k, r] of Object.entries(d.rumors)) {
+      const s = Rules.SOURCES[k], f = (p.friendship || [])[s.npc] || 0;
+      rumors[k] = { ...r }; if (Rules.hearts(f) < 2) delete rumors[k].sure;
+    }
+    return { season: p.season, day: p.day, asleep: !!p.asleep, rumors, weather: d.weather, kaito: d.kaito, stormWarning, commitment: d.commitment, tx: txHash(tx) };
   }),
   // Reveal the event after the player has gone to sleep.
-  'POST /api/settle': body => withLock(body.accountId, async () => {
+  'POST /api/settle': body => checkId(body.accountId) && withLock(body.accountId, async () => {
     const p = await view('get_player', { account_id: body.accountId });
     if (!p) throw new Error('not a player');
     const already = () => body.day && (p.history || []).find(h => h.day === body.day && p.season === (body.season || p.season));
@@ -169,6 +200,7 @@ const routes = {
     if (!p.asleep && body.day && p.day !== body.day && already()) return { log: already(), tx: null };
     if (!p.asleep) throw new Error('The player is not asleep yet.');
     const d = plan(body.accountId, p.season, p.day);
+    if (p.commitment !== d.commitment) { await operatorCall('void_day', { player: body.accountId }); return { voided: true }; }
     let res = null;
     try { res = await operatorCall('settle_day', { player: body.accountId, day: p.day, event: d.truth, rumors: d.rumorText, salt: d.salt }); }
     catch (e) { const q = await view('get_player', { account_id: body.accountId }); if (q.asleep || q.day === p.day && !q.finished) throw e; }
@@ -189,6 +221,7 @@ async function handle(req, res) {
   if (req.method === 'OPTIONS') return json(res, 204, {});
   const route = routes[req.method + ' ' + url.pathname];
   if (route) {
+    if (!MOCK && over('api|' + clientIp(req), 240, 60e3)) return json(res, 429, { error: 'Too many requests. Slow down a little.' });
     try { json(res, 200, await route(await readBody(req), req)); }
     catch (e) { console.error(url.pathname, errText(e)); json(res, 400, { error: errText(e) }); }
     return;
@@ -208,4 +241,4 @@ async function handle(req, res) {
 http.createServer(async (req, res) => {
   try { await handle(req, res); }
   catch (e) { console.error('request failed', req.url, e && e.message); if (!res.headersSent) { res.writeHead(400); res.end('bad request'); } }
-}).listen(PORT, () => console.log(`Pixel Bazaar ${MOCK ? 'MOCK' : NETWORK} server on http://localhost:${PORT}  contract=${CONTRACT}`));
+}).listen(PORT, HOST, () => console.log(`Pixel Bazaar ${MOCK ? 'MOCK' : NETWORK} server on http://${HOST}:${PORT}  contract=${CONTRACT}`));

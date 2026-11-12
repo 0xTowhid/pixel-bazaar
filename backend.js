@@ -39,7 +39,7 @@ const Backend = (() => {
   function localSetup() {
     local = { engine: new BazaarEngine.Engine('operator', 'local'), acc: null, plan: null };
     local.engine.create_npc('operator', 'rita'); local.engine.create_npc('operator', 'kaito');
-    local.engine.join('you.local');
+    local.engine.register_player('operator', 'you');
     me = { accountId: 'you.local' };
   }
 
@@ -122,10 +122,10 @@ const Backend = (() => {
         local.plan = { ...d, day: p.day };
         const r = d.rumors.rita, moves = [{ npc: 'kaito.local', good: d.kaito.good, long: d.kaito.long }];
         if (r.lying) moves.push({ npc: 'rita.local', good: Rules.EVENTS[r.ev].fx[0][0], long: false });
-        local.engine.commit_day('operator', { player: me.accountId, day: p.day, commitment: 'x'.repeat(64), weather: Rules.EVENTS[d.truth].weather || null, npc_moves: moves });
+        local.engine.commit_day('operator', { player: me.accountId, day: p.day, commitment: Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join(''), npc_moves: moves });
       }
       const lp = local.plan;
-      return { season: p.season, day: p.day, rumors: lp.rumors, weather: Rules.EVENTS[lp.truth].weather || null, kaito: lp.kaito, stormWarning: p.projects[1] ? lp.truth === 0 : null };
+      return { season: p.season, day: p.day, rumors: lp.rumors, weather: lp.weather || null, kaito: lp.kaito, stormWarning: p.projects[1] ? lp.truth === 0 : null };
     },
     /** Reveal the night's event and settle. */
     async settle(day) {

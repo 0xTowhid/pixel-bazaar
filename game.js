@@ -223,7 +223,7 @@ async function mustDo(label, fn, tag) {
 function netRetry(msg) {
   return new Promise(res => {
     const el = $('netErr');
-    el.innerHTML = `<div class="gname">NEAR DID NOT ANSWER</div><div class="sub" style="margin:.6em 0 1em">${String(msg).replace(/</g, '&lt;').slice(0, 160)}</div><button class="btn big" id="netBtn">TRY AGAIN</button>`;
+    el.innerHTML = `<div class="gname">NEAR DID NOT ANSWER</div><div class="sub" style="margin:.6em 0 1em">${esc(String(msg).slice(0, 160))}</div><button class="btn big" id="netBtn">TRY AGAIN</button>`;
     el.classList.add('on'); sfx('alert');
     $('netBtn').onclick = () => { el.classList.remove('on'); res(); };
   });
@@ -252,8 +252,8 @@ function askLogin() {
     openCard(`<div class="ntitle" style="color:var(--gold);font-size:2em">PIXEL BAZAAR</div>
       <div class="sub" style="text-align:center">Farm by day. Trade on rumors by night.<br>Your progress lives on NEAR ${net}. Log in from any device.</div>
       <div class="tabs"><button class="tab ${tab === 'new' ? 'on' : ''}" data-t="new">NEW TRADER</button><button class="tab ${tab === 'login' ? 'on' : ''}" data-t="login">LOG IN</button><button class="tab ${tab === 'code' ? 'on' : ''}" data-t="code">RECOVERY CODE</button></div>
-      ${err ? `<div class="dn" style="text-align:center;margin:.4em 0">${err}</div>` : ''}
-      <label class="fl">NAME <span class="sub">${acct}</span></label><input id="nameIn" maxlength="31" autocomplete="username" placeholder="your-name" value="${askLogin.nm || ''}">
+      ${err ? `<div class="dn" style="text-align:center;margin:.4em 0">${esc(err)}</div>` : ''}
+      <label class="fl">NAME <span class="sub">${acct}</span></label><input id="nameIn" maxlength="31" autocomplete="username" placeholder="your-name" value="${esc(askLogin.nm || '')}">
       ${tab === 'code' ? `<label class="fl">12-WORD RECOVERY CODE</label><textarea id="codeIn" rows="2" autocomplete="off" placeholder="word word word ..."></textarea>`
         : `<label class="fl">PASSWORD</label><input id="pwIn" type="password" autocomplete="${tab === 'new' ? 'new-password' : 'current-password'}" placeholder="8+ characters">`}
       ${tab === 'new' ? `<label class="fl">REPEAT PASSWORD</label><input id="pw2In" type="password" autocomplete="new-password">` : ''}
@@ -333,6 +333,7 @@ async function sleep(passedOut) {
     }, 'sleep');
     const day = p.day;
     const r = await mustDo('Revealing the night', () => Backend.settle(day), 'settle_day · reveal checked against commitment');
+    if (r && r.voided) { toast('That night could not be revealed, so it was cancelled and your trades refunded. Starting the day again...', 5); setTimeout(() => location.reload(), 4000); return; }
     await minNight;
     S.night.dawn = performance.now(); quietBusy = false;
     await wait(1800);
@@ -441,6 +442,7 @@ function advance() { S.step = Math.min(S.step + 1, STEPS.length - 1); sfx('ok');
 // ---------- UI ----------
 let dlg = null, cardCb = null;
 const uiOpen = () => !!dlg || (S && S.fishing) || ['trade', 'card', 'journal', 'profile', 'netErr'].some(id => $(id)?.classList.contains('on'));
+const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 function toast(t, sec = 2.5) { const el = $('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => el.style.display = 'none', sec * 1000); }
 function hideToast() { $('toast').style.display = 'none'; }
 function openCard(html, cb) { hideToast(); $('card').innerHTML = html; $('card').classList.add('on'); cardCb = cb; $('cardBtn').onclick = closeCard; }
@@ -499,7 +501,7 @@ function talkTo(n) {
     if (S.t / DAY_SECONDS > (10 - 6) / 18) { say(n, 'Too late, the catch is gone. Come before ten in the morning.'); return; }
     claim('fish', 'Taking the morning catch').then(ok => { if (ok) { sfx('coin'); say(n, `Early bird! Take a share of the morning catch. (+${FISH_GIFT} coins)`); } }); return;
   }
-  say(n, pick(['Have you met Madame Vey in the woods? Spooky lady.', "The Old Sailor is never wrong about the sea.", 'Rita always seems to know which way prices go. Funny that.', 'Get home before midnight. Pickpockets love sleepy traders.']));
+  say(n, pick(['Have you met Madame Vey in the woods? Spooky lady.', "The Old Sailor is never wrong about the sea.", 'Rita always seems to know which way prices go. Funny that.', 'Get home before midnight. Nobody sleeps well on the street.']));
 }
 
 // ---------- trading screen ----------

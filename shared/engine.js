@@ -19,17 +19,19 @@
   const emptyPlot = () => ({ crop: null, grown: 0, watered_day: 0 });
   const newPlayer = season => {
     const seeds = new Array(CROPS.length).fill(0); seeds[0] = 4; seeds[4] = 2;
-    return { season, day: 1, coins: START_COINS, prices: BASE.slice(), positions: [], commitment: null, weather: null, npc_moves: [],
+    return { season, day: 1, coins: START_COINS, prices: BASE.slice(), positions: [], commitment: null, npc_moves: [],
       asleep: false, passed_out: false, fish_day: 0, seer_day: 0, chest: false, finished: false, won: false, history: [],
       energy: ENERGY_MAX, plots: Array.from({ length: START_PLOTS }, emptyPlot), seeds, friendship: new Array(NPCS).fill(0), gift_day: new Array(NPCS).fill(0),
       projects: PROJECTS.map(() => false), donated: PROJECTS.map(() => new Array(NG + 1).fill(0)), mined_day: 0, mined: 0, catches_today: 0, cat_day: 0,
-      harvested: 0, jade_found: 0, fish_caught: 0, kaito_start: 0, start_coins: START_COINS, seasons_won: 0, best_score: 0 };
+      harvested: 0, jade_found: 0, fish_caught: 0, kaito_pnl: 0, start_coins: START_COINS, seasons_won: 0, best_score: 0 };
   };
   const preimage = (player, season, day, event, rumors, salt) => `${player}|${season}|${day}|${event}|${rumors}|${salt}`;
-  function settle(pos, price) { const mv = Math.trunc((price - pos.entry) * 1e6 / pos.entry); return Math.trunc(pos.stake * pos.lev * mv * (pos.long ? 1 : -1) / 1e6); }
+  function settle(pos, price) { const e = Math.max(1, pos.entry); const mv = Math.trunc((price - e) * 1e6 / e); return Math.trunc(pos.stake * pos.lev * mv * (pos.long ? 1 : -1) / 1e6); }
   const ripe = pl => pl.crop !== null && pl.grown >= CROPS[pl.crop][1];
   const rnd = () => Math.floor(Math.random() * 256);
   const clone = o => JSON.parse(JSON.stringify(o));
+  // FNV-1a, used for the day's fixed rolls when no sha256 is available (the browser's offline mode)
+  const fnv = str => { let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h; };
 
   class Engine {
     constructor(operator, contractId, sha256hex) {
@@ -44,17 +46,20 @@
     _maxLev(a) { return this._bal('license_x10', a) ? 10 : this._bal('license_x5', a) ? 5 : 2; }
     _barnAdd(a, g, n) { const tot = GOODS.reduce((s, t) => s + this._bal(t, a), 0); req(tot + n <= BARN_CAP, 'your barn is full'); this._mint(GOODS[g], a, n); }
     _badge(name, a) { const t = 'badge_' + name; if (this._bal(t, a)) return false; this._mint(t, a, 1); return true; }
-    _kaito() { return this.npcs['kaito.' + this.contractId] || 0; }
-    _rank(e) { this.leaderboard.push(e); this.leaderboard.sort((x, y) => (y.won - x.won) || (y.score - x.score) || (x.day - y.day)); this.leaderboard.length = Math.min(20, this.leaderboard.length); }
+    _roll(commit, who, what, n) { const s = `${commit}|${who}|${what}|${n}`; return this.sha ? parseInt(this.sha(s).slice(0, 2), 16) : fnv(s) & 255; }
+    _rank(e) {
+      const better = (a, b) => (a.won - b.won) || (a.score - b.score) || (b.day - a.day);
+      const i = this.leaderboard.findIndex(x => x.account === e.account);
+      if (i >= 0) { if (better(e, this.leaderboard[i]) <= 0) return; this.leaderboard.splice(i, 1); }
+      this.leaderboard.push(e); this.leaderboard.sort((x, y) => (y.won - x.won) || (y.score - x.score) || (x.day - y.day)); this.leaderboard.length = Math.min(20, this.leaderboard.length); }
 
-    register_player(c, name) { this._op(c); const id = `${name}.${this.contractId}`; req(!this.players[id], 'name taken'); const p = newPlayer(1); p.kaito_start = this._kaito(); this.players[id] = p; return id; }
-    join(c) { if (!this.players[c]) { const p = newPlayer(1); p.kaito_start = this._kaito(); this.players[c] = p; } }
+    register_player(c, name) { this._op(c); const id = `${name}.${this.contractId}`; req(!this.players[id], 'name taken'); this.players[id] = newPlayer(1); return id; }
     create_npc(c, name) { this._op(c); this.npcs[`${name}.${this.contractId}`] = 1000 * 100; }
 
     start_season(c) {
-      const old = this._p(c), p = newPlayer(old.season + 1);
+      const old = this._p(c); req(old.finished, 'finish this season first'); const p = newPlayer(old.season + 1);
       p.plots = old.plots.map(pl => ({ ...pl, watered_day: 0 })); p.seeds = old.seeds; p.friendship = old.friendship; p.projects = old.projects; p.donated = old.donated;
-      p.harvested = old.harvested; p.jade_found = old.jade_found; p.fish_caught = old.fish_caught; p.kaito_start = this._kaito();
+      p.harvested = old.harvested; p.jade_found = old.jade_found; p.fish_caught = old.fish_caught;
       p.seasons_won = old.seasons_won; p.best_score = old.best_score;
       this.players[c] = p;
     }
@@ -85,7 +90,8 @@
       catch (e) { this.players[c] = before; this.balances = balBefore; this.supply = supBefore; throw e; }
     }
     _act(c, actions) {
-      const p = this._p(c); req(!p.finished && !p.asleep, 'day is over');
+      const p = this._p(c); req(!p.finished && !p.asleep, 'day is over'); req(p.commitment, 'the day has not started yet');
+      const commit = p.commitment, roll = (what, n) => this._roll(commit, c, what, n);
       const energy = n => { req(p.energy >= n, 'you are too tired'); p.energy -= n; };
       const badges = [];
       for (const a of actions) {
@@ -106,26 +112,27 @@
             energy(8); req(a.rock < ROCKS, 'no such rock');
             if (p.mined_day !== p.day) { p.mined_day = p.day; p.mined = 0; }
             req(!(p.mined & (1 << a.rock)), 'already mined today'); p.mined |= 1 << a.rock;
-            const r = rnd();
+            const r = roll('mine', a.rock);
             if (r < 64) { this._barnAdd(c, 11, 1); p.jade_found++; if (p.jade_found === 5) badges.push('jade_hunter'); }
             else if (r < 200) this._barnAdd(c, 12, 1);
             else p.seeds[r % 7] += 2;
             break;
           }
           case 'Fish': {
-            energy(4); req(p.catches_today < 6, 'the fish stopped biting for today'); p.catches_today++;
-            if (a.ok) { const n = p.projects[0] ? 2 : 1; this._barnAdd(c, 1, n); p.fish_caught += n; if (p.fish_caught >= 10 && p.fish_caught - n < 10) badges.push('angler'); }
+            energy(4); req(p.catches_today < 6, 'the fish stopped biting for today');
+            const r = roll('fish', p.catches_today); p.catches_today++;
+            if (a.ok && r < 179) { const n = p.projects[0] ? 2 : 1; this._barnAdd(c, 1, n); p.fish_caught += n; if (p.fish_caught >= 10 && p.fish_caught - n < 10) badges.push('angler'); }
             break;
           }
-          case 'Cat': { req(p.cat_day !== p.day, 'Mochi already found something today'); p.cat_day = p.day; const r = rnd(); if (r < 128) p.coins += 1000; else p.seeds[r % 7] += 1; break; }
+          case 'Cat': { req(p.cat_day !== p.day, 'Mochi already found something today'); p.cat_day = p.day; const r = roll('cat', 0); if (r < 128) p.coins += 1000; else p.seeds[r % 7] += 1; break; }
           case 'Sell': {
             const g = a.good; req(g >= 0 && g < NG && g !== 3 && a.qty > 0, 'cannot sell that'); req(this._bal(GOODS[g], c) >= a.qty, 'not enough in your barn');
             this._burn(GOODS[g], c, a.qty); const bonus = g === 0 && p.projects[2] ? 115 : 100;
-            for (let i = 0; i < a.qty; i++) { p.coins += Math.trunc(Math.trunc(p.prices[g] / 10) * bonus / 100); p.prices[g] = Math.trunc(p.prices[g] * 98 / 100); }
+            for (let i = 0; i < a.qty; i++) { p.coins += Math.trunc(Math.trunc(p.prices[g] / 10) * bonus / 100); p.prices[g] = Math.max(1, Math.trunc(p.prices[g] * 98 / 100)); }
             break;
           }
           case 'Gift': {
-            const n = a.npc; req(n >= 0 && n < NPCS, 'no such person'); req(p.gift_day[n] !== p.day, 'one gift a day'); req(this._bal(GOODS[a.good], c) >= 1, "you don't have that");
+            const n = a.npc; req(n >= 0 && n < NPCS, 'no such person'); req(p.gift_day[n] !== p.day, 'one gift a day'); req(a.good >= 0 && a.good < NG, 'no such good'); req(this._bal(GOODS[a.good], c) >= 1, "you don't have that");
             this._burn(GOODS[a.good], c, 1); p.gift_day[n] = p.day;
             const before = p.friendship[n]; p.friendship[n] = Math.min(100, p.friendship[n] + (a.good >= 4 && a.good <= 10 ? 15 : 10));
             if (before < 100 && p.friendship[n] >= 100) badges.push('best_friend');
@@ -148,27 +155,28 @@
     }
     sleep(c, { passed_out }) { const p = this._p(c); req(!p.finished && !p.asleep, 'already asleep'); req(p.commitment, 'the day has not started yet'); p.asleep = true; p.passed_out = !!passed_out; }
     pay_debt(c) {
-      const k = this._kaito(), p = this._p(c); req(!p.finished && p.coins >= DEBT, 'not enough coins');
+      const p = this._p(c); req(!p.finished && p.coins >= DEBT, 'not enough coins');
       p.coins -= DEBT; p.finished = true; p.won = true; p.seasons_won++; p.best_score = Math.max(p.best_score, p.coins + DEBT);
       this._badge('debt_free', c); if (p.day <= 6) this._badge('early_bird', c);
-      if (p.coins + DEBT - p.start_coins > k - p.kaito_start) this._badge('beat_kaito', c);
+      if (p.coins + DEBT - p.start_coins > p.kaito_pnl) this._badge('beat_kaito', c);
       this._rank({ account: c, season: p.season, score: p.coins + DEBT, day: p.day, won: true });
     }
-    commit_day(c, { player, day, commitment, weather, npc_moves }) {
+    commit_day(c, { player, day, commitment, npc_moves }) {
       this._op(c); const p = this._p(player);
       req(commitment && commitment.length === 64, 'commitment must be a sha256 hex'); req(!p.finished && p.day === day, 'wrong day'); req(!p.commitment, 'already committed');
       if (p.mined_day !== day) p.mined = 0; p.catches_today = 0;
-      p.commitment = commitment; p.weather = weather || null; p.npc_moves = npc_moves || [];
+      p.commitment = commitment; p.npc_moves = npc_moves || [];
     }
     settle_day(c, { player, day, event, rumors, salt }) {
       this._op(c); const p = this._p(player);
       req(p.day === day && p.asleep && !p.finished, 'nothing to settle'); req(p.commitment, 'no commitment');
       if (this.sha && this.sha(preimage(player, p.season, day, event, rumors, salt)) !== p.commitment) fail('reveal does not match the commitment');
       const prices = p.prices.map((x, i) => { x = x + Math.trunc((BASE[i] - x) * 40 / 100); x = Math.trunc(x * (1000 + (rnd() % 101) - 50) / 1000); return Math.max(1, x); });
-      for (const [g, m] of EVENTS[event]) prices[g] = Math.trunc(prices[g] * m / 1000);
+      const pre = prices.slice(); // trades pay on the event only
+      for (const [g, m] of EVENTS[event]) prices[g] = Math.max(1, Math.trunc(prices[g] * m / 1000));
       const badges = [], rita = p.npc_moves.find(m => m.npc.startsWith('rita.'));
       const results = p.positions.map(pos => {
-        let pnl = settle(pos, prices[pos.good]); const liquidated = pnl <= -pos.stake; if (liquidated) pnl = -pos.stake;
+        let pnl = settle({ ...pos, entry: pre[pos.good] }, prices[pos.good]); const liquidated = pnl <= -pos.stake; if (liquidated) pnl = -pos.stake;
         p.coins = Math.max(0, p.coins + pos.stake + pnl);
         if (pos.lev === 10 && pnl > 0) badges.push('x10_survivor');
         if (rita && rita.good === pos.good && !pos.long && pnl > 0) badges.push('faded_rita');
@@ -190,23 +198,28 @@
         let best = -1; for (let g = 0; g < NG; g++) if (g !== 3 && this._bal(GOODS[g], player) > 0 && (best < 0 || prices[g] > prices[best])) best = g;
         if (best >= 0) { this._burn(GOODS[best], player, 1); const v = Math.trunc(Math.trunc(prices[best] / 10) * 110 / 100); p.coins += v; stall_sold += v; }
       }
-      const loss = p.passed_out ? Math.floor(p.coins / 10) : 0; p.coins -= loss;
+      const loss = 0;
       for (const m of p.npc_moves) if (this.npcs[m.npc] !== undefined) {
-        const stake = m.npc.startsWith('kaito.') ? 20000 : 10000, pos = { good: m.good, long: m.long, lev: 5, stake, entry: p.prices[m.good] };
-        this.npcs[m.npc] += Math.max(-stake, settle(pos, prices[m.good]));
+        const stake = m.npc.startsWith('kaito.') ? 20000 : 10000, pos = { good: m.good, long: m.long, lev: 5, stake, entry: pre[m.good] };
+        const pnl = Math.max(-stake, settle(pos, prices[m.good])); this.npcs[m.npc] += pnl;
+        if (m.npc.startsWith('kaito.')) p.kaito_pnl += pnl;
       }
-      p.prices = prices; p.commitment = null; p.weather = null; p.npc_moves = []; p.asleep = false; p.passed_out = false; p.energy = ENERGY_MAX;
+      p.prices = prices; p.commitment = null; p.npc_moves = []; p.asleep = false; p.passed_out = false; p.energy = ENERGY_MAX; p.catches_today = 0;
       if (day >= SEASON_DAYS) {
         p.finished = true; p.won = p.coins >= DEBT; if (p.won) { p.coins -= DEBT; badges.push('debt_free'); }
         const score = p.won ? p.coins + DEBT : p.coins;
         if (p.won) p.seasons_won++; p.best_score = Math.max(p.best_score, score);
-        if (score - p.start_coins > this._kaito() - p.kaito_start) badges.push('beat_kaito');
+        if (score - p.start_coins > p.kaito_pnl) badges.push('beat_kaito');
         this._rank({ account: player, season: p.season, score, day, won: p.won });
       } else p.day += 1;
       const minted = badges.filter(b => this._badge(b, player));
       const log = { day, event, prices: prices.slice(), results, coins_after: p.coins, passed_out_loss: loss, rumors, killed, grew, stall_sold, badges: minted };
       p.history.push(log); if (p.history.length > SEASON_DAYS) p.history.shift();
       return log;
+    }
+    void_day(c, { player }) {
+      this._op(c); const p = this._p(player); req(!p.finished && p.commitment, 'nothing to cancel');
+      p.coins += p.positions.reduce((s, x) => s + x.stake, 0); p.positions = []; p.commitment = null; p.npc_moves = []; p.asleep = false; p.passed_out = false;
     }
     // views
     mt_balance_of(account_id, token_id) { return this._bal(token_id, account_id); }
