@@ -14,7 +14,7 @@ use near_sdk::store::{IterableMap, Lazy, LookupMap};
 use near_sdk::{env, log, near, require, AccountId, Allowance, BorshStorageKey, Gas, NearToken, PanicOnDefault, Promise, PromiseError, PublicKey};
 
 pub const START_COINS: u64 = 300 * 100; // coins are stored in cents
-pub const DEBT: u64 = 5000 * 100;
+pub const DEBT: u64 = 3000 * 100;
 pub const SEASON_DAYS: u8 = 10;
 pub const NG: usize = 13;
 pub const GOODS: [&str; NG] = ["tea", "fish", "honey", "sushi", "carrot", "strawberry", "pumpkin", "tomato", "corn", "eggplant", "apple", "jade", "ore"];
@@ -787,7 +787,7 @@ impl Contract {
         require!(!p.finished && p.coins >= DEBT, "not enough coins");
         p.coins -= DEBT; p.finished = true; p.won = true; p.seasons_won += 1; p.best_score = p.best_score.max(p.coins + DEBT);
         let (season, coins, day, beat) = (p.season, p.coins, p.day, (p.coins + DEBT) as i64 - p.start_coins as i64 > p.kaito_pnl);
-        self.badge("debt_free", &id); self.post(&id, format!("paid off the 5,000 coin debt on day {day}"));
+        self.badge("debt_free", &id); self.post(&id, format!("paid off the 3,000 coin debt on day {day}"));
         if day <= 6 { self.badge("early_bird", &id); }
         if beat { self.badge("beat_kaito", &id); }
         self.rank(Entry { account: id, season, score: coins + DEBT, day, won: true });
@@ -1259,7 +1259,7 @@ mod tests {
     fn early_payoff_wins_with_badges() {
         let mut c = setup(); c.players.get_mut(&pl()).unwrap().coins = 6000 * 100;
         c.pay_debt();
-        let p = c.get_player(pl()).unwrap(); assert!(p.won); assert_eq!(p.coins, 1000 * 100);
+        let p = c.get_player(pl()).unwrap(); assert!(p.won); assert_eq!(p.coins, 3000 * 100);
         assert_eq!(p.seasons_won, 1); assert_eq!(p.best_score, 6000 * 100);
         c.start_season(); assert_eq!(c.get_player(pl()).unwrap().seasons_won, 1);
         assert_eq!(c.mt_balance_of(pl(), "badge_early_bird".into()).0, 1);

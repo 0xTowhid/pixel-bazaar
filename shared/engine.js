@@ -2,7 +2,7 @@
 // Used for the offline build in the browser and as a stand-in contract when testing the server.
 (function (root) {
   'use strict';
-  const START_COINS = 300 * 100, DEBT = 5000 * 100, SEASON_DAYS = 10, NG = 13;
+  const START_COINS = 300 * 100, DEBT = 3000 * 100, SEASON_DAYS = 10, NG = 13;
   const GOODS = ['tea', 'fish', 'honey', 'sushi', 'carrot', 'strawberry', 'pumpkin', 'tomato', 'corn', 'eggplant', 'apple', 'jade', 'ore'];
   const BASE = [20000, 35000, 50000, 80000, 15000, 30000, 60000, 25000, 20000, 35000, 40000, 120000, 12000];
   const EVENTS = [[[1, 1500]], [[1, 620]], [[0, 620]], [[0, 1500]], [[2, 620]], [[2, 1500]], [[3, 1500], [6, 1300]], [[6, 1500], [8, 1400]], [[5, 600]], [[4, 1450], [7, 1450], [9, 1300]]];
@@ -381,7 +381,7 @@
     pay_debt(c) {
       const p = this._p(c); req(!p.finished && p.coins >= DEBT, 'not enough coins');
       p.coins -= DEBT; p.finished = true; p.won = true; p.seasons_won++; p.best_score = Math.max(p.best_score, p.coins + DEBT);
-      this._badge('debt_free', c); this._post(c, `paid off the 5,000 coin debt on day ${p.day}`); if (p.day <= 6) this._badge('early_bird', c);
+      this._badge('debt_free', c); this._post(c, `paid off the 3,000 coin debt on day ${p.day}`); if (p.day <= 6) this._badge('early_bird', c);
       if (p.coins + DEBT - p.start_coins > p.kaito_pnl) this._badge('beat_kaito', c);
       this._rank({ account: c, season: p.season, score: p.coins + DEBT, day: p.day, won: true });
     }

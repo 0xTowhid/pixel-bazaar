@@ -2,7 +2,7 @@
 
 **Catch spirits, solve the mystery, trade on rumors.** A pixel-art RPG and life sim on NEAR, where every spirit, badge and legendary fish is a real NFT you own.
 
-You arrive on the Lantern Isles owing the Harbor Master 5,000 coins, with 300 coins and 10 days to pay. Someone has stolen the Great Lantern and the spirits have gone wild. Catch them, raise them and duel with them. Follow the clues through the Whispering Woods, the Sunken Shrine and the Clockwork Sky to the old spirit gate. Every morning the locals tell you rumors about tomorrow's prices. Some tell the truth and some don't. Use them to go **long or short with leverage** at Tomo's stall, against five agent traders who each have their own NEAR account. And you are not alone on the island: other players leave ghost notes, cast curses, and fight the rare world boss with you.
+You arrive on the Lantern Isles owing the Harbor Master 3,000 coins, with 300 coins and 10 days to pay. Someone has stolen the Great Lantern and the spirits have gone wild. Catch them, raise them and duel with them. Follow the clues through the Whispering Woods, the Sunken Shrine and the Clockwork Sky to the old spirit gate. Every morning the locals tell you rumors about tomorrow's prices. Some tell the truth and some don't. Use them to go **long or short with leverage** at Tomo's stall, against five agent traders who each have their own NEAR account. And you are not alone on the island: other players leave ghost notes, cast curses, and fight the rare world boss with you.
 
 Built for NEAR HACKATHON 2026, **Games With Real Economies** track.
 
@@ -56,7 +56,7 @@ On phones, tap **FULL SCREEN** at the top (on iPhone, use Share → Add to Home 
 | **Fishing legends** | Five one-of-one fish that only bite when their riddle is true (with a fire companion, on a day of The River, after the sky...). |
 | **The island** (I) | Live feed of every player, ghost notes, curses and charms, the world boss. |
 | **The bazaar** (Tomo) | Long or short on 12 goods with x1-x10 leverage; five agent traders bet beside you (AGENTS board). Sell your harvest, buy seeds, licenses and your own stall. |
-| **Life sim** | Farm 9 crops (rain waters them, frost kills them), mine jade, fish, give gifts until locals trust you, rebuild the town. Pay the Harbor Master 5,000 to finish the season; your spirits, story and farm carry over. |
+| **Life sim** | Farm 9 crops (rain waters them, frost kills them), mine jade, fish, give gifts until locals trust you, rebuild the town. Pay the Harbor Master 3,000 to finish the season; your spirits, story and farm carry over. |
 
 Controls: arrows or WASD, E or Space to interact, 1-9 seeds, B spirits, Q quests, I island, P profile, J journal, M music. On phones (sideways): the on-screen pad and A button.
 

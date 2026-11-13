@@ -212,6 +212,15 @@ body:not(.ingame) #hudL,body:not(.ingame) #objBox,body:not(.ingame) #topR,body:n
 .bar{height:.8em;border:2px solid var(--ink);border-radius:3px;margin-top:.3em}.bar div{height:100%;background:var(--gold)}
 #pad{position:absolute;inset:auto 0 0 0;height:0;display:none}
 #pad button{position:absolute;width:60px;height:60px;border-radius:50%;background:#0006;color:#fff;border:2px solid #fff8;font:18px monospace}
+#joy{position:absolute;left:22px;bottom:18px;width:150px;height:150px;border-radius:50%;touch-action:none;
+  background:conic-gradient(from 45deg,#555 0 89deg,#3a3a3a 89deg 91deg,#555 91deg 179deg,#3a3a3a 179deg 181deg,#555 181deg 269deg,#3a3a3a 269deg 271deg,#555 271deg 359deg,#3a3a3a 359deg);
+  box-shadow:0 4px 0 #0005,inset 0 0 0 2px #0003;opacity:.88}
+#joy .jA{position:absolute;width:0;height:0;border:8px solid transparent}
+#joy .jA.u{left:67px;top:8px;border-bottom:10px solid #eee;border-top:0}#joy .jA.d{left:67px;bottom:8px;border-top:10px solid #eee;border-bottom:0}
+#joy .jA.l{top:67px;left:8px;border-right:10px solid #eee;border-left:0}#joy .jA.r{top:67px;right:8px;border-left:10px solid #eee;border-right:0}
+#joyWell{position:absolute;left:39px;top:39px;width:72px;height:72px;border-radius:50%;background:radial-gradient(circle at 50% 45%,#3d3d3d,#2a2a2a);box-shadow:inset 0 3px 6px #0008}
+#joyKnob{position:absolute;left:45px;top:45px;width:60px;height:60px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#c4c4c4,#9c9c9c);border:2px solid #2a2a2a;box-shadow:0 3px 6px #0007;transition:transform .12s;pointer-events:none}
+#joy.on #joyKnob{transition:none}
 @media (pointer:coarse){.kh{display:none}#pad{display:block}body.panelOn #pad,body.dlgOn #pad{display:none}}
 #topR{right:1.2%;top:2%;display:flex;gap:.5em}
 #topR button{padding:.35em .6em;cursor:pointer}
@@ -290,10 +299,7 @@ body.dlgOn #hotbar,body.dlgOn #chainlog{display:none}
 </div>
 <div id="rotate">Turn your phone sideways to play.</div>
 <div id="pad">
-  <button data-k="ArrowUp" style="left:76px;bottom:146px">&#9650;</button>
-  <button data-k="ArrowLeft" style="left:14px;bottom:84px">&#9664;</button>
-  <button data-k="ArrowRight" style="left:138px;bottom:84px">&#9654;</button>
-  <button data-k="ArrowDown" style="left:76px;bottom:22px">&#9660;</button>
+  <div id="joy"><i class="jA u"></i><i class="jA d"></i><i class="jA l"></i><i class="jA r"></i><div id="joyWell"></div><div id="joyKnob"></div></div>
   <button data-k="e" style="right:24px;bottom:56px;width:78px;height:78px">A</button>
 </div>
 <script src="config.js"></script>

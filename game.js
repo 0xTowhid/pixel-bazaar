@@ -4,7 +4,7 @@
 
 const { TS, TW } = World;
 let VW = 960; const VH = 540; // logical canvas size; width follows the screen shape
-const SEASON_DAYS = 10, DAY_SECONDS = 240, START_COINS = 300, DEBT = 5000;
+const SEASON_DAYS = 10, DAY_SECONDS = 240, START_COINS = 300, DEBT = 3000;
 const STAKE_STEP = 50;
 
 const { GOODS, EVENTS, SOURCES } = Rules;
@@ -136,7 +136,7 @@ async function boot() {
   const firstTime = !safeGet('pb_intro|' + Backend.accountId);
   let tour = false;
   if (firstTime) { await playIntro(); tour = await showWelcome(); if (tour) tour = await showGuide(); safeSet('pb_intro|' + Backend.accountId, '1'); }
-  showPaper(() => { if (tour) startTour(); else toast('You owe the Harbor Master 5,000 coins. You have ' + fmt(S.coins) + ' and ' + (SEASON_DAYS - S.day + 1) + ' days.', 6); });
+  showPaper(() => { if (tour) startTour(); else toast('You owe the Harbor Master 3,000 coins. You have ' + fmt(S.coins) + ' and ' + (SEASON_DAYS - S.day + 1) + ' days.', 6); });
 }
 // What the chain does not keep (your notes on who lies, the tutorial step, price history) lives in this browser.
 const memKey = p => 'pb_mem|' + Backend.accountId + '|' + p.season;
@@ -162,7 +162,7 @@ async function newSeason() {
   const p = await Backend.player();
   S = freshState(p); makeCast();
   await beginDay(true);
-  showPaper(() => toast('New season. You owe 5,000 again. Your farm, seeds, friends and items are still yours.', 5));
+  showPaper(() => toast('New season. You owe 3,000 again. Your farm, seeds, friends and items are still yours.', 5));
 }
 async function sync() {
   const p = await Backend.player();
@@ -431,13 +431,13 @@ async function endSeason(won, early) {
   S.over = true;
   const score = Math.round(won ? S.coins + DEBT : S.coins);
   if (won && score > S.best) { S.best = score; safeSet('pb2_best', score); }
-  const share = won ? `I paid off a 5,000 coin debt in Pixel Bazaar on day ${S.day}, trading rumors with leverage on NEAR. Rita lied to me ${S.rec.rita.tot - S.rec.rita.ok} times. #NEARHackathon`
-    : `The Harbor Master took my stall in Pixel Bazaar. I got to ${fmt(score)} of 5,000. #NEARHackathon`;
+  const share = won ? `I paid off a 3,000 coin debt in Pixel Bazaar on day ${S.day}, trading rumors with leverage on NEAR. Rita lied to me ${S.rec.rita.tot - S.rec.rita.ok} times. #NEARHackathon`
+    : `The Harbor Master took my stall in Pixel Bazaar. I got to ${fmt(score)} of 3,000. #NEARHackathon`;
   let board = [];
   try { board = (await Backend.leaderboard()).slice(0, 5); } catch (e) {}
   const acct = Backend.accountId, link = Backend.explorerAccount(acct);
   openCard(`<div class="ntitle">${won ? 'DEBT PAID · THE STALL IS YOURS' : 'THE HARBOR MASTER TOOK YOUR STALL'}</div>
-    <div class="sub" style="margin:.6em 0">${won ? `You cleared 5,000 coins ${early ? 'early, on day ' + S.day : 'by the last day'}. Coins left over: ${fmt(Math.max(0, S.coins))}.` : `You reached ${fmt(score)} of 5,000 coins.`}
+    <div class="sub" style="margin:.6em 0">${won ? `You cleared 3,000 coins ${early ? 'early, on day ' + S.day : 'by the last day'}. Coins left over: ${fmt(Math.max(0, S.coins))}.` : `You reached ${fmt(score)} of 3,000 coins.`}
     ${Backend.mode !== 'local' ? `<br>Season result recorded for ${link ? `<a href="${link}" target="_blank" rel="noopener">${acct}</a>` : acct}.` : ''}</div>
     ${board.length ? '<div class="gname" style="font-size:1em;margin-top:.4em">LEADERBOARD</div>' + board.map((e, i) => `<div class="tr"><span>${i + 1}. ${e.account}</span><span class="${e.won ? 'up' : 'dn'}">${fmt(e.score / 100)}${e.won ? ' · paid day ' + e.day : ''}</span></div>`).join('') : ''}
     <div class="sub" style="margin-top:.8em">${share}</div>
@@ -453,7 +453,7 @@ const STEPS = [
   { text: 'Plant a seed behind your house and water it', target: () => at({ x: World.P.plots[0].x + .5, y: World.P.plots[0].y + .8 }) },
   { text: "Open a trade at Tomo's stall", target: () => NPCS.tomo },
   { text: 'Go home and sleep after 18:00', target: () => at(World.P.homeDoor) },
-  { text: 'Reach 5,000 coins, then see the Harbor Master', target: () => S.coins >= DEBT ? NPCS.master : null, chapter: true },
+  { text: 'Reach 3,000 coins, then see the Harbor Master', target: () => S.coins >= DEBT ? NPCS.master : null, chapter: true },
 ];
 function advance() { S.step = Math.min(S.step + 1, STEPS.length - 1); sfx('ok'); saveMem(); }
 
@@ -539,8 +539,8 @@ function talkTo(n) {
   if (n === NPCS.tomo) { say(n, 'Welcome! Bet on tomorrow, sell your harvest, or stock up on seeds.', [{ t: 'TRADE', fn: () => { closeDlg(); openTrade(); } }, { t: 'SELL', fn: () => { closeDlg(); openSell(); } }, { t: 'SEEDS', fn: () => { closeDlg(); openSeeds(); } }, { t: 'GIFT', fn: () => giftMenu('tomo') }, { t: 'LEAVE', fn: closeDlg }]); return; }
   if (n === NPCS.kaito) { const k = S.kaito; say(n, k ? `I went ${k.long ? 'long' : 'short'} ${GOODS[k.good].name.toLowerCase()} at dawn, five times over. Follow me if you dare. I'm right more often than not.` : 'Busy, busy.'); return; }
   if (n === NPCS.master) {
-    if (S.coins >= DEBT) { say(n, `${fmt(S.coins)} coins? Well, well. Pay the 5,000 and the stall is yours for good.`, [{ t: 'PAY 5,000', fn: async () => { closeDlg(); const r = await guarded('Paying the Harbor Master', () => Backend.call('pay_debt'), 'pay_debt'); if (r === null && Backend.mode === 'chain') return; await sync(); endSeason(true, true); } }, { t: 'NOT YET', fn: closeDlg }]); return; }
-    say(n, `You owe me 5,000 by the end of day ${SEASON_DAYS}. You have ${fmt(S.coins)}. Tick tock.`);
+    if (S.coins >= DEBT) { say(n, `${fmt(S.coins)} coins? Well, well. Pay the 3,000 and the stall is yours for good.`, [{ t: 'PAY 3,000', fn: async () => { closeDlg(); const r = await guarded('Paying the Harbor Master', () => Backend.call('pay_debt'), 'pay_debt'); if (r === null && Backend.mode === 'chain') return; await sync(); endSeason(true, true); } }, { t: 'NOT YET', fn: closeDlg }]); return; }
+    say(n, `You owe me 3,000 by the end of day ${SEASON_DAYS}. You have ${fmt(S.coins)}. Tick tock.`);
     return;
   }
   if (n === NPCS.fisher) {
@@ -755,6 +755,21 @@ addEventListener('keydown', e => {
   if (dlg && ['ArrowLeft', 'ArrowRight', 'a', 'd'].includes(k)) { dlg.sel = (dlg.sel + (k === 'ArrowRight' || k === 'd' ? 1 : dlg.choices.length - 1)) % dlg.choices.length; renderChoices(); sfx('menu'); }
 });
 addEventListener('keyup', e => { keys[e.key.length === 1 ? e.key.toLowerCase() : e.key] = false; });
+// the thumb stick (phones): drag the knob, it springs back when you let go
+const JOY = { on: false, x: 0, y: 0, id: null };
+(() => {
+  const el = $('joy'), knob = $('joyKnob'); if (!el) return;
+  const R = 52;
+  const move = e => {
+    const r = el.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    let x = e.clientX - cx, y = e.clientY - cy; const d = Math.hypot(x, y); if (d > R) { x = x / d * R; y = y / d * R; }
+    knob.style.transform = `translate(${x}px,${y}px)`; JOY.x = x / R; JOY.y = y / R;
+  };
+  const end = e => { if (e.pointerId !== JOY.id) return; JOY.on = false; JOY.x = JOY.y = 0; JOY.id = null; el.classList.remove('on'); knob.style.transform = ''; };
+  el.addEventListener('pointerdown', e => { e.preventDefault(); initAudio(); JOY.on = true; JOY.id = e.pointerId; el.classList.add('on'); el.setPointerCapture(e.pointerId); move(e); });
+  el.addEventListener('pointermove', e => { if (JOY.on && e.pointerId === JOY.id) move(e); });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) el.addEventListener(ev, end);
+})();
 document.querySelectorAll('#pad button').forEach(b => {
   const k = b.dataset.k;
   b.addEventListener('pointerdown', e => { e.preventDefault(); initAudio(); if (k === 'e') interact(); else if (k === 'j') openJournal(); else keys[k] = true; });
@@ -824,6 +839,7 @@ function update(dt) {
     if (keys.ArrowLeft || keys.a) dx -= sp; if (keys.ArrowRight || keys.d) dx += sp;
     if (keys.ArrowUp || keys.w) dy -= sp; if (keys.ArrowDown || keys.s) dy += sp;
     if (dx && dy) { dx *= .707; dy *= .707; }
+    if (JOY.on && Math.hypot(JOY.x, JOY.y) > .18) { dx = JOY.x * sp; dy = JOY.y * sp; } // the thumb stick: speed follows how far you push
   }
   if (player.auto) {
     const a = player.auto, vx = a.x - player.x, vy = a.y - player.y, d = Math.hypot(vx, vy), st = 120 * dt;

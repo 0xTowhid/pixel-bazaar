@@ -25,7 +25,7 @@ const INTRO = [
   { who: null, text: '...it went out.', lantern: 0, burst: true },
   { who: 'mei', name: 'MEI', color: '#ff9ad5', text: 'You can see them too? Nobody else can! The spirits are loose all over the island.', lantern: 0 },
   { who: 'mei', name: 'MEI', color: '#ff9ad5', text: "Someone stole the Lantern's flame. Without it the spirits run wild and the town falls apart.", lantern: 0 },
-  { who: 'master', name: 'HARBOR MASTER', color: '#ffd86b', text: 'Lantern or no Lantern, you still owe me 5,000 coins. Ten days.', lantern: 0 },
+  { who: 'master', name: 'HARBOR MASTER', color: '#ffd86b', text: 'Lantern or no Lantern, you still owe me 3,000 coins. Ten days.', lantern: 0 },
   { who: 'mei', name: 'MEI', color: '#ff9ad5', text: "Catch the spirits, find who took the flame, and I'll help you with that debt. Come find me at the market!", lantern: 0 },
 ];
 function playIntro() {
@@ -115,7 +115,7 @@ function showWelcome() {
 
 // ---------- 2b. how to play: what the game is, what to do, where the worlds are ----------
 const GUIDE = [
-  { t: 'YOUR STORY', f: 'LanternRed', b: `You arrive on the Lantern Isles owing the <b class="gold">Harbor Master 5,000 coins</b>. You have 300 coins and <b class="gold">10 days</b>.
+  { t: 'YOUR STORY', f: 'LanternRed', b: `You arrive on the Lantern Isles owing the <b class="gold">Harbor Master 3,000 coins</b>. You have 300 coins and <b class="gold">10 days</b>.
       <br><br>Someone stole the <b class="gold">Great Lantern</b>, and the island's spirits are running wild. Earn your coins, catch the spirits, and find out who took the flame.` },
   { t: 'ONE DAY', f: 'Owl', b: `<ol class="gList"><li><b>Morning:</b> the paper and the locals give you <b>rumors</b> about tomorrow's prices. Some lie.</li>
       <li><b>Day:</b> farm, fish, mine, catch spirits, sell at <b>Tomo's stall</b>, bet on the rumors, do your 3 daily quests.</li>
@@ -165,7 +165,7 @@ const worldTarget = (fn, w = 90, h = 110) => () => { const p = fn(); if (!p) ret
 const TOUR = [
   { t: 'YOUR GOAL', d: 'Your current goal is always written here, and a yellow arrow on screen points the way. Tap it (or press Q) for the story and the daily quests.', at: domTarget('#objBox') },
   { t: 'THAT IS YOU', d: 'Move with the arrow keys or WASD (on phones, the pad). Press E or Space (A on phones) to talk, farm, fish and catch spirits.', at: worldTarget(() => player) },
-  { t: 'COINS AND DEBT', d: 'You start with 300 coins and owe the Harbor Master 5,000 within 10 days. This bar fills as you get closer. Pay him to win the season.', at: domTarget(() => $('hudL').children[2]) },
+  { t: 'COINS AND DEBT', d: 'You start with 300 coins and owe the Harbor Master 3,000 within 10 days. This bar fills as you get closer. Pay him to win the season.', at: domTarget(() => $('hudL').children[2]) },
   { t: 'ENERGY', d: 'Farming, mining, fishing and catching spirits use energy. It refills every night when you sleep.', at: domTarget(() => $('hudL').children[3]) },
   { t: 'SEEDS', d: 'Pick a seed with keys 1-9 (or tap it). Plant and water it on the plots behind your house, then sell the harvest.', at: domTarget('#hotbar') },
   { t: 'MEI', d: 'The townsfolk hear rumors about tomorrow. Some tell the truth, some do not. Make friends: gifts fill their hearts.', at: worldTarget(() => NPCS.mei) },
