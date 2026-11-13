@@ -415,9 +415,10 @@ function showNight(ev, prev, results, truths, notes, before, after, lost, finish
   const chg = Math.round((S.price[g.id] / prev[g.id] - 1) * 100);
   const diff = Math.round(after - before);
   sfx(diff >= 0 ? 'success' : 'alert');
-  const pos = results.length ? results.map(r => `<div class="pos ${r.liq ? 'liq' : r.pnl >= 0 ? 'win' : 'loss'}">
-      <span>${r.dir > 0 ? 'LONG' : 'SHORT'} ${GOOD(r.good).name.toUpperCase()} x${r.lev} · ${fmt(r.stake)}</span>
-      <b>${r.liq ? '-' + fmt(r.stake) : (r.pnl >= 0 ? '+' : '') + fmt(r.pnl)}</b>${r.liq ? '<i class="stamp">LIQUIDATED</i>' : ''}</div>`).join('')
+  // a win is green, a loss red; a good the night's event did not touch pays nothing either way (your stake comes back)
+  const pos = results.length ? results.map(r => { const even = !r.liq && Math.round(r.pnl) === 0; return `<div class="pos ${r.liq ? 'liq' : even ? 'even' : r.pnl > 0 ? 'win' : 'loss'}">
+      <span>${r.dir > 0 ? 'LONG' : 'SHORT'} ${GOOD(r.good).name.toUpperCase()} x${r.lev} · ${fmt(r.stake)}${even ? '<i class="sub" style="display:block;font-style:normal">price did not move · stake back</i>' : ''}</span>
+      <b>${r.liq ? '-' + fmt(r.stake) : even ? '±0' : (r.pnl > 0 ? '+' : '−') + fmt(Math.abs(r.pnl))}</b>${r.liq ? '<i class="stamp">LIQUIDATED</i>' : ''}</div>`; }).join('')
     : '<div class="sub">No positions tonight.</div>';
   const who = truths.length ? truths.map(t => `<span style="color:${SOURCES[t.k].color}">${SOURCES[t.k].name}</span> <span class="${t.right ? 'up' : 'dn'}">${t.right ? 'right' : 'wrong'}</span>`).join(' &nbsp; ') : 'You heard no rumors today.';
   openCard(`<div class="night">
