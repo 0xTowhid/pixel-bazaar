@@ -15,7 +15,7 @@ async function pollIsland(force) {
     ISL.notes[w] = notes || []; ISL.boss = boss;
     const fresh = (feed || []).filter(f => f.at > ISL.seenFeed && f.who !== Backend.accountId);
     if (fresh.some(f => f.who === Backend.contractId)) sfx('alert');
-    if (ISL.seenFeed && fresh.length) { const f = fresh[fresh.length - 1]; toast(f.who === Backend.contractId ? `⚠ ${f.text} Press I.` : `✦ ${shortName(f.who)} ${shortText(f.text)}`, 5); }
+    if (ISL.seenFeed && fresh.length) { $('iDot').classList.add('on'); const f = fresh[fresh.length - 1]; toast(f.who === Backend.contractId ? `⚠ ${f.text} Press I.` : `✦ ${shortName(f.who)} ${shortText(f.text)}`, 5); }
     ISL.feed = feed || []; if (ISL.feed.length) ISL.seenFeed = Math.max(ISL.seenFeed, ISL.feed[ISL.feed.length - 1].at);
     else if (!ISL.seenFeed) ISL.seenFeed = 1;
     bossBanner();
@@ -133,7 +133,7 @@ function curseHTML() {
 
 // ---------- the panel (I) ----------
 async function openIsland(tab) {
-  if (tab) ISL.tab = tab;
+  if (tab) ISL.tab = tab; $('iDot').classList.remove('on');
   if (!$('island').classList.contains('on')) { await pollIsland(true); }
   const el = $('island'), t = ISL.tab;
   const feed = ISL.feed.slice().reverse().map(f => `<div class="fRowI"><span class="sub">${ago(f.at)}</span> ${f.who === Backend.contractId ? `<b class="dn">⚠ ${f.text}</b>` : `<b class="${f.who === Backend.accountId ? 'gold' : 'cy'}">${f.who === Backend.accountId ? 'You' : shortName(f.who)}</b> ${shortText(f.text)}`}</div>`).join('') || '<div class="sub">Quiet so far. Catch something rare, beat a rival or pay the debt and the whole island hears about it.</div>';

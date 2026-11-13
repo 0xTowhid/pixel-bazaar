@@ -73,7 +73,7 @@ button{font:inherit;color:inherit}
 .tr{display:flex;justify-content:space-between;gap:1em;padding:.4em 0;border-top:2px dashed #3d3363}
 #journal{width:min(92%,30em)}
 #profile{width:min(94%,34em)}
-body:not(.ingame) #hudL,body:not(.ingame) #objBox,body:not(.ingame) #topR,body:not(.ingame) #hotbar,body:not(.ingame) #pad{display:none!important}
+body:not(.ingame) #hudL,body:not(.ingame) #objBox,body:not(.ingame) #topR,body:not(.ingame) #menu,body:not(.ingame) #hotbar,body:not(.ingame) #pad{display:none!important}
 #cine{position:absolute;inset:0;display:none;z-index:70;cursor:pointer}#cine.on{display:block}
 #fxcv{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated}
 #cine .lb{position:absolute;left:0;right:0;height:9%;background:#000}#cine .lb.top{top:0}#cine .lb.bot{bottom:0}
@@ -216,18 +216,27 @@ body:not(.ingame) #hudL,body:not(.ingame) #objBox,body:not(.ingame) #topR,body:n
 #pad{position:absolute;inset:auto 0 0 0;height:0;display:none}
 #pad button{position:absolute;width:60px;height:60px;border-radius:50%;background:#0006;color:#fff;border:2px solid #fff8;font:18px monospace}
 #joy{position:absolute;left:22px;bottom:18px;width:150px;height:150px;border-radius:50%;touch-action:none;
-  background:conic-gradient(from 45deg,#555 0 89deg,#3a3a3a 89deg 91deg,#555 91deg 179deg,#3a3a3a 179deg 181deg,#555 181deg 269deg,#3a3a3a 269deg 271deg,#555 271deg 359deg,#3a3a3a 359deg);
-  box-shadow:0 4px 0 #0005,inset 0 0 0 2px #0003;opacity:.88}
+  background:conic-gradient(from 45deg,#ffffff2e 0 89deg,#ffffff10 89deg 91deg,#ffffff2e 91deg 179deg,#ffffff10 179deg 181deg,#ffffff2e 181deg 269deg,#ffffff10 269deg 271deg,#ffffff2e 271deg 359deg,#ffffff10 359deg);
+  border:1.5px solid #ffffff55;box-shadow:none;opacity:.75}
 #joy .jA{position:absolute;width:0;height:0;border:8px solid transparent}
-#joy .jA.u{left:67px;top:8px;border-bottom:10px solid #eee;border-top:0}#joy .jA.d{left:67px;bottom:8px;border-top:10px solid #eee;border-bottom:0}
-#joy .jA.l{top:67px;left:8px;border-right:10px solid #eee;border-left:0}#joy .jA.r{top:67px;right:8px;border-left:10px solid #eee;border-right:0}
-#joyWell{position:absolute;left:39px;top:39px;width:72px;height:72px;border-radius:50%;background:radial-gradient(circle at 50% 45%,#3d3d3d,#2a2a2a);box-shadow:inset 0 3px 6px #0008}
-#joyKnob{position:absolute;left:45px;top:45px;width:60px;height:60px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#c4c4c4,#9c9c9c);border:2px solid #2a2a2a;box-shadow:0 3px 6px #0007;transition:transform .12s;pointer-events:none}
+#joy .jA.u{left:67px;top:8px;border-bottom:10px solid #ffffffcc;border-top:0}#joy .jA.d{left:67px;bottom:8px;border-top:10px solid #ffffffcc;border-bottom:0}
+#joy .jA.l{top:67px;left:8px;border-right:10px solid #ffffffcc;border-left:0}#joy .jA.r{top:67px;right:8px;border-left:10px solid #ffffffcc;border-right:0}
+#joyWell{position:absolute;left:39px;top:39px;width:72px;height:72px;border-radius:50%;background:#00000022;box-shadow:inset 0 2px 4px #0003}
+#joyKnob{position:absolute;left:45px;top:45px;width:60px;height:60px;border-radius:50%;background:#ffffff8c;border:1.5px solid #ffffffb0;box-shadow:0 2px 4px #0003;transition:transform .12s;pointer-events:none}
 #joy.on #joyKnob{transition:none}
 @media (pointer:coarse){.kh{display:none}#pad{display:block}body.panelOn #pad,body.dlgOn #pad{display:none}}
-#topR{right:1.2%;top:2%;display:flex;gap:.5em}
-#topR button{padding:.35em .6em;cursor:pointer}
-@media (max-width:1400px){#topR{gap:.25em}#topR button{padding:.3em .42em;font-size:.82em}#topR .kh{display:none}}
+#topR{right:1.2%;top:2%;display:flex;gap:.45em}
+#topR .dk{width:3.1em;height:3.1em;border-radius:50%;background:var(--pan);border:3px solid var(--ink);display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer;padding:0;color:var(--ink)}
+#topR .dk img{width:2em;height:2em;image-rendering:pixelated}#topR .dk b{font-size:1.35em;font-weight:normal}
+#topR .dk span{position:absolute;bottom:-1.3em;font-size:.55em;color:var(--ink);background:#1c1630cc;padding:0 .3em;border-radius:3px;white-space:nowrap}
+#topR .dk.on{border-color:var(--gold)}
+#iDot{position:absolute;top:-4px;right:-4px;width:12px;height:12px;border-radius:50%;background:#ff4d6d;border:2px solid var(--pan);display:none}#iDot.on{display:block}
+#menu{right:1.2%;top:calc(2% + 3.9em);display:none;z-index:41;background:#1c1630f2;border:3px solid var(--ink);border-radius:12px;padding:.7em;grid-template-columns:repeat(4,5.8em);gap:.5em}
+#menu.on{display:grid}
+#menu .mT{background:var(--pan2);border:2px solid transparent;border-radius:10px;padding:.5em .2em;color:var(--ink);font:inherit;font-size:.72em;display:flex;flex-direction:column;align-items:center;gap:.35em;cursor:pointer}
+#menu .mT:hover{border-color:var(--gold)}#menu .mT img{width:2.6em;height:2.6em;image-rendering:pixelated}#menu .mT .g{width:2.6em;height:2.6em;display:flex;align-items:center;justify-content:center;font-size:1.6em}
+#menu .mT b{font-weight:normal}#menu .mT i{font-style:normal;color:var(--mut);font-size:.85em}
+@media (max-width:900px){#topR .dk{width:3.3em;height:3.3em}#topR .dk span{display:none}#topR .dk img{width:2.2em;height:2.2em}#menu{top:calc(2% + 4.2em);grid-template-columns:repeat(4,5.4em)}}
 #busy{left:50%;top:45%;transform:translate(-50%,-50%);padding:.7em 1.2em;display:none;color:var(--gold);z-index:5}
 #chainlog{left:1.2%;bottom:3%;font-size:clamp(7px,1vw,11px);display:flex;flex-direction:column-reverse;gap:.25em;max-width:40%;pointer-events:auto}
 #chainlog div{background:#1c1630cc;padding:.25em .5em;border-radius:4px;transition:opacity .6s}
@@ -272,7 +281,22 @@ body.dlgOn #hotbar,body.dlgOn #chainlog{display:none}
     <div class="box"><span>ENERGY</span><div class="debtbar"><div id="enFill" style="background:#78e678"></div></div></div>
   </div>
   <div id="objBox" class="ui box"><span id="obj"></span></div>
-  <div id="topR" class="ui"><button class="box" id="wBtn">WALLET</button><button class="box" id="iBtn">ISLAND<span class="kh"> (I)</span></button><button class="box" id="sBtn">SPIRITS<span class="kh"> (B)</span></button><button class="box" id="pBtn">PROFILE<span class="kh"> (P)</span></button><button class="box" id="jBtn">JOURNAL<span class="kh"> (J)</span></button><button class="box" id="fsBtn">FULL SCREEN</button><button class="box" id="mute">♪ ON</button></div>
+  <div id="topR" class="ui">
+    <button class="dk" id="sBtn" title="Spirits (B)"><img src="assets/spirits/f_Flam.png" alt=""><span>SPIRITS</span></button>
+    <button class="dk" id="iBtn" title="Island (I)"><img src="assets/spirits/f_Skull.png" alt=""><span>ISLAND</span><i class="dot" id="iDot"></i></button>
+    <button class="dk" id="wBtn" title="Wallet"><img src="assets/items/GoldCoin.png" alt=""><span>WALLET</span></button>
+    <button class="dk" id="mBtn" title="Menu (Tab)"><b>☰</b><span>MENU</span></button>
+  </div>
+  <div id="menu" class="ui">
+    <button class="mT" data-m="spirits"><img src="assets/spirits/f_Flam.png" alt=""><b>SPIRITS</b><i>key B</i></button>
+    <button class="mT" data-m="island"><img src="assets/spirits/f_Skull.png" alt=""><b>ISLAND</b><i>key I</i></button>
+    <button class="mT" data-m="wallet"><img src="assets/items/GoldCoin.png" alt=""><b>WALLET</b><i>&nbsp;</i></button>
+    <button class="mT" data-m="quests"><img src="assets/spirits/f_LanternRed.png" alt=""><b>QUESTS</b><i>key Q</i></button>
+    <button class="mT" id="pBtn"><img src="assets/spirits/f_Owl.png" alt=""><b>PROFILE</b><i>key P</i></button>
+    <button class="mT" id="jBtn"><img src="assets/spirits/f_Eye2.png" alt=""><b>JOURNAL</b><i>key J · guide</i></button>
+    <button class="mT" id="fsBtn"><div class="g">⛶</div><b id="fsTxt">FULL SCREEN</b><i>&nbsp;</i></button>
+    <button class="mT" id="mute"><div class="g">♪</div><b id="muteTxt">MUSIC ON</b><i>key M</i></button>
+  </div>
   <div id="zone" class="ui"></div>
   <div id="hint" class="ui box"></div>
   <div id="toast" class="ui box"></div>

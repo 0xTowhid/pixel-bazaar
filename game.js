@@ -498,7 +498,7 @@ function closeDlg() { dlg = null; $('dialog').classList.remove('on'); }
 const CLOSERS = {
   trade: () => closeTrade(), journal: () => $('journal').classList.remove('on'), profile: () => $('profile').classList.remove('on'),
   book: () => $('book').classList.remove('on'), quests: () => $('quests').classList.remove('on'), fate: () => $('fate').classList.remove('on'),
-  island: () => closeIsland(), duel: () => { if (!$('dStage') && !document.querySelector('#duel .dWait')) closeDuel(); }, wallet: () => typeof closeWallet === 'function' && closeWallet(),
+  menu: () => toggleMenu(false), island: () => closeIsland(), duel: () => { if (!$('dStage') && !document.querySelector('#duel .dWait')) closeDuel(); }, wallet: () => typeof closeWallet === 'function' && closeWallet(),
 };
 document.addEventListener('pointerdown', e => {
   if (!S || busyN) return;
@@ -506,6 +506,7 @@ document.addEventListener('pointerdown', e => {
   if (t.closest && (t.closest('.nws-modal-wrapper,.modal-wrapper,#netErr,#tour,#cine,#busy') )) return;
   for (const [id, close] of Object.entries(CLOSERS)) {
     const el = $(id);
+    if (id === 'menu' && t.closest && t.closest('#mBtn')) continue; // the menu button toggles it itself
     if (el && el.classList.contains('on') && !el.contains(t)) { close(); e.preventDefault(); e.stopPropagation(); sfx('menu'); return; }
   }
   if (dlg && !$('dialog').contains(t) && !t.closest('#pad,.padBtn')) { closeDlg(); e.preventDefault(); e.stopPropagation(); return; }
@@ -743,13 +744,14 @@ addEventListener('keydown', e => {
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; keys[k] = true;
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
   if (k === 'e' || k === ' ' || k === 'Enter') interact();
-  if (k === 'Escape') { closeTrade(); $('journal').classList.remove('on'); $('profile').classList.remove('on'); $('book').classList.remove('on'); $('quests').classList.remove('on'); if (DUEL.on && !$('dStage')) closeDuel(); closeIsland(); closeWallet(); if (dlg) closeDlg(); }
+  if (k === 'Escape') { closeTrade(); $('journal').classList.remove('on'); $('profile').classList.remove('on'); $('book').classList.remove('on'); $('quests').classList.remove('on'); if (DUEL.on && !$('dStage')) closeDuel(); closeIsland(); closeWallet(); toggleMenu(false); if (dlg) closeDlg(); }
   if (k === 'q' && S && S.player && !dlg && !$('card').classList.contains('on')) $('quests').classList.contains('on') ? $('quests').classList.remove('on') : openQuests();
   if (k === 'i' && S && S.player && !dlg && !$('card').classList.contains('on')) $('island').classList.contains('on') ? closeIsland() : openIsland();
   if (k === 'b' && S && S.player && !dlg && !$('card').classList.contains('on')) $('book').classList.contains('on') ? $('book').classList.remove('on') : openBook();
   if (k === 'j' && !dlg && !$('card').classList.contains('on')) $('journal').classList.contains('on') ? $('journal').classList.remove('on') : openJournal();
   if (k === 'p' && S && !dlg && !(e.target && e.target.tagName === 'INPUT') && !$('card').classList.contains('on')) $('profile').classList.contains('on') ? $('profile').classList.remove('on') : openProfile();
   if (k === 'm') toggleMusic();
+  if (e.key === 'Tab' && S && S.player) { e.preventDefault(); toggleMenu(); }
   if (k === 'f' && !(e.target && e.target.tagName === 'INPUT')) toggleFull();
   if (S && /^[1-9]$/.test(k) && !dlg && !uiOpen()) { S.seedSel = +k - 1; renderHotbar(); sfx('menu'); }
   if (dlg && ['ArrowLeft', 'ArrowRight', 'a', 'd'].includes(k)) { dlg.sel = (dlg.sel + (k === 'ArrowRight' || k === 'd' ? 1 : dlg.choices.length - 1)) % dlg.choices.length; renderChoices(); sfx('menu'); }
@@ -781,11 +783,18 @@ $('sBtn').onclick = () => { initAudio(); if (S && S.player) openBook(); };
 $('iBtn').onclick = () => { initAudio(); if (S && S.player) openIsland(); };
 $('wBtn').onclick = () => { initAudio(); if (S && S.player) openWallet(); };
 $('bossBar').onclick = () => { if (S && S.player) openIsland('boss'); };
+// the menu: everything that is not one of the three quick buttons
+function toggleMenu(on) { const m = $('menu'); on = on === undefined ? !m.classList.contains('on') : on; m.classList.toggle('on', on); $('mBtn').classList.toggle('on', on); if (on) sfx('menu'); }
+$('mBtn').onclick = e => { e.stopPropagation(); initAudio(); if (S && S.player) toggleMenu(); };
+$('menu').addEventListener('click', e => {
+  const b = e.target.closest('.mT'); if (!b) return; toggleMenu(false); initAudio();
+  const m = b.dataset.m; if (m === 'spirits') openBook(); else if (m === 'island') openIsland(); else if (m === 'wallet') openWallet(); else if (m === 'quests') openQuests();
+}, true);
 $('objBox').onclick = () => { initAudio(); if (S && S.player) openQuests(); };
 // Full screen: the Fullscreen API where the browser has it (Android, desktop); on iPhone, add to the home screen.
 const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
 const standalone = () => matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone;
-function fsLabel() { $('fsBtn').textContent = fsEl() ? '⛶ EXIT' : (matchMedia('(max-width:1400px)').matches ? '⛶' : 'FULL SCREEN'); $('fsBtn').style.display = !fsEl() && standalone() ? 'none' : ''; }
+function fsLabel() { $('fsTxt').textContent = fsEl() ? 'EXIT FULL' : 'FULL SCREEN'; $('fsBtn').style.display = !fsEl() && standalone() ? 'none' : ''; }
 async function toggleFull() {
   const d = document.documentElement;
   try {
@@ -800,7 +809,7 @@ $('fsBtn').onclick = () => { initAudio(); toggleFull(); };
 document.addEventListener('fullscreenchange', () => { fsLabel(); setTimeout(() => { fit(); layoutTop(); }, 100); });
 document.addEventListener('webkitfullscreenchange', fsLabel);
 fsLabel();
-function toggleMusic() { musicOn = !musicOn; $('mute').textContent = musicOn ? '♪ ON' : '♪ OFF'; if (music) musicOn ? music.play().catch(() => {}) : music.pause(); }
+function toggleMusic() { musicOn = !musicOn; $('muteTxt').textContent = musicOn ? 'MUSIC ON' : 'MUSIC OFF'; if (music) musicOn ? music.play().catch(() => {}) : music.pause(); }
 
 // ---------- loop ----------
 const cv = $('cv'), ctx = cv.getContext('2d');
@@ -821,6 +830,8 @@ function toScreen(wx, wy) {
 function layoutTop() {
   const ob = $('objBox'); if (!ob || !$('stage') || !$('hudL') || !$('topR')) return;
   const st = $('stage').getBoundingClientRect();
+  { const r = cv.getBoundingClientRect(), tb = $('topR').getBoundingClientRect(); // the minimap sits just under the round buttons
+    if (r.height && tb.height) { layoutTop.miniY = Math.max(56, Math.round((tb.bottom - r.top) * VH / r.height + 14)); $('zone').style.top = (tb.bottom - st.top + (102 + 18) * r.height / VH) + 'px'; } }
   const l = $('hudL').getBoundingClientRect().right - st.left, r = $('topR').getBoundingClientRect().left - st.left;
   ob.style.left = ((l + r) / 2) + 'px'; ob.style.maxWidth = Math.max(120, r - l - 16) + 'px';
 }
@@ -927,7 +938,7 @@ function draw() {
     }
   }
   // minimap
-  const mw = 176, mh = 102, mx = VW - mw - 12, my = 56;
+  const mw = 176, mh = 102, mx = VW - mw - 12, my = layoutTop.miniY || 56;
   ctx.globalAlpha = .92; ctx.drawImage(MINI, mx, my); ctx.globalAlpha = 1;
   ctx.strokeStyle = '#fff3d6'; ctx.lineWidth = 2; ctx.strokeRect(mx, my, mw, mh);
   const sx = mw / MWp, sy = mh / MHp;
