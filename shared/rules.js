@@ -66,7 +66,8 @@
     x10_survivor: 'Won a x10 trade', faded_rita: 'Faded Rita and won', beat_kaito: 'Beat Kaito this season', debt_free: 'Paid the debt',
     early_bird: 'Paid the debt by day 6', restorer: 'Finished a town project', best_friend: '5 hearts with a local',
     first_spirit: 'Caught your first spirit', spirit_tamer: 'Caught 10 kinds of spirit', shiny_hunter: 'Caught a shiny spirit',
-    legend_tamer: 'Raised a legendary spirit', wallet_linked: 'Linked a NEAR wallet', lantern_seeker: 'Solved all three world puzzles', lantern_keeper: 'Brought the Lantern back', spirit_champion: 'Beat the Great Spirit in a duel', fishing_legend: 'Caught all five legendary fish', island_oracle: '10 people believed your notes', boss_slayer: 'Fought a world boss to the end',
+    legend_tamer: 'Raised a legendary spirit', wallet_linked: 'Linked a NEAR wallet', lantern_seeker: 'Solved all three world puzzles', lantern_keeper: 'Brought the Lantern back',
+    stall_owner: 'Took a stall from a baron', bazaar_keeper: 'Lantern Keeper: holds all five stalls and finished the story', spirit_champion: 'Beat the Great Spirit in a duel', fishing_legend: 'Caught all five legendary fish', island_oracle: '10 people believed your notes', boss_slayer: 'Fought a world boss to the end',
   };
   // ---- spirits (same table as the contract) ----
   const ELEMENTS = [
@@ -258,12 +259,38 @@
   };
   // ---- bazaar agents: traders with their own NEAR accounts and coin ledgers, settled on chain every night ----
   const AGENTS = [
-    { id: 'kaito', name: 'Kaito the Whale', sheet: 'kaito', style: 'Big money. Reads the market right about two times in three.', stake: 200 },
-    { id: 'rita', name: 'Rita', sheet: 'rita', style: 'Shorts what she lies about. Only trades on the days she lies.', stake: 100 },
-    { id: 'pell', name: 'Granny Pell', sheet: 'v1', style: 'A contrarian. Always bets against Kaito, on the same good.', stake: 100 },
-    { id: 'bolt', name: 'Bolt-9', sheet: 'v2', style: "A trading bot. Follows Mei's gossip blindly, every single day.", stake: 100 },
-    { id: 'luna', name: 'Luna Moonsong', sheet: 'seer', style: 'Reads the stars. Right about seven times in ten.', stake: 100 },
+    { id: 'kaito', name: 'Kaito the Whale', sheet: 'kaito', style: 'Big money. Reads the market right about two times in three.', stake: 200, stall: 0, target: 300, peek: 30 },
+    { id: 'rita', name: 'Rita', sheet: 'rita', style: 'Shorts what she lies about. Only trades on the days she lies.', stake: 100, stall: 2, target: 220, peek: 20 },
+    { id: 'pell', name: 'Granny Pell', sheet: 'v1', style: 'A contrarian. Always bets against Kaito, on the same good.', stake: 100, stall: 4, target: 150, peek: 10 },
+    { id: 'bolt', name: 'Bolt-9', sheet: 'v2', style: "A trading bot. Follows Mei's gossip blindly, every single day.", stake: 100, stall: 1, target: 200, peek: 10 },
+    { id: 'luna', name: 'Luna Moonsong', sheet: 'seer', style: 'Reads the stars. Right about seven times in ten.', stake: 100, stall: 11, target: 400, peek: 25 },
   ];
+  // ---- night crews, calls and baron stalls (same numbers as the contract) ----
+  const CREW = { MAX: 3, XP: 8, STALL_RENT: 25, CALL_REWARD: 15, GRUDGE_CHANCE: 77, FARM_GOODS: [4, 5, 7, 8, 9],
+    JOBS: [ // by element
+      { job: 'GUARD', verb: 'guards your barn', brings: 'a charm (blocks a curse)' }, { job: 'FISH', verb: 'casts at the pier', brings: 'fish' },
+      { job: 'COURIER', verb: 'runs deliveries', brings: 'coins' }, { job: 'MINE', verb: 'digs in the hills', brings: 'ore, maybe jade' },
+      { job: 'FARM', verb: 'tends the fields', brings: 'vegetables' }, { job: 'SEEK', verb: 'searches the old ruins', brings: 'a chance of a lantern shard' },
+      { job: 'PROWL', verb: 'prowls the docks', brings: 'coins' } ] };
+  // what a crew spirit brings in a night: [[good, qty]...], coins, shard, charm, note (0 normal, 1 halved, 2 doubled)
+  function crewWork(el, lv, rar, shiny, event, r, r2, charms) {
+    const m = (el === 1 && event === 0) ? 50 : (el === 1 && event === 1) ? 200 : (el === 4 && (event === 3 || event === 5)) ? 50 : (el === 4 && (event === 7 || event === 9)) ? 200 : (el === 2 && event === 6) ? 200 : 100;
+    const note = m < 100 ? 1 : m > 100 ? 2 : 0, sh = q => shiny ? Math.floor((q * 3 + 1) / 2) : q, adj = q => sh(Math.floor(q * m / 100));
+    switch (el) {
+      case 3: { const g = [[12, adj(1 + Math.floor((lv + r % 3) / 4))]]; if (r2 < Math.min(220, 48 + 16 * rar + 3 * lv)) g.push([11, sh(1)]); return [g, 0, false, false, note]; }
+      case 1: return [[[1, adj(1 + Math.floor((lv + r % 4) / 3))]], 0, false, false, note];
+      case 4: return [[[CREW.FARM_GOODS[r2 % 5], adj(1 + Math.floor((lv + r % 3) / 4))]], 0, false, false, note];
+      case 0: return charms < 3 ? [[], 0, false, true, note] : [[], sh(10), false, false, note];
+      case 2: return [[], adj(15 + 3 * lv + r % 10), false, false, note];
+      case 5: return r < 12 + 6 * rar + lv ? [[], 0, true, false, note] : [[], sh(10 + r % 10), false, false, note];
+      default: return [[], sh(10 + 2 * lv + r % 20), false, false, note];
+    }
+  }
+  // the agents' moves as they go into the day's commitment (same as encode_moves in the contract)
+  const encodeMoves = moves => moves.map(m => `${m.npc}:${m.good}:${m.long ? 'L' : 'S'}`).join(',');
+  const agentOf = npc => AGENTS.findIndex(a => a.id === String(npc).split('.')[0]);
+  // what a baron needs this season to keep their stall (cents)
+  const baronBar = (p, k) => Math.trunc(AGENTS[k].target * 100 * (100 + 50 * ((p.baron_lv || [])[k] || 0)) / 100) + ((p.baron_score || [])[k] || 0);
   // the new agents' bets for a day (Kaito and Rita are planned in planDay)
   function agentMoves(rng, truth, rumors, kaito) {
     const bet = ev => ({ good: EVENTS[ev].fx[0][0], long: EVENTS[ev].up });
@@ -271,6 +298,6 @@
     const luna = rng() < .7 ? truth : Math.floor(rng() * EVENTS.length);
     return { pell: { good: kaito.good, long: !kaito.long }, bolt: bet(mei), luna: bet(luna) };
   }
-  const Rules = { AGENTS, agentMoves, ISLAND, LEGENDS, FOES, DUEL_ENERGY, beats, fighter, duel, GOODS, CROPS, EVENTS, SOURCES, NPC_IDS, ITEMS, PROJECTS, BADGES, ENERGY, ELEMENTS, RARITY, SPECIES, SPAWN, ZONES, CATCH_CHANCE, ENCOUNTERS_A_DAY, FEEDS_A_DAY, spiritLevel, FATE, QUESTS, CHAPTERS, mulberry32, seasonAccuracy, planDay, encodeRumors, decodeRumors, rumorRight, evIndex, hearts };
+  const Rules = { AGENTS, agentMoves, CREW, crewWork, encodeMoves, agentOf, baronBar, ISLAND, LEGENDS, FOES, DUEL_ENERGY, beats, fighter, duel, GOODS, CROPS, EVENTS, SOURCES, NPC_IDS, ITEMS, PROJECTS, BADGES, ENERGY, ELEMENTS, RARITY, SPECIES, SPAWN, ZONES, CATCH_CHANCE, ENCOUNTERS_A_DAY, FEEDS_A_DAY, spiritLevel, FATE, QUESTS, CHAPTERS, mulberry32, seasonAccuracy, planDay, encodeRumors, decodeRumors, rumorRight, evIndex, hearts };
   if (typeof module !== 'undefined' && module.exports) module.exports = Rules; else root.Rules = Rules;
 })(typeof window !== 'undefined' ? window : globalThis);
