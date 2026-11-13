@@ -97,6 +97,19 @@ function bindCalls(el) {
   });
 }
 
+// ---- talking to one stall: a small dialog, not the whole board ----
+function stallTalk(k) {
+  const a = Rules.AGENTS[k], g = stallGood(k), p = S.player, h = heldStall(k);
+  const mine = (p.stall_score || [])[k] / 100 || 0, bar = Rules.baronBar(p, k) / 100;
+  const line = h
+    ? `Your ${g.name} stall (level ${h[2]}). ${a.name} wants it back: keep your ${g.name.toLowerCase()} score above ${fmt(bar)} this season. You have ${fmt(mine)}.`
+    : `${a.name}'s ${g.name} stall. Out-trade the baron on ${g.name.toLowerCase()}: you have ${fmt(mine)} of ${fmt(bar)}. Beat it by season's end (and pay your debt) and the stall NFT is yours, with rent every night.`;
+  say({ name: h ? `Your ${g.name} stall` : `${a.name} · ${g.name} stall`, sheet: h ? null : a.sheet, color: '#ffd86b' }, line, [
+    { t: `TRADE ${g.name.toUpperCase()}`, fn: () => { closeDlg(); S.sel = GOODS.indexOf(g); openTrade(); } },
+    { t: 'ALL STALLS', fn: () => { closeDlg(); openIsland('barons'); } },
+    { t: 'BYE', fn: closeDlg }]);
+}
+
 // ---- the barons: who holds which stall, and how close you are ----
 function baronsHTML() {
   const p = S.player, held = (S.stalls || []).length;

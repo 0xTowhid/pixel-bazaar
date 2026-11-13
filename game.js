@@ -732,7 +732,7 @@ function interact() {
     else say(o.kind === 'sign' ? { name: 'Signpost', color: '#d9b88a' } : who, o.text + (o.kind === 'tablet' ? puzzleHint() : ''));
   }
   else if (t.kind === 'board') openIsland('calls');
-  else if (t.kind === 'stall') openIsland('barons');
+  else if (t.kind === 'stall') stallTalk(t.k);
   else if (t.kind === 'home') {
     const hour = 6 + S.t / DAY_SECONDS * 18;
     if (hour < 18) {
