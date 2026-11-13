@@ -52,7 +52,47 @@ function enterWorld(id) {
     switchWorld(id);
     const w = Worlds.get(id, IMG);
     toast(w.name.toUpperCase() + (id === 'woods' && !hasFireLead() ? ' · it is dark: a fire spirit as your companion lights the way' : ''), 4);
+    worldCard(id, false);
   });
+}
+// ---------- "what is here" card, shown on your first visit to a world each day ----------
+const WORLD_INFO = {
+  woods: { story: 'Dark woods north of town. Something carried the Lantern this way.', todo: [
+    ['person', 'Talk to <b>Hiro the Woodcutter</b> near the entrance and <b>Pip</b> in the clearing'],
+    ['puzzle', 'Solve the <b>4 braziers</b> in the clearing up the path (read the stone tablet first): +1 lantern shard and a story clue'],
+    ['chest', 'Open the <b>daily chest</b> by the west pond'],
+    ['spirits', 'Catch an <b>owl or moth</b>: a WIND spirit opens the Clockwork Sky'],
+    ['tip', 'Too dark? Make a <b>FIRE</b> spirit your companion and the woods light up'] ] },
+  moon: { story: 'A night market, open from 18:00.', todo: [
+    ['person', 'Duel <b>Rita</b> at the duel table: 3 of your spirits against hers, the winner takes coins'],
+    ['person', 'Buy <b>charms</b> from Noor: each blocks one curse another player throws at you'],
+    ['chest', 'Open the <b>daily chest</b> east of the pond'],
+    ['spirits', 'Catch night spirits you will not find in town'] ] },
+  shrine: { story: 'A drowned temple. Only water spirits can bring you here.', todo: [
+    ['person', 'Talk to <b>Sora the Diver</b> and the <b>Kappa Sage</b>'],
+    ['puzzle', 'Ring the <b>3 bells</b> in the order the stone tablet gives: +1 lantern shard and a story clue'],
+    ['chest', 'Open the <b>daily chest</b> on the east side'],
+    ['spirits', 'Catch rare water spirits'] ] },
+  sky: { story: 'Floating islands joined by bridges. Wind spirits carried you up.', todo: [
+    ['person', 'Talk to <b>Ivo the Clockmaker</b> and <b>Lin</b>'],
+    ['puzzle', 'Wind the <b>4 gears</b> in the order the stone tablet gives: +1 lantern shard and a story clue'],
+    ['chest', 'Open the <b>daily chest</b> on the west island'],
+    ['spirits', 'Catch sky spirits found nowhere else'] ] },
+};
+function worldCard(id, force) {
+  const info = WORLD_INFO[id]; if (!info) return;
+  const key = 'pb_wcard|' + id + '|' + S.day;
+  if (!force) { try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch (e) {} }
+  const w = WD.w, k = Worlds.PUZZLE_OF[id], solved = k !== undefined && S.player.solved_day && S.player.solved_day[k] === S.day;
+  const chest = w.objects.find(o => o.kind === 'wchest'), chestDone = chest && (S.player.forage_day || [])[chest.world] === S.day;
+  const els = [...new Set((Rules.SPAWN[w.spec.zone] || []).map(([sp]) => Rules.SPECIES[sp].el))].map(e => `<span style="color:${Rules.ELEMENTS[e].color}">${Rules.ELEMENTS[e].name}</span>`).join(' · ');
+  const icon = { person: '💬', puzzle: '✦', chest: '🎁', spirits: '👻', tip: '🔥' };
+  const done = t => (t === 'puzzle' && solved) || (t === 'chest' && chestDone);
+  openCard(`<div class="sub" style="text-align:center">YOU ARRIVED IN</div><div class="ntitle">${w.spec.name.toUpperCase()}</div>
+    <div class="sub" style="text-align:center;margin-bottom:.8em">${info.story}</div>
+    <div class="wTodo">${info.todo.map(([t, h]) => `<div class="${done(t) ? 'wDone' : ''}"><span>${done(t) ? '✓' : icon[t]}</span><div>${h}${done(t) ? ' <b class="up">done today</b>' : ''}</div></div>`).join('')}</div>
+    <div class="sub" style="margin-top:.7em">Spirits here: ${els}</div>
+    <div style="text-align:center;margin-top:1em"><button class="btn big gold" id="cardBtn">LET'S GO</button></div>`, null, true);
 }
 function leaveWorld() {
   const from = WD.id, g = World.P.gates.find(x => x.to === from);
@@ -235,6 +275,23 @@ function openWorldChest(o) {
     else if (dc > 0) { sfx('coin'); popup(o.x * TW, o.y * TW - 50, `+${fmt(dc)} coins`, '#ffd86b'); }
   };
 }
+// names over people and things nearby, so a world never looks empty
+const LABEL_OF = { wchest: 'DAILY CHEST', tablet: 'STONE TABLET (READ ME)', gate: 'SPIRIT GATE', merchant: 'DUEL TABLE', brazier: 'BRAZIER', bell: 'BELL', gear: 'GEAR', sign: 'SIGN' };
+function drawWorldLabels(camX, camY) {
+  const shown = new Set();
+  ctx.save(); ctx.font = '10px Joy, monospace'; ctx.textAlign = 'center';
+  for (const o of WD.w.objects) {
+    const name = o.name ? o.name.toUpperCase() : LABEL_OF[o.kind]; if (!name) continue;
+    const ox = o.x * TW, oy = o.y * TW, d = Math.hypot(player.x - ox, player.y - oy);
+    if (d > 420) continue;
+    if (['brazier', 'bell', 'gear'].includes(o.kind)) { if (shown.has(o.kind) && d > 90) continue; shown.add(o.kind); } // one label for a set of puzzle pieces unless you are next to one
+    const x = ox - camX, y = oy - camY - 52, w = ctx.measureText(name).width + 10;
+    ctx.globalAlpha = Math.min(1, (440 - d) / 120);
+    ctx.fillStyle = 'rgba(28,22,48,.8)'; ctx.fillRect(x - w / 2, y - 11, w, 15);
+    ctx.fillStyle = o.kind === 'person' || o.kind === 'spiritnpc' ? '#ffd86b' : o.kind === 'wchest' ? '#8ee68a' : '#fff3d6'; ctx.fillText(name, x, y);
+  }
+  ctx.restore();
+}
 // tint, fog and darkness per world
 function drawWorldMood(camX, camY) {
   if (WD.id === 'town') return;
@@ -245,11 +302,12 @@ function drawWorldMood(camX, camY) {
     const D = drawWorldMood.dk || (drawWorldMood.dk = document.createElement('canvas'));
     if (D.width !== VW || D.height !== VH) { D.width = VW; D.height = VH; }
     const d = D.getContext('2d'); d.globalCompositeOperation = 'source-over'; d.clearRect(0, 0, VW, VH);
-    d.fillStyle = 'rgba(4,10,8,.86)'; d.fillRect(0, 0, VW, VH); d.globalCompositeOperation = 'destination-out';
+    const fire = hasFireLead();
+    d.fillStyle = fire ? 'rgba(4,10,8,.82)' : 'rgba(4,10,8,.66)'; d.fillRect(0, 0, VW, VH); d.globalCompositeOperation = 'destination-out';
     const hole = (x, y, r) => { const g = d.createRadialGradient(x, y, r * .3, x, y, r); g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)'); d.fillStyle = g; d.beginPath(); d.arc(x, y, r, 0, 7); d.fill(); };
-    hole(player.x - camX, player.y - camY - 20, hasFireLead() ? 330 : 160);
+    hole(player.x - camX, player.y - camY - 20, fire ? 330 : 230);
     for (const o of WD.w.objects) {
-      const r = { lantern: 110, person: 90, wchest: 60, tablet: 70, gate: 90, brazier: PZ.lit.includes(o.i) ? 120 : 0, sign: 50 }[o.kind];
+      const r = { lantern: 110, person: 90, wchest: 60, tablet: 70, gate: 90, brazier: PZ.lit.includes(o.i) ? 120 : 60, sign: 50 }[o.kind];
       if (r) hole(o.x * TW - camX, o.y * TW - camY - 24, r);
     }
     for (const w of wilds) hole(w.x - camX, w.y - camY - 14, 40);
@@ -257,6 +315,7 @@ function drawWorldMood(camX, camY) {
     // wisps still glow through the dark
     for (const w of wilds) { const x = w.x - camX, y = w.y - camY - 14; const gg = ctx.createRadialGradient(x, y, 1, x, y, 16); gg.addColorStop(0, 'rgba(220,250,255,.9)'); gg.addColorStop(1, 'rgba(160,230,255,0)'); ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(x, y, 16, 0, 7); ctx.fill(); }
   }
+  drawWorldLabels(camX, camY);
   if (spec.islands) { // drifting clouds below the islands
     const t = performance.now() / 1000; ctx.fillStyle = 'rgba(255,255,255,.35)';
     for (let k = 0; k < 6; k++) { const x = ((k * 397 + t * 18) % (VW + 300)) - 150, y = (k * 151) % VH; ctx.beginPath(); ctx.ellipse(x, y, 90, 22, 0, 0, 7); ctx.fill(); }

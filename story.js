@@ -118,7 +118,7 @@ const GUIDE = [
   { t: 'YOUR STORY', f: 'LanternRed', b: `You arrive on the Lantern Isles owing the <b class="gold">Harbor Master 3,000 coins</b>. You have 300 coins and <b class="gold">10 days</b>.
       <br><br>Someone stole the <b class="gold">Great Lantern</b>, and the island's spirits are running wild. Earn your coins, catch the spirits, and find out who took the flame.` },
   { t: 'ONE DAY', f: 'Owl', b: `<ol class="gList"><li><b>Morning:</b> the paper and the locals give you <b>rumors</b> about tomorrow's prices. Some lie.</li>
-      <li><b>Day:</b> farm, fish, mine, catch spirits, sell at <b>Tomo's stall</b>, bet on the rumors, do your 3 daily quests.</li>
+      <li><b>Day:</b> farm, fish and mine, then sell your harvest (crops, fish, honey, jade) at <b>Tomo's stall</b>. Catch spirits and raise them as companions. Bet on the rumors, do your 3 daily quests.</li>
       <li><b>After 18:00:</b> walk home (your house by the farm) and press E on the door to <b>sleep</b>.</li>
       <li><b>Night:</b> NEAR reveals what really happened. Your trades, crops and spirits update. Energy refills.</li></ol>` },
   { t: 'YOUR FIRST DAY', f: 'Flam', b: `<ol class="gList"><li>Talk to <b>Mei</b> by the market: your first rumor.</li>

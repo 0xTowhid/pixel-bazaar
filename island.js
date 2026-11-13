@@ -69,9 +69,22 @@ function voteNote(n, truth) {
   queue({ t: 'VoteNote', id: n.id, truth }, 'vote', true);
   flush.after = () => { toast(truth ? `You backed ${shortName(n.author)}: they get 5 coins and +1 reputation.` : `You called ${shortName(n.author)} a liar: -1 reputation for them.`, 3.5); pollIsland(true); };
 }
+const WORLD_NAME = ['Town', 'Whispering Woods', 'Sunken Shrine', 'Clockwork Sky', 'Moon Market'];
+// every world's notes, for the list in the Ghost Notes tab
+async function loadAllNotes() {
+  try { const all = await Promise.all([0, 1, 2, 3, 4].map(w => Backend.view('get_notes', { world: w }).catch(() => []))); all.forEach((n, w) => ISL.notes[w] = n || []); } catch (e) {}
+}
+function notesList() {
+  const me = Backend.accountId, all = Object.values(ISL.notes).flat().sort((a, b) => b.at - a.at);
+  const mine = all.find(n => n.author === me), others = all.filter(n => n.author !== me).slice(0, 8);
+  const votes = n => `<span class="up">${n.truth} true</span> · <span class="dn">${n.liar} liar</span>`;
+  return `${mine ? `<div class="nMine"><div class="gold">YOUR LATEST NOTE · ${ago(mine.at)} ago</div>"${noteText(mine)}"<br><span class="sub">Floating in ${WORLD_NAME[mine.world]}, where you stood · </span>${votes(mine)} <span class="sub">· each TRUE vote pays you 5 coins</span></div>` : ''}
+    <div class="sub" style="margin-top:.7em">LATEST NOTES ON THE ISLAND · walk up to a glowing note in its world to vote TRUE or LIAR</div>
+    ${others.length ? others.map(n => `<div class="nRow"><span>"${noteText(n)}"<br><span class="sub">${shortName(n.author)} · ${WORLD_NAME[n.world]} · ${ago(n.at)}</span></span><span style="white-space:nowrap">${votes(n)}</span></div>`).join('') : '<div class="sub" style="margin-top:.3em">No notes from other players yet.</div>'}`;
+}
 function noteComposer() {
   const L = Rules.ISLAND.NOTE_LINES, done = S.player.note_day === S.day;
-  return `<div class="sub" style="margin:.4em 0;line-height:1.6">${done ? 'You left your ghost note for today. Come back tomorrow.' : `Leave one ghost note a day, right where you stand (${WD.id === 'town' ? 'Town' : WD.w.spec.name}). Others vote TRUE or LIAR: true votes pay you 5 coins each.`}</div>
+  return `${notesList()}<div class="sub" style="margin:.4em 0;line-height:1.6">${done ? 'You left your ghost note for today. Come back tomorrow.' : `Leave one ghost note a day, right where you stand (${WD.id === 'town' ? 'Town' : WD.w.spec.name}). Others vote TRUE or LIAR: true votes pay you 5 coins each.`}</div>
     ${done ? '' : `<div class="nList">${L.map((l, i) => `<button class="btn nLine" data-l="${i}">${l.t.replace(/\{\w+\}/, '…')}</button>`).join('')}</div>
     <div id="nArg" class="sBtns"></div>`}`;
 }
@@ -135,6 +148,7 @@ function curseHTML() {
 async function openIsland(tab) {
   if (tab) ISL.tab = tab; $('iDot').classList.remove('on');
   if (!$('island').classList.contains('on')) { await pollIsland(true); }
+  if (ISL.tab === 'notes') await loadAllNotes();
   const el = $('island'), t = ISL.tab;
   const feed = ISL.feed.slice().reverse().map(f => `<div class="fRowI"><span class="sub">${ago(f.at)}</span> ${f.who === Backend.contractId ? `<b class="dn">⚠ ${f.text}</b>` : `<b class="${f.who === Backend.accountId ? 'gold' : 'cy'}">${f.who === Backend.accountId ? 'You' : shortName(f.who)}</b> ${shortText(f.text)}`}</div>`).join('') || '<div class="sub">Quiet so far. Catch something rare, beat a rival or pay the debt and the whole island hears about it.</div>';
   el.innerHTML = `<div class="gname">THE ISLAND</div><div class="sub">shared with every player on NEAR · rep ${S.player.rep || 0}</div>

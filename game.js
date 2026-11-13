@@ -4,7 +4,7 @@
 
 const { TS, TW } = World;
 let VW = 960; const VH = 540; // logical canvas size; width follows the screen shape
-const SEASON_DAYS = 10, DAY_SECONDS = 240, START_COINS = 300, DEBT = 3000;
+const SEASON_DAYS = 10, DAY_SECONDS = 480, START_COINS = 300, DEBT = 3000;
 const STAKE_STEP = 50;
 
 const { GOODS, EVENTS, SOURCES } = Rules;
@@ -185,7 +185,7 @@ async function sync() {
 async function beginDay(first) {
   const d = await mustDo('Committing today to NEAR', () => Backend.beginDay(), 'commit_day');
   if (d.finished) { await sync(); endSeason(S.player.won); return; }
-  S.t = 0; S.warned = false; S.heard = {}; S.weather = d.weather; S.kaito = d.kaito; S.agents = d.agents || {}; S.stormWarning = d.stormWarning;
+  S.t = 0; S.warned = false; S.warned20 = false; S.heard = {}; S.weather = d.weather; S.kaito = d.kaito; S.agents = d.agents || {}; S.stormWarning = d.stormWarning;
   S.rumors = {};
   for (const [k, r] of Object.entries(d.rumors)) S.rumors[k] = r.quiet ? { quiet: true, sure: r.sure } : { ev: EVENTS[r.ev], evIdx: r.ev, lying: !!r.lying, sure: r.sure };
   NPCS.kaito.selling = d.kaito ? `${d.kaito.long ? 'LONG' : 'SHORT'} ${GOODS[d.kaito.good].name.toUpperCase()} x5` : null;
@@ -406,7 +406,7 @@ function showNight(ev, prev, results, truths, notes, before, after, lost, finish
     <div class="ngrid">
       <div class="nbox"><div class="nh"><img src="${goodIcon(g.id)}"> ${g.name.toUpperCase()} ${fmt(prev[g.id])} → ${fmt(S.price[g.id])} <span class="${chg >= 0 ? 'up' : 'dn'}">${chg >= 0 ? '+' : ''}${chg}%</span></div><div class="chart">${bars}</div>
         ${Backend.mode !== 'local' ? '<div class="sub" style="margin-top:.5em">Event was committed this morning and checked on reveal.</div>' : ''}</div>
-      <div class="nbox">${lost ? `<div class="dn" style="margin-bottom:.5em">You passed out in the street. Pickpockets took ${fmt(lost)}.</div>` : ''}
+      <div class="nbox">${lost ? `<div class="dn" style="margin-bottom:.5em">You passed out in the street. Pickpockets took ${fmt(lost)}.</div>` : S.night && S.night.out ? `<div class="dn" style="margin-bottom:.5em">You passed out at midnight. Next time go home and sleep before 24:00.</div>` : ''}
         ${pos}
         <div class="who">${who}</div>
         ${notes.map(n => `<div class="note">Journal: ${n}</div>`).join('')}
@@ -672,6 +672,7 @@ function hud() {
   const mins = 6 * 60 + Math.floor(S.t / DAY_SECONDS * 18 * 60);
   $('clock').textContent = String(Math.floor(mins / 60)).padStart(2, '0') + ':' + String(mins % 60).padStart(2, '0');
   $('clock').style.color = mins >= 22 * 60 ? 'var(--bad)' : 'var(--gold)';
+  $('clock').style.visibility = mins >= 23 * 60 && !S.night && Math.floor(performance.now() / 500) % 2 ? 'hidden' : 'visible'; // last hour: the clock blinks
   $('debtFill').style.width = Math.min(100, worth() / DEBT * 100) + '%';
   if (S.player) { $('enFill').style.width = (S.player.energy / Rules.ENERGY.max * 100) + '%'; $('enFill').style.background = S.player.energy < 20 ? 'var(--bad)' : '#78e678'; }
   { const g = currentGoal(); if (g) $('obj').textContent = g.text; }
@@ -894,7 +895,8 @@ function update(dt) {
   updateCat(dt); updateSpirits(dt);
   if (!busy) {
     S.t += dt;
-    if (S.t > DAY_SECONDS * (16 / 18) && !S.warned) { S.warned = true; toast("It's 22:00. Head home before midnight.", 3); sfx('alert'); }
+    if (S.t > DAY_SECONDS * (14 / 18) && !S.warned20) { S.warned20 = true; toast("It's 20:00. Start heading home soon: at midnight you pass out wherever you are.", 5); sfx('menu'); }
+    if (S.t > DAY_SECONDS * (16 / 18) && !S.warned) { S.warned = true; toast("22:00 · 2 hours until you pass out. Go home and press E on your door to sleep.", 6); sfx('alert'); }
     if (S.t >= DAY_SECONDS && !S.sleeping) { S.t = DAY_SECONDS; sleep(true); }
   }
   // safety net: never stay hidden "inside the house" once the night is over and no card is waiting
