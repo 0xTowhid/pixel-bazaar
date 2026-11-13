@@ -17,6 +17,37 @@ async function questSlots() {
 }
 const chapterDone = p => [null, p.book && p.sold > 0, p.clues & 1, p.clues & 2, p.clues & 4, p.boss_wins & 1][p.chapter];
 
+// ---------- the goal line and the yellow arrow: always one clear next step ----------
+const townGate = to => World.P.gates.find(g => g.to === to);
+const leadEl = () => { const s = (S.spirits || []).find(x => x.token_id === S.player.lead); return s ? Rules.SPECIES[s.species].el : -1; };
+function currentGoal() {
+  if (!S || !S.player || S.night) return null;
+  const p = S.player, inTown = WD.id === 'town', hour = 6 + S.t / DAY_SECONDS * 18;
+  const exit = () => ({ x: WD.w.P.exit.x * TW, y: WD.w.P.exit.y * TW });
+  const inTownAt = pt => inTown ? at(pt) : exit();          // a town spot: from another world, go back first
+  const obj = (world, kind) => WD.id === world ? (o => o && at(o))(WD.w.objects.find(o => o.kind === kind)) : null;
+  const goWorld = (world, kind, there, go) => WD.id === world ? { text: there, target: obj(world, kind) } : { text: go, target: inTown ? at(townGate(world)) : exit() };
+  if (hour >= 18 && !p.asleep) return { text: inTown ? "It's late: go home and sleep (E on your door)" : "It's late: head back to town and sleep", target: inTownAt(World.P.homeDoor) };
+  if (S.step <= 2) return { text: STEPS[S.step].text, target: inTown ? STEPS[S.step].target() : exit() };
+  if (S.coins >= DEBT) return { text: 'You have 5,000! Pay the Harbor Master', target: inTownAt({ x: NPCS.master.x / TW, y: NPCS.master.y / TW }) };
+  const ch = p.chapter, tag = ch <= 5 ? `CH.${ch} · ` : '';
+  if (ch === 1) {
+    if (!p.book) { const w = typeof wilds !== 'undefined' && wilds[0]; return { text: tag + 'Catch a spirit: walk up to a glowing wisp, press E', target: w ? { x: w.x, y: w.y } : null }; }
+    return { text: tag + "Sell anything at Tomo's stall", target: inTownAt({ x: NPCS.tomo.x / TW, y: NPCS.tomo.y / TW }) };
+  }
+  if (ch === 2) return goWorld('woods', 'tablet', tag + 'Read the stone tablet, then light the braziers', tag + 'Go north to the Whispering Woods');
+  if (ch === 3) {
+    if (!ownsElement(1)) return { text: tag + 'Catch a WATER spirit (slimes and axolotls, around town)', target: null };
+    return goWorld('shrine', 'tablet', tag + 'Read the tablet, then ring the bells', tag + 'Dive to the Sunken Shrine (east shore)');
+  }
+  if (ch === 4) {
+    if (!ownsElement(2)) return { text: tag + 'Catch a WIND spirit (owls and moths, in the woods)', target: null };
+    return goWorld('sky', 'tablet', tag + 'Read the tablet, then wind the gears', tag + 'Ride the wind to the Clockwork Sky (north-east)');
+  }
+  if (ch === 5) return goWorld('woods', 'gate', tag + 'Wake the Great Spirit at the old gate (north)', tag + 'Go to the old gate deep in the Whispering Woods');
+  return { text: 'Reach 5,000 coins, then see the Harbor Master', target: null };
+}
+
 // ---------- after every sync: pay finished quests and move the story on ----------
 let progressBusy = false;
 async function checkProgress() {

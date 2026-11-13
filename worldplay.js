@@ -4,6 +4,39 @@ const isNight = () => S && S.t / DAY_SECONDS >= 12 / 18; // 18:00
 const ownsElement = el => (S.spirits || []).some(s => Rules.SPECIES[s.species].el === el);
 
 // ---------- gates in town ----------
+const GATE_NAME = { woods: 'WHISPERING WOODS', moon: 'MOON MARKET', shrine: 'SUNKEN SHRINE', sky: 'CLOCKWORK SKY' };
+function gateStatus(g) {
+  if (g.night && !isNight()) return { open: false, why: 'opens at 18:00' };
+  const spec = Worlds.SPECS[g.to];
+  if (spec.needs !== undefined && !ownsElement(spec.needs)) return { open: false, why: `needs a ${Rules.ELEMENTS[spec.needs].name.toLowerCase()} spirit` };
+  return { open: true, why: 'open' };
+}
+// floating signs over the town gates, and dots on the minimap, so you always know where the worlds are
+function drawGateSigns(camX, camY) {
+  if (WD.id !== 'town') return;
+  ctx.save(); ctx.font = '11px Joy, monospace'; ctx.textAlign = 'center';
+  for (const g of World.P.gates) {
+    const x = g.x * TW - camX; let y = g.y * TW - camY - 34; if (y < 34) y = g.y * TW - camY + 70; // too close to the top: sign below
+    if (x < -120 || x > VW + 120 || y < -40 || y > VH + 40) continue;
+    const st = gateStatus(g), t1 = GATE_NAME[g.to], t2 = st.open ? '▸ OPEN' : '🔒 ' + st.why.toUpperCase();
+    const w = Math.max(ctx.measureText(t1).width, ctx.measureText(t2).width) + 14;
+    ctx.fillStyle = 'rgba(28,22,48,.85)'; ctx.fillRect(x - w / 2, y - 26, w, 30); ctx.strokeStyle = st.open ? '#8ee68a' : '#ff9a8a'; ctx.lineWidth = 2; ctx.strokeRect(x - w / 2, y - 26, w, 30);
+    ctx.fillStyle = '#ffd86b'; ctx.fillText(t1, x, y - 13); ctx.fillStyle = st.open ? '#8ee68a' : '#ff9a8a'; ctx.fillText(t2, x, y);
+  }
+  ctx.restore();
+}
+function drawMiniMarks(mx, my, sx, sy) {
+  ctx.save(); ctx.font = '9px Joy, monospace'; ctx.textAlign = 'center';
+  const marks = WD.id === 'town' ? World.P.gates.map(g => ({ x: g.x, y: g.y, c: gateStatus(g).open ? '#8ee68a' : '#ff9a8a', l: GATE_NAME[g.to][0] }))
+    : WD.w.objects.filter(o => ['tablet', 'gate', 'merchant'].includes(o.kind)).map(o => ({ x: o.x, y: o.y, c: o.kind === 'tablet' ? '#fff3d6' : '#b9a8e8', l: o.kind === 'tablet' ? 'T' : o.kind === 'gate' ? 'G' : 'R' }))
+      .concat([{ x: WD.w.P.exit.x, y: WD.w.P.exit.y, c: '#6bc8ff', l: '⌂' }]);
+  for (const m of marks) {
+    const x = mx + m.x * TW * sx, y = my + m.y * TW * sy;
+    ctx.fillStyle = '#1c1630'; ctx.fillRect(x - 5, y - 5, 10, 10); ctx.fillStyle = m.c; ctx.fillRect(x - 4, y - 4, 8, 8);
+    ctx.fillStyle = '#1c1630'; ctx.fillText(m.l, x, y + 3);
+  }
+  ctx.restore();
+}
 function gateTarget() {
   for (const g of World.P.gates) {
     if (Math.hypot(player.x - g.x * TW, player.y - g.y * TW) > 52) continue;
@@ -75,6 +108,18 @@ async function puzzleOrder(commit, who, k) {
     const j = r % (i + 1); [v[i], v[j]] = [v[j], v[i]];
   }
   return v;
+}
+// the tablet tells you where to start; a right piece stays lit, a wrong one resets them all
+function puzzleHint() {
+  const k = Worlds.PUZZLE_OF[WD.id]; if (k === undefined) return '';
+  if (S.player.solved_day && S.player.solved_day[k] === S.day) return ' (Solved today. It changes tomorrow.)';
+  if (!PZ.order) return ' (The day has not started on NEAR yet.)';
+  const pieces = WD.w.objects.filter(o => ['brazier', 'bell', 'gear'].includes(o.kind));
+  const cx = pieces.reduce((a, o) => a + o.x, 0) / pieces.length, cy = pieces.reduce((a, o) => a + o.y, 0) / pieces.length;
+  const first = pieces.find(o => o.i === PZ.order[0]), dx = first.x - cx, dy = first.y - cy;
+  const dir = (Math.abs(dy) > 1.5 ? (dy < 0 ? 'NORTH' : 'SOUTH') : '') + (Math.abs(dx) > 1.5 ? (dx < 0 ? 'WEST' : 'EAST') : '') || 'MIDDLE';
+  const what = { brazier: 'flame', bell: 'bell', gear: 'gear' }[first.kind];
+  return `  ·  Today it begins with the ${dir} ${what}. Then try the others: a right one stays lit, a wrong one resets them all.`;
 }
 function touchPiece(o) {
   const k = Worlds.PUZZLE_OF[WD.id];

@@ -39,7 +39,7 @@ async function renderWallet() {
       </div></div>`;
   } else if (t === 'items') {
     body = WAL.nfts.length ? `<div class="sub" style="margin:.4em 0">Every item here is a NEP-171 NFT you own. Send it to a friend or to your own wallet (MyNearWallet, Meteor, HOT...).</div>
-      <div class="wGrid">${WAL.nfts.map(n => `<div class="wItem"><img src="${nftImg(n)}" alt=""><b>${esc((n.metadata.title || '').replace(/^Badge: /, '').toUpperCase())}</b><span class="sub">${nftKind(n).toUpperCase()} · #${n.token_id}</span><button class="btn" data-sendnft="${n.token_id}">SEND</button></div>`).join('')}</div>`
+      <div class="wlGrid">${WAL.nfts.map(n => `<div class="wlItem"><img src="${nftImg(n)}" alt=""><b>${esc((n.metadata.title || '').replace(/^Badge: /, '').toUpperCase())}</b><span class="sub">${nftKind(n).toUpperCase()} · #${n.token_id}</span><button class="btn" data-sendnft="${n.token_id}">SEND</button></div>`).join('')}</div>`
       : '<div class="sub" style="margin:1.5em 0;line-height:1.7">No items yet. Catch a spirit (glowing wisps in the grass), earn a badge, or land a legendary fish.</div>';
   } else {
     body = `<div class="sub" style="margin:.4em 0 .8em;line-height:1.6">Send NEAR from your game account to any NEAR address. For safety, type your password (or your 12 words): the game rebuilds your full key for this one send and forgets it right after.</div>

@@ -135,7 +135,7 @@ async function boot() {
   await beginDay(true);
   const firstTime = !safeGet('pb_intro|' + Backend.accountId);
   let tour = false;
-  if (firstTime) { await playIntro(); tour = await showWelcome(); safeSet('pb_intro|' + Backend.accountId, '1'); }
+  if (firstTime) { await playIntro(); tour = await showWelcome(); if (tour) tour = await showGuide(); safeSet('pb_intro|' + Backend.accountId, '1'); }
   showPaper(() => { if (tour) startTour(); else toast('You owe the Harbor Master 5,000 coins. You have ' + fmt(S.coins) + ' and ' + (SEASON_DAYS - S.day + 1) + ' days.', 6); });
 }
 // What the chain does not keep (your notes on who lies, the tutorial step, price history) lives in this browser.
@@ -637,9 +637,10 @@ function openJournal() { hideToast();
     <div class="jh">BADGES (NEP-245)</div><div class="badges">${Object.entries(Rules.BADGES).map(([k, n]) => `<span class="${S.items.has('badge_' + k) ? 'got' : ''}">${n}</span>`).join('')}</div>
     <div class="tr" style="margin-top:.6em"><span>Items</span><span>x${S.lev} license${S.bridge ? ' · bridge' : ''}${S.boat ? ' · boat pass' : ''}${S.items.has('stall') ? ' · stall' : ''}</span></div>
     ${txHistory.length ? '<div class="jh">ON NEAR</div><div class="txh">' + txHistory.map(h => '<div>' + h + '</div>').join('') + '</div>' : ''}
-    <div style="display:flex;gap:.5em;flex-wrap:wrap"><button class="btn" id="jTour">REPLAY TOUR</button><button class="btn" id="jIntro">REPLAY INTRO</button><button class="btn big" id="jClose">CLOSE (J)</button></div>`;
+    <div style="display:flex;gap:.5em;flex-wrap:wrap"><button class="btn gold" id="jGuide">HOW TO PLAY</button><button class="btn" id="jTour">SCREEN TOUR</button><button class="btn" id="jIntro">REPLAY INTRO</button><button class="btn big" id="jClose">CLOSE (J)</button></div>`;
   $('journal').classList.add('on'); $('jClose').onclick = () => $('journal').classList.remove('on'); sfx('menu');
   $('jTour').onclick = () => { $('journal').classList.remove('on'); startTour(); };
+  $('jGuide').onclick = async () => { $('journal').classList.remove('on'); if (await showGuide()) startTour(); };
   $('jIntro').onclick = async () => { $('journal').classList.remove('on'); await playIntro(); };
 }
 function clockText() { const m = 6 * 60 + Math.floor(S.t / DAY_SECONDS * 18 * 60); return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
@@ -651,7 +652,7 @@ function hud() {
   $('clock').style.color = mins >= 22 * 60 ? 'var(--bad)' : 'var(--gold)';
   $('debtFill').style.width = Math.min(100, worth() / DEBT * 100) + '%';
   if (S.player) { $('enFill').style.width = (S.player.energy / Rules.ENERGY.max * 100) + '%'; $('enFill').style.background = S.player.energy < 20 ? 'var(--bad)' : '#78e678'; }
-  $('obj').textContent = STEPS[S.step].chapter && S.player && S.player.chapter <= 5 ? `CH.${S.player.chapter} · ${Rules.CHAPTERS[S.player.chapter - 1].goal}` : STEPS[S.step].text;
+  { const g = currentGoal(); if (g) $('obj').textContent = g.text; }
   if (WD.id !== 'town') { $('zone').textContent = WD.w.name; return; }
   const z = World.zone(Math.floor(player.x / TW), Math.floor(player.y / TW));
   $('zone').textContent = World.ZONE_NAME[z] || '';
@@ -701,7 +702,7 @@ function interact() {
     const o = t.o, who = { name: o.kind === 'merchant' ? 'Rita, at the night table' : 'Old stone', sheet: o.kind === 'merchant' ? 'rita' : null, color: '#b9a8e8' };
     if (o.kind === 'merchant') say(who, 'Darling! By day I sell rumors, by moonlight I duel. Three spirits each. Winner takes the pot.', [duelChoice(1), { t: 'LEAVE', fn: closeDlg }]);
     else if (o.kind === 'gate' && WD.id === 'woods' && S.player.chapter >= 5) say({ name: 'The old spirit gate', color: '#b9a8e8' }, S.player.boss_wins & 1 ? 'The Great Spirit rests. It bows when it sees you. (You can still spar with it once a day.)' : 'The seal is cracking. Something huge breathes behind it. The thief of the Lantern?', [duelChoice(2), { t: 'NOT YET', fn: closeDlg }]);
-    else say(who, o.text);
+    else say(who, o.text + (o.kind === 'tablet' ? puzzleHint() : ''));
   }
   else if (t.kind === 'board') openTown();
   else if (t.kind === 'home') {
@@ -890,11 +891,12 @@ function draw() {
     }
   }
   drawPopups(camX, camY, 1 / 60);
+  drawGateSigns(camX, camY);
   drawWorldMood(camX, camY);
   drawNight(camX, camY);
   drawFishing();
   // objective marker / edge arrow
-  const tgt = WD.id === 'town' ? STEPS[S.step].target() : null;
+  const goal = currentGoal(), tgt = goal && goal.target;
   if (tgt && !uiOpen() && !S.night) {
     const tx = tgt.x - camX, ty = tgt.y - camY - 70;
     ctx.fillStyle = '#ffd86b';
@@ -912,6 +914,7 @@ function draw() {
   ctx.strokeStyle = '#fff3d6'; ctx.lineWidth = 2; ctx.strokeRect(mx, my, mw, mh);
   const sx = mw / MWp, sy = mh / MHp;
   ctx.strokeStyle = '#ffffff88'; ctx.lineWidth = 1; ctx.strokeRect(mx + camX * sx, my + camY * sy, VW * sx, VH * sy);
+  drawMiniMarks(mx, my, sx, sy);
   if (tgt) { ctx.fillStyle = '#ffd86b'; ctx.fillRect(mx + tgt.x * sx - 2, my + tgt.y * sy - 2, 5, 5); }
   ctx.fillStyle = '#ff4d6d'; ctx.fillRect(mx + player.x * sx - 2, my + player.y * sy - 3, 5, 5);
   const t = !uiOpen() && !S.over && !S.night && nearest();

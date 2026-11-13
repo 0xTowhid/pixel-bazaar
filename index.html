@@ -87,6 +87,11 @@ body:not(.ingame) #hudL,body:not(.ingame) #objBox,body:not(.ingame) #topR,body:n
 #tourSpot{position:absolute;border:3px solid var(--gold);border-radius:10px;box-shadow:0 0 0 9999px rgba(11,8,20,.72);transition:all .25s ease;pointer-events:none}
 #tourBox{position:absolute;padding:1em 1.2em;transition:left .25s,top .25s}
 #tourBox .tT{color:var(--gold);font-size:1.35em;margin:.4em 0 .5em}#tourBox .tD{line-height:1.6}
+.gHead{display:flex;gap:.9em;align-items:center;margin-bottom:.8em}.gHead img{width:3.6em;height:3.6em;image-rendering:pixelated;border:3px solid var(--gold);border-radius:8px;background:#2a2346}
+.gBody{line-height:1.75;min-height:12em}.gList{margin:.2em 0 .6em;padding-left:1.3em}.gList li{margin:.35em 0}
+.gWorlds{display:grid;grid-template-columns:1fr 1fr;gap:.5em .9em;margin-bottom:.6em}.gWorlds div{background:#2a2346;border-radius:8px;padding:.45em .6em;line-height:1.5}.gWorlds span{display:block;font-size:.8em;color:var(--mut)}
+.gBtns{display:flex;justify-content:space-between;gap:.5em;flex-wrap:wrap}
+@media (max-width:760px){.gWorlds{grid-template-columns:1fr}.gBody{font-size:.9em}}
 .tDots{display:flex;gap:.35em;margin:1em 0}.tDots i{width:1.6em;height:.4em;border-radius:3px;background:#3a2f5c}.tDots i.on{background:var(--gold)}
 .tBtns{display:flex;gap:.5em;align-items:center;flex-wrap:wrap}.tBtns button[disabled]{opacity:.4}
 .wGrid{display:grid;grid-template-columns:1fr 1fr;gap:.8em 1.4em}
@@ -119,9 +124,9 @@ body:not(.ingame) #hudL,body:not(.ingame) #objBox,body:not(.ingame) #topR,body:n
 .wHome{display:flex;gap:1.2em;align-items:flex-start;flex-wrap:wrap}.wQr{width:11em;height:11em;background:#fff;border-radius:8px;padding:.3em;flex:none}.wQr svg{width:100%;height:100%}
 .wInfo{flex:1;min-width:14em}.wAddr{font-size:1.05em;color:var(--gold);word-break:break-all;margin:.3em 0 .5em}.wBal{font-size:1.5em;color:#fff3d6;margin:.2em 0}
 .wNote{margin-top:.8em;line-height:1.6;background:#2a2346;border-radius:8px;padding:.6em .8em;font-size:.85em}
-.wGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(9.5em,1fr));gap:.6em;max-height:22em;overflow:auto}
-.wItem{background:#2a2346;border-radius:10px;padding:.5em;text-align:center;display:flex;flex-direction:column;gap:.3em;align-items:center;font-size:.85em}
-.wItem img{width:4.5em;height:4.5em;image-rendering:pixelated;border-radius:6px}.wItem b{color:#fff3d6}
+.wlGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(9.5em,1fr));gap:.6em;max-height:22em;overflow:auto}
+.wlItem{background:#2a2346;border-radius:10px;padding:.5em;text-align:center;display:flex;flex-direction:column;gap:.3em;align-items:center;font-size:.85em}
+.wlItem img{width:4.5em;height:4.5em;image-rendering:pixelated;border-radius:6px}.wlItem b{color:#fff3d6}
 .wForm{display:flex;flex-direction:column;gap:.6em;max-width:28em}.wForm label{display:flex;flex-direction:column;gap:.3em;font-size:.85em;color:var(--mut)}
 .wForm input{font:inherit;padding:.5em .6em;border-radius:6px;border:2px solid var(--mut);background:#1c1630;color:#fff3d6}
 .wSendOne{text-align:center}.wSendOne img{width:6em;height:6em;image-rendering:pixelated;border-radius:8px}.wSendOne .wForm{margin:0 auto}

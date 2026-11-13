@@ -97,7 +97,7 @@ function playIntro() {
 function showWelcome() {
   return new Promise(res => {
     const item = (f, t, d) => `<div class="wItem"><img src="assets/spirits/f_${f}.png" alt=""><div><b>${t}</b><span>${d}</span></div></div>`;
-    openCard(`<div class="ntitle">WELCOME TO THE LANTERN ISLES</div>
+    openCard(`<div class="sub" style="text-align:center;color:var(--gold)">PIXEL BAZAAR</div><div class="ntitle">WELCOME TO THE LANTERN ISLES</div>
       <div class="sub" style="text-align:center;margin-bottom:1em">Someone stole the Great Lantern. The spirits are loose. You can talk to them.</div>
       <div class="wGrid">
         ${item('Flam', 'CATCH SPIRITS', 'They follow you, evolve, and are real NFTs you own')}
@@ -107,9 +107,55 @@ function showWelcome() {
         ${item('Mushroom', 'FARM · FISH · TRADE', 'The cozy life between adventures')}
         ${item('Skull', 'PRANK OTHER PLAYERS', 'Ghost notes, curses, a rare world boss')}
       </div>
-      <div style="text-align:center;margin-top:1.2em"><button class="btn big gold" id="cardBtn">TAKE THE 1-MINUTE TOUR</button> <button class="btn big" id="wSkip">SKIP, LET ME PLAY</button></div>
+      <div style="text-align:center;margin-top:1.2em"><button class="btn big gold" id="cardBtn">HOW TO PLAY (2 MIN)</button> <button class="btn big" id="wSkip">SKIP, LET ME PLAY</button></div>
       <div class="sub" style="text-align:center;margin-top:.8em">No wallet needed. Everything you earn is saved on NEAR.</div>`, () => res(true));
     $('wSkip').onclick = e => { e.stopPropagation(); cardCb = null; $('card').classList.remove('on'); sfx('ok'); res(false); };
+  });
+}
+
+// ---------- 2b. how to play: what the game is, what to do, where the worlds are ----------
+const GUIDE = [
+  { t: 'YOUR STORY', f: 'LanternRed', b: `You arrive on the Lantern Isles owing the <b class="gold">Harbor Master 5,000 coins</b>. You have 300 coins and <b class="gold">10 days</b>.
+      <br><br>Someone stole the <b class="gold">Great Lantern</b>, and the island's spirits are running wild. Earn your coins, catch the spirits, and find out who took the flame.` },
+  { t: 'ONE DAY', f: 'Owl', b: `<ol class="gList"><li><b>Morning:</b> the paper and the locals give you <b>rumors</b> about tomorrow's prices. Some lie.</li>
+      <li><b>Day:</b> farm, fish, mine, catch spirits, sell at <b>Tomo's stall</b>, bet on the rumors, do your 3 daily quests.</li>
+      <li><b>After 18:00:</b> walk home (your house by the farm) and press E on the door to <b>sleep</b>.</li>
+      <li><b>Night:</b> NEAR reveals what really happened. Your trades, crops and spirits update. Energy refills.</li></ol>` },
+  { t: 'YOUR FIRST DAY', f: 'Flam', b: `<ol class="gList"><li>Talk to <b>Mei</b> by the market: your first rumor.</li>
+      <li>Shake an <b>apple tree</b> (E) and plant a seed on your farm plots.</li>
+      <li>Walk up to a <b>glowing wisp</b> and press E. Stop the bar in the green to <b>catch your first spirit</b>.</li>
+      <li><b>Sell</b> anything at Tomo's stall. That finishes <b>Chapter 1</b>.</li>
+      <li>Visit <b>Madame Vey</b> for your 3 fate cards, then <b>sleep</b> after 18:00.</li></ol>
+      <div class="sub">The yellow arrow on screen always points at your next goal.</div>` },
+  { t: 'THE WORLDS', f: 'Spirit', b: `<div class="gWorlds">
+      <div><b class="gold">TOWN</b><span>start here: farm, market, harbor, Madame Vey</span></div>
+      <div><b class="gold">WHISPERING WOODS</b><span>north road. Open any time. Dark: a fire spirit lights the way. Chapter 2</span></div>
+      <div><b class="gold">MOON MARKET</b><span>the gate in the middle of town. Opens at 18:00. Rita's duel table</span></div>
+      <div><b class="gold">SUNKEN SHRINE</b><span>east shore. You need a WATER spirit. Chapter 3</span></div>
+      <div><b class="gold">CLOCKWORK SKY</b><span>north-east cliff. You need a WIND spirit. Chapter 4</span></div>
+      <div><b class="gold">THE OLD GATE</b><span>deep in the woods. The Great Spirit waits. Chapter 5</span></div></div>
+      <div class="sub">Gates are marked on the minimap. Each world has a puzzle that changes every day.</div>` },
+  { t: 'SPIRITS AND DUELS', f: 'KappaGreen', b: `Every spirit is a real <b>NFT you own</b>. Press <b>B</b> to see them. Your <b>companion</b> follows you and grows every night. Feed it to level up, and it evolves.
+      <br><br>Pick 3 spirits and <b>duel</b> Mei, Rita (Moon Market, at night) or the Great Spirit. Fire beats nature, nature beats water, water beats fire.` },
+  { t: 'OTHER PLAYERS', f: 'Skull', b: `Press <b>I</b> for the island. See what everyone is doing, leave <b>ghost notes</b> others vote TRUE or LIAR on, cast <b>curses</b> (buy charms to block them), and, very rarely, fight a <b>world boss</b> together.` },
+  { t: 'IT IS ALL ON NEAR', f: 'Eye2', b: `Your game account is a real NEAR account. Every move is a transaction (see the ✓ lines bottom-left). Open <b>WALLET</b> to see your address, receive NEAR, and send spirits, badges and fish to anyone.
+      <br><br>Keys: arrows/WASD move · E act · 1-9 seeds · B spirits · Q quests · I island · P profile · J journal.` },
+];
+function showGuide() {
+  return new Promise(res => {
+    let i = 0;
+    const page = () => {
+      const g = GUIDE[i], last = i === GUIDE.length - 1;
+      openCard(`<div class="gHead"><img src="assets/spirits/f_${g.f}.png" alt=""><div><div class="sub">HOW TO PLAY · ${i + 1} OF ${GUIDE.length}</div><div class="ntitle" style="text-align:left;margin:0">${g.t}</div></div></div>
+        <div class="gBody">${g.b}</div>
+        <div class="tDots">${GUIDE.map((_, k) => `<i class="${k <= i ? 'on' : ''}"></i>`).join('')}</div>
+        <div class="gBtns"><span>${i ? '<button class="btn big" id="gBack">BACK</button>' : ''}</span>
+          <span>${last ? '<button class="btn big" id="gTour">SHOW ME THE SCREEN</button> ' : ''}<button class="btn big gold" id="cardBtn">${last ? "LET'S PLAY" : 'NEXT ▸'}</button></span></div>`, null, false);
+      $('cardBtn').onclick = () => { sfx('ok'); if (last) { $('card').classList.remove('on'); res(false); } else { i++; page(); } };
+      if ($('gBack')) $('gBack').onclick = () => { i--; sfx('ok'); page(); };
+      if ($('gTour')) $('gTour').onclick = () => { $('card').classList.remove('on'); sfx('ok'); res(true); };
+    };
+    page();
   });
 }
 
@@ -119,7 +165,7 @@ const worldTarget = (fn, w = 90, h = 110) => () => { const p = fn(); if (!p) ret
 const TOUR = [
   { t: 'YOUR GOAL', d: 'Your current goal is always written here, and a yellow arrow on screen points the way. Tap it (or press Q) for the story and the daily quests.', at: domTarget('#objBox') },
   { t: 'THAT IS YOU', d: 'Move with the arrow keys or WASD (on phones, the pad). Press E or Space (A on phones) to talk, farm, fish and catch spirits.', at: worldTarget(() => player) },
-  { t: 'COINS AND DEBT', d: 'You start with 300 coins and owe the Harbor Master 5,000. This bar fills as you get closer. Chapter 1 ends when you pay him.', at: domTarget(() => $('hudL').children[2]) },
+  { t: 'COINS AND DEBT', d: 'You start with 300 coins and owe the Harbor Master 5,000 within 10 days. This bar fills as you get closer. Pay him to win the season.', at: domTarget(() => $('hudL').children[2]) },
   { t: 'ENERGY', d: 'Farming, mining, fishing and catching spirits use energy. It refills every night when you sleep.', at: domTarget(() => $('hudL').children[3]) },
   { t: 'SEEDS', d: 'Pick a seed with keys 1-9 (or tap it). Plant and water it on the plots behind your house, then sell the harvest.', at: domTarget('#hotbar') },
   { t: 'MEI', d: 'The townsfolk hear rumors about tomorrow. Some tell the truth, some do not. Make friends: gifts fill their hearts.', at: worldTarget(() => NPCS.mei) },
