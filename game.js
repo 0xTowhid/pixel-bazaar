@@ -207,9 +207,12 @@ const worth = () => S.coins + S.positions.reduce((a, p) => a + p.stake, 0);
 let busyN = 0, quietBusy = false;
 const wait = ms => new Promise(r => setTimeout(r, ms));
 function walkTo(x, y, dir) { return new Promise(done => { player.auto = { x, y, dir, done }; }); }
-async function guarded(label, fn, tag) {
+// The game keeps moving while NEAR answers: only `block` calls (paying the debt) stop the screen; the rest show the saving dot.
+let pendingN = 0, pendingLabel = '';
+async function guarded(label, fn, tag, block) {
   if (typeof Q !== 'undefined' && (Q.list.length || Q.sending)) { while (Q.sending) await wait(100); await flush(); }
-  busyN++; $('busy').textContent = label + '...'; if (!quietBusy) $('busy').style.display = 'block';
+  if (block) { busyN++; $('busy').textContent = label + '...'; if (!quietBusy) $('busy').style.display = 'block'; }
+  else { pendingN++; pendingLabel = label; }
   try {
     const r = await fn();
     const tx = typeof r === 'string' ? r : r && r.tx;
@@ -219,10 +222,22 @@ async function guarded(label, fn, tag) {
     chainLog(tag || label, false); sfx('alert');
     const m = String(e.message || e).replace(/^.*panicked:\s*/is, '').replace(/^Error:\s*/, '');
     if (/has not started/.test(m)) { toast('Today was not on NEAR yet. Fixing that, try again in a moment.', 3.5); recoverDay(); }
-    else toast(niceErr(m), 4);
+    else toast(niceErr(m) + ' (undone)', 4);
+    saveFail();
     return null;
-  } finally { if (--busyN === 0) $('busy').style.display = 'none'; }
+  } finally { if (block) { if (--busyN === 0) $('busy').style.display = 'none'; } else pendingN--; }
 }
+// ---------- the saving dot: a small sign that your moves are on their way to NEAR ----------
+let saveWas = false, saveFailAt = 0;
+function saveFail() { saveFailAt = performance.now(); }
+setInterval(() => {
+  const el = $('saveDot'); if (!el || !S) return;
+  const q = typeof Q !== 'undefined' ? Q : { list: [], sending: false, labels: [] };
+  const busy = pendingN > 0 || q.sending || q.list.length > 0;
+  if (performance.now() - saveFailAt < 2500) { el.className = 'fail'; el.innerHTML = '<i></i>NOT SAVED · UNDONE'; saveWas = false; return; }
+  if (busy) { const l = q.sending ? (q.cur || 'your moves') : q.list.length ? 'your moves' : pendingLabel.toLowerCase(); el.className = 'on'; el.innerHTML = `<i></i>SAVING ${esc(l).toUpperCase().slice(0, 28)}`; saveWas = true; return; }
+  if (saveWas) { saveWas = false; el.className = 'ok'; el.innerHTML = '<i></i>SAVED ON NEAR'; clearTimeout(el.t); el.t = setTimeout(() => { el.className = ''; }, 1400); }
+}, 150);
 // For steps the day cannot go on without: retry quietly, then ask the player to retry.
 async function mustDo(label, fn, tag) {
   for (let i = 0; ; i++) {
@@ -309,9 +324,11 @@ async function openPosition() {
   if (g.id === 'ore') { toast('Nobody speculates on ore. Pick another good.', 2); return; }
   if (S.mult > S.lev) { sfx('alert'); toast('You need a license for x' + S.mult + '.', 2); return; }
   if (S.stake > S.coins || S.stake <= 0) { sfx('alert'); toast('Not enough coins.', 2); return; }
+  // show it at once; if NEAR says no, the next sync puts everything back
+  const stake = S.stake; S.coins -= stake; S.positions.push({ good: g.id, dir: S.dir, lev: S.mult, stake, entry: S.price[g.id], pending: true }); sfx('coin'); renderTrade();
   const ok = await guarded(`Opening ${S.dir > 0 ? 'long' : 'short'} ${g.name} x${S.mult}`, () => Backend.call('open_position', { good: S.sel, long: S.dir > 0, lev: S.mult, stake: Math.round(S.stake * 100) }), `open_position · ${S.dir > 0 ? 'LONG' : 'SHORT'} ${g.name.toUpperCase()} x${S.mult}`);
-  if (ok === null && Backend.mode === 'chain') return;
-  await sync(); sfx('coin');
+  if (ok === null && Backend.mode === 'chain') { await sync(); renderTrade(); return; }
+  await sync();
   if (S.step === 2) advance();
   S.stake = Math.min(S.stake, Math.max(STAKE_STEP, Math.floor(S.coins / STAKE_STEP) * STAKE_STEP));
   renderTrade();
@@ -319,9 +336,10 @@ async function openPosition() {
 async function buyItem(token, label) {
   const cost = Rules.ITEMS[token];
   if (S.coins < cost) { sfx('alert'); toast(label + ' costs ' + cost + ' coins.', 2); return false; }
+  S.coins -= cost; S.items.add(token); sfx('success'); toast(label + ' is yours.', 2.5); // at once; undone if NEAR says no
   const r = await guarded('Buying ' + label, () => Backend.call('buy_item', { token_id: token }), 'buy_item · ' + token + ' (NEP-245)');
-  if (r === null && Backend.mode === 'chain') return false;
-  await sync(); sfx('success'); toast(label + ' is yours.', 2.5); return true;
+  if (r === null && Backend.mode === 'chain') { await sync(); return false; }
+  await sync(); return true;
 }
 async function buyLicense(l) { if (S.lev >= l.lev) return; if (await buyItem('license_x' + l.lev, 'Leverage License x' + l.lev)) renderTrade(); }
 async function claim(kind, label) {
@@ -564,7 +582,7 @@ function talkTo(n) {
   if (n === NPCS.tomo) { say(n, 'Welcome! Seeds, and everything the barons don\'t sell: crops, apples, sushi. Tea, honey, carrots, fish and jade? Their stalls are just below.', [{ t: 'TRADE', fn: () => { closeDlg(); openTrade(); } }, { t: 'SELL', fn: () => { closeDlg(); openSell(); } }, { t: 'SEEDS', fn: () => { closeDlg(); openSeeds(); } }, { t: 'GIFT', fn: () => giftMenu('tomo') }, { t: 'LEAVE', fn: closeDlg }]); return; }
   if (n === NPCS.kaito) { const k = S.kaito; say(n, k ? `You paid, so here it is: ${k.long ? 'long' : 'short'} ${GOODS[k.good].name.toLowerCase()}, five times over. Follow me if you dare.` : heldStall(0) ? 'Enjoy MY tea stall while it lasts. I want it back by season\'s end.' : `My call is sealed on NEAR until tonight. ${Rules.AGENTS[0].peek} coins at the Bazaar Board and I'll show you. I'm right more often than not.`, [{ t: 'BAZAAR BOARD', fn: () => { closeDlg(); openIsland('calls'); } }, { t: 'LEAVE', fn: closeDlg }]); return; }
   if (n === NPCS.master) {
-    if (S.coins >= DEBT) { say(n, `${fmt(S.coins)} coins? Well, well. Pay the ${fmt(DEBT)} and the stall is yours for good.`, [{ t: 'PAY ' + fmt(DEBT), fn: async () => { closeDlg(); const r = await guarded('Paying the Harbor Master', () => Backend.call('pay_debt'), 'pay_debt'); if (r === null && Backend.mode === 'chain') return; await sync(); endSeason(true, true); } }, { t: 'NOT YET', fn: closeDlg }]); return; }
+    if (S.coins >= DEBT) { say(n, `${fmt(S.coins)} coins? Well, well. Pay the ${fmt(DEBT)} and the stall is yours for good.`, [{ t: 'PAY ' + fmt(DEBT), fn: async () => { closeDlg(); const r = await guarded('Paying the Harbor Master', () => Backend.call('pay_debt'), 'pay_debt', true); if (r === null && Backend.mode === 'chain') return; await sync(); endSeason(true, true); } }, { t: 'NOT YET', fn: closeDlg }]); return; }
     say(n, `You owe me ${fmt(DEBT)} by the end of day ${SEASON_DAYS}. You have ${fmt(S.coins)}. Tick tock.`);
     return;
   }

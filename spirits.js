@@ -133,7 +133,8 @@ async function finishCatch(ok, ran) {
   const wild = CATCH.wild, sp = Rules.SPECIES[wild.species], before = (S.spirits || []).length;
   $('cMark').classList.add(ok ? 'good' : 'bad');
   sfx(ok ? 'ok' : 'alert');
-  if (!ran) $('catch').querySelector('.cHint').textContent = ok ? 'It calms down... is it coming with you?' : 'It got spooked!';
+  if (!ran) $('catch').querySelector('.cHint').innerHTML = ok ? 'It calms down... is it coming with you?<span class="dots"></span>' : 'It got spooked!';
+  if (ok && !ran) $('catch').querySelector('.cHead img').classList.add('wob'); // it wobbles while NEAR rolls the catch
   queue({ t: 'Catch', ok: ok && !ran }, ok ? 'spirit catch' : 'spirit fled', true);
   await new Promise(res => { flush.after = () => res(); });
   const caught = (S.spirits || []).length > before;

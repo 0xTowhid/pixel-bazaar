@@ -152,6 +152,13 @@ body.cineOn #hudL,body.cineOn #objBox,body.cineOn #topR,body.cineOn #menu,body.c
 .dNum{position:absolute;top:.3em;left:.4em;background:var(--gold);color:#1c1630;border-radius:50%;width:1.5em;height:1.5em;line-height:1.5em;font-style:normal}
 .dSpr{width:3.6em;height:3.6em;margin:0 auto;image-rendering:pixelated;background-repeat:no-repeat}.dSpr.big{width:6em;height:6em}
 .dWheel{margin:.8em 0;text-align:center}.dBtns{display:flex;justify-content:space-between;align-items:center;gap:.6em;flex-wrap:wrap}
+#saveDot{align-self:flex-start;font-size:.8em;display:none;align-items:center;gap:.5em;background:#1c1630dd;padding:.3em .7em;border-radius:20px;color:var(--mut);z-index:6;pointer-events:none}
+#saveDot.on,#saveDot.ok,#saveDot.fail{display:flex}#saveDot i{width:.7em;height:.7em;border-radius:50%;background:var(--gold);animation:sPulse .8s ease-in-out infinite}
+#saveDot.ok i{background:var(--good);animation:none}#saveDot.ok{color:var(--good)}#saveDot.fail i{background:var(--bad);animation:none}#saveDot.fail{color:var(--bad)}
+@keyframes sPulse{50%{opacity:.25;transform:scale(.7)}}
+.dots:after{content:'';animation:dots 1.2s steps(4) infinite}@keyframes dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
+.wob{animation:wob .5s ease-in-out infinite}@keyframes wob{0%,100%{transform:rotate(0)}25%{transform:rotate(-14deg)}75%{transform:rotate(14deg)}}
+.dWaitVs{display:flex;justify-content:center;align-items:center;gap:.6em;margin-bottom:1em}.dWaitVs img{width:3.2em;height:3.2em;image-rendering:pixelated;animation:wob .7s ease-in-out infinite}.dWaitVs b{color:var(--gold);font-size:1.4em;margin:0 .4em}
 .dWait{text-align:center;padding:4em 1em;animation:bPulse 1.4s ease-in-out infinite}
 #dStage{position:relative;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:.5em;min-height:20em}
 .dSide{display:flex;flex-direction:column;gap:.4em}.dVs{font-size:2em;color:var(--gold)}
@@ -301,6 +308,7 @@ button.uRow{width:100%;font:inherit;color:inherit;background:#2a2346;border:2px 
     <div class="box"><span id="day">DAY 1</span><span id="clock">06:00</span></div>
     <div class="box"><span>DEBT</span><div class="debtbar"><div id="debtFill"></div></div></div>
     <div class="box"><span>ENERGY</span><div class="debtbar"><div id="enFill" style="background:#78e678"></div></div></div>
+    <div id="saveDot"></div>
   </div>
   <div id="objBox" class="ui box"><span id="obj"></span></div>
   <div id="topR" class="ui">

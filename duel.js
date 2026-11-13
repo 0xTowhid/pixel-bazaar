@@ -79,7 +79,7 @@ async function fight() {
   const lineup = team.map(s => [s.species, s.level]); // levels before the fight, as the contract sees them
   const coinsBefore = S.player.coins;
   // the fight runs on chain first, rolled from that block's randomness, so nobody can know the result in advance
-  $('duel').innerHTML = `<div class="dWait"><div class="gname">THE SPIRITS FACE OFF...</div><div class="sub">the duel is being fought on NEAR</div></div>`;
+  $('duel').innerHTML = `<div class="dWait"><div class="dWaitVs">${team.map(s => `<img src="${spiritFace(s.species)}" alt="">`).join('')}<b>VS</b>${f.team.map(([sp]) => `<img src="${spiritFace(sp)}" alt="">`).join('')}</div><div class="gname">THE SPIRITS FACE OFF<span class="dots"></span></div><div class="sub">the duel is being fought on NEAR</div></div>`;
   queue({ t: 'Duel', foe, team: DUEL.pick.slice() }, 'spirit duel', true);
   await new Promise(res => { flush.after = () => res(); });
   const ran = S.player.duel_day && S.player.duel_day[foe] === S.day && S.player.duel_seed;

@@ -20,7 +20,7 @@ async function flush() {
   const batch = Q.list.splice(0, 25), labels = Q.labels.splice(0, batch.length);
   const counts = {}; labels.forEach(l => counts[l] = (counts[l] || 0) + 1);
   const what = 'act · ' + Object.entries(counts).map(([l, n]) => n > 1 ? `${l} x${n}` : l).join(', ');
-  Q.sending = true;
+  Q.sending = true; Q.cur = Object.keys(counts).slice(0, 2).join(', ');
   const before = { barn: S.barn ? S.barn.slice() : [], seeds: S.player ? S.player.seeds.slice() : [], coins: S.coins };
   try {
     const tx = await Backend.call('act', { actions: batch });
@@ -29,7 +29,8 @@ async function flush() {
     chainLog(what, false); sfx('alert');
     const m = String(e.message || e).replace(/^.*panicked:\s*/is, '');
     if (/has not started/.test(m)) { toast('Today was not on NEAR yet. Fixing that, try again in a moment.', 3.5); recoverDay(); }
-    else toast(niceErr(m), 4);
+    else toast(niceErr(m) + ' (undone)', 4);
+    if (typeof saveFail === 'function') saveFail();
   }
   Q.sending = false;
   await sync();

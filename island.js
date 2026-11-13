@@ -148,11 +148,11 @@ function curseHTML() {
 async function openIsland(tab) {
   if (tab) ISL.tab = tab; $('iDot').classList.remove('on');
   if (ISL.tab === 'town') { ISL.tab = 'calls'; closeIsland(); openTown(); return; } // projects and records keep their own screen
+  if (!$('island').classList.contains('on')) { await Promise.all([pollIsland(true), loadMarket(true)]); }
+  else if (ISL.tab === 'market' || ISL.tab === 'goal') await loadMarket();
   const gs = goalState();
   const TABS = [['calls', 'CALLS', 'calls'], ['barons', `BARONS · ${(S.stalls || []).length}/5`, 'barons'], ['market', 'MARKET', 'market'], ['goal', gs && gs.claim ? '★ GOAL' : 'GOAL'], ['feed', 'FEED'], ['boss', bossUp() ? '⚠ BOSS' : 'BOSS'], ['curse', 'CURSES', 'calls'], ['town', 'TOWN']].filter(x => (!x[2] || unlocked(x[2])) && ((x[0] !== 'market' && x[0] !== 'goal') || MKT.goals)); // market and goal need the v8 contract
   if (ISL.tab === 'notes' || !TABS.some(x => x[0] === ISL.tab)) ISL.tab = TABS[0][0]; // ghost notes became calls
-  if (!$('island').classList.contains('on')) { await Promise.all([pollIsland(true), loadMarket(true)]); }
-  else if (ISL.tab === 'market' || ISL.tab === 'goal') await loadMarket();
   if (ISL.tab === 'calls') { try { ISL.posts = await Backend.view('get_calls', {}); } catch (e) { ISL.posts = ISL.posts || []; } }
   const el = $('island'), t = ISL.tab;
   const feed = ISL.feed.slice().reverse().map(f => `<div class="fRowI"><span class="sub">${ago(f.at)}</span> ${f.who === Backend.contractId ? `<b class="dn">⚠ ${f.text}</b>` : `<b class="${f.who === Backend.accountId ? 'gold' : 'cy'}">${f.who === Backend.accountId ? 'You' : shortName(f.who)}</b> ${shortText(f.text)}`}</div>`).join('') || '<div class="sub">Quiet so far. Catch something rare, beat a rival or pay the debt and the whole island hears about it.</div>';
