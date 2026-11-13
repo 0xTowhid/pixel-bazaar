@@ -11,7 +11,7 @@ const Backend = (() => {
   const mode = cfg.mode || 'local';
   const KEY = 'pb_account_' + (cfg.contractId || 'local');
   const store = { get() { try { return JSON.parse(localStorage.getItem(KEY)); } catch (e) { return null; } }, set(v) { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) {} }, clear() { try { localStorage.removeItem(KEY); } catch (e) {} } };
-  let me = null, near = null, keys = null, account = null, provider = null, local = null;
+  let me = null, near = null, keys = null, account = null, provider = null, local = null, lastNonce = 0n, relayOff = false;
   const url = f => new URL(f, document.baseURI).href;
 
   async function api(path, body) {
@@ -145,8 +145,32 @@ const Backend = (() => {
       if (mode === 'mock') { await api('/mock/call', { accountId: me.accountId, method, args }); return null; }
       await loadNear();
       if (!account) account = new near.Account(me.accountId, provider, me.secretKey);
+      // Gasless: sign the move here, the game server submits it and pays the gas (NEP-366). Your account needs no NEAR.
+      const gas = near.teraToGas(method === 'act' ? '50' : '15');
+      const relayed = async () => {
+        const pk = await account.signer.getPublicKey();
+        const [ak, block] = await Promise.all([provider.viewAccessKey({ accountId: me.accountId, publicKey: pk.toString() }), provider.viewBlock({ finality: 'final' })]);
+        let nonce = BigInt(ak.nonce) + 1n; if (nonce <= lastNonce) nonce = lastNonce + 1n;
+        const da = near.buildDelegateAction({ senderId: me.accountId, receiverId: cfg.contractId, nonce, maxBlockHeight: BigInt(block.header.height) + 120n, publicKey: pk,
+          actions: [near.actions.functionCall(method, args, gas, 0n)] });
+        const { signedDelegate } = await account.signer.signDelegateAction(da);
+        const bytes = near.encodeSignedDelegate(signedDelegate);
+        let bin = ''; for (const b of bytes) bin += String.fromCharCode(b);
+        try { return (await api('/api/relay', { accountId: me.accountId, delegate: btoa(bin) })).tx || null; }
+        finally { lastNonce = nonce; } // a refused move can still use up its nonce on chain
+      };
+      if (!relayOff) {
+        try { return await relayed(); }
+        catch (e) {
+          const m = String(e && e.message || e);
+          if (/InvalidNonce|nonce/i.test(m)) { lastNonce = 0n; return await relayed(); } // a stale nonce: read it again once
+          if (!/RELAY_OFF|RELAY_LIMIT|Server error|Failed to fetch|NetworkError/i.test(m)) throw e; // the game said no: show why
+          if (/RELAY_OFF/.test(m)) relayOff = true;
+          console.warn('relay unavailable, paying gas from your own account:', m);
+        }
+      }
       const send = async () => {
-        const r = await account.callFunctionRaw({ contractId: cfg.contractId, methodName: method, args, gas: near.teraToGas(method === 'act' ? '50' : '15'), deposit: 0n });
+        const r = await account.callFunctionRaw({ contractId: cfg.contractId, methodName: method, args, gas, deposit: 0n });
         const fail = r?.status?.Failure;
         if (fail) { const raw = JSON.stringify(fail); const err = new Error(raw.replace(/.*panicked: ?/, '').replace(/["\\}]+$/g, '').slice(0, 160)); err.raw = raw; throw err; }
         return r?.transaction?.hash || null;
