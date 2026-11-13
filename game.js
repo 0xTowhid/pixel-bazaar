@@ -228,7 +228,7 @@ async function guarded(label, fn, tag, block) {
   } finally { if (block) { if (--busyN === 0) $('busy').style.display = 'none'; } else pendingN--; }
 }
 // ---------- the saving dot: a small sign that your moves are on their way to NEAR ----------
-let saveWas = false, saveFailAt = 0;
+let saveWas = false, saveFailAt = -1e9;
 function saveFail() { saveFailAt = performance.now(); }
 setInterval(() => {
   const el = $('saveDot'); if (!el || !S) return;

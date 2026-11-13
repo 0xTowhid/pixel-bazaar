@@ -2,7 +2,7 @@
 
 **Catch spirits, solve the mystery, trade on rumors.** A pixel-art RPG and life sim on NEAR, where every spirit, badge and legendary fish is a real NFT you own.
 
-You arrive on the Lantern Isles owing the Harbor Master 3,000 coins, with 300 coins and 10 days to pay. Someone has stolen the Great Lantern and the spirits have gone wild. Catch them, raise them and duel with them. Follow the clues through the Whispering Woods, the Sunken Shrine and the Clockwork Sky to the old spirit gate. Every morning the locals tell you rumors about tomorrow's prices. Some tell the truth and some don't. Use them to go **long or short with leverage** at Tomo's stall, against five agent barons who each have their own NEAR account, a sealed daily call and a stall you can take from them as an NFT. While you sleep, your spirits work the night shift. And you are not alone: other players post calls, cast curses, and fight the rare world boss with you. **You never pay gas**: the game relays every move.
+You arrive on the Lantern Isles owing the Harbor Master 3,000 coins, with 300 coins and 10 days to pay. Someone has stolen the Great Lantern and the spirits have gone wild. Catch them, raise them and duel with them. Follow the clues through the Whispering Woods, the Sunken Shrine and the Clockwork Sky to the old spirit gate. Every morning the locals tell you rumors about tomorrow's prices. Some tell the truth and some don't. Use them to go **long or short with leverage** at the stalls, against five agent barons who each have their own NEAR account, a sealed daily call and a stall you can take from them as an NFT. While you sleep, your spirits work the night shift. And you are not alone: other players trade spirits with you on the player market (5% of every sale is burned), work toward a shared weekly island goal, post calls, cast curses, and fight the rare world boss with you. Every season the debt grows, and you pick an omen to help. **You never pay gas**: the game relays every move.
 
 Built for NEAR HACKATHON 2026, **Games With Real Economies** track.
 
@@ -18,17 +18,57 @@ Built for NEAR HACKATHON 2026, **Games With Real Economies** track.
 
 ## For judges: a 5-minute run
 
-1. Open the game. A short intro plays (SKIP works), then **HOW TO PLAY** explains the story, a day, your first day step by step, and how the worlds unlock. The goal line at the top and a yellow arrow always point to your next step.
+1. Open the game. A short intro plays (SKIP works), then a 3-page **HOW TO PLAY**. After that you learn by playing: walk up to anything and the prompt says what it is for. The goal line at the top and a yellow arrow always point to your next step. (The full guide is in the Journal, J.)
 2. Choose **NEW TRADER**, pick a name and a password. The game creates `yourname.pixelbazaar8-tow69.testnet` and shows a 12-word recovery code. Every ✓ line at the bottom of the screen links to the transaction on the explorer.
 3. Read the morning paper and press **START DAY**. The day is committed on chain before you see any rumors (`✓ commit_day`).
 4. Catch a spirit: walk up to a glowing wisp in the grass, press E (A on phones) and stop the bar in the green. The contract decides the catch, and the spirit is minted to you as an NFT. It follows you as your companion.
 5. Press **B** for your spirits (feed, evolve, the Spirit Book, the five legendary fish). Press **WALLET**: your game account is a real NEAR account with an address, a QR code and a balance. Send any spirit, badge or fish to any NEAR address, or send NEAR out after re-typing your password.
 6. Press **Q** for the story and today's three quests, talk to **Madame Vey** for three fate cards, and challenge **Mei** to a 3-vs-3 spirit duel.
-7. Press **I** for the **Bazaar Board**: the barons' sealed calls (pay to PEEK one), post your own call, the race for each baron's stall, the feed of every player, curses and the world boss.
+7. Press **I** for the **Bazaar Board**: how many players are on the island, the barons' sealed calls (pay to PEEK one), your own call, the **player market**, this week's **island goal**, the race for each baron's stall, the feed of every player, curses and the world boss.
 8. In **B → NIGHT CREW**, put up to three fed spirits to work: earth mines, water fishes, nature farms, wind runs deliveries...
 9. After 18:00, go home and **SLEEP**. The contract checks the night's reveal (event, rumors and the barons' sealed calls) against the morning commitment and settles everything (`✓ settle_day`). At dawn your crew comes home with its haul.
 
+In the first season, features open day by day (day 2 worlds and the night crew, day 3 duels, calls and the market, day 4 the baron race). To see everything at once, play a second season, or read **How to play** below.
+
 On phones, tap **FULL SCREEN** at the top (on iPhone, use Share → Add to Home Screen).
+
+## How to play
+
+**The goal.** You owe the Harbor Master 3,000 coins and have 10 days. Pay him before day 10 ends to win the season. Then a new season starts: the debt grows by 500 (up to 6,000), coins restart at 300, and you keep your farm, spirits, stalls, badges and items. Along the way, solve the mystery of the stolen Great Lantern (five story chapters).
+
+**One day.**
+1. *Morning:* the paper and the locals give rumors about tomorrow's prices. Some lie: some locals always, some only on some days. Your day is committed on NEAR before you see them.
+2. *Day:* farm, fish, mine, catch spirits, sell, trade, do quests. Most actions cost energy (100 a day).
+3. *After 18:00:* go home and sleep (stay up too late and you pass out).
+4. *Night:* the contract checks the reveal against the morning commitment and settles everything: prices, trades, crops, the barons' calls, your night crew's work. Energy refills.
+
+**What opens when (first season only).** Day 1: farming, selling, fishing, mining, catching spirits, rumors, trading. Day 2: the other worlds, Madame Vey's fate cards, the night crew. Day 3: spirit duels, player calls and curses, the player market. Day 4: the baron race for the stalls. From season 2, everything is open.
+
+**Making coins.**
+- *Farm:* 9 crops. Plant with keys 1-9 on the plots behind your house, water daily, harvest when ripe. Rain waters for you; frost kills crops.
+- *Sell:* tea, honey, carrots, fish and jade at the five barons' stalls; seeds, apples, ore and everything else at Tomo's. Prices move every night.
+- *Fish, mine, forage:* fish at the pier (five legendary fish bite only when their riddle is true), mine rocks for ore and jade, shake apple trees, open each world's daily chest, pet Mochi the cat.
+- *Quests:* three daily quests (Q) pay automatically. Town projects (pier, lighthouse, tea house) give lasting bonuses.
+
+**Trading on rumors.** At a stall (or Tomo's for other goods), go LONG or SHORT on a good with leverage; x5 and x10 need a license. Trades settle at night and pay on the event only, so there is no risk-free trade. Big leverage can be liquidated. Gifts make locals friends, and friends tell you how sure they are.
+
+**Spirits.** 39 species in 7 elements, each world with its own. Walk up to a glowing wisp, stop the bar in the green, and the contract rolls the catch; a caught spirit is minted to you as an NFT. Your companion follows you, gains XP every night, and evolves when fed (some forms need a lantern shard). Elements open worlds: fire lights the dark woods, water dives to the Sunken Shrine, wind glides to the Clockwork Sky.
+- *Night crew:* up to 3 fed spirits work while you sleep, by element (earth mines, water fishes, nature farms, fire guards, wind delivers, spirit seeks shards, dark prowls for coins).
+- *Duels:* pick 3 spirits against Mei, Rita (Moon Market, at night) or the Great Spirit, once a day each. Fire › nature › water › fire, wind › earth › fire, spirit ⇄ dark.
+
+**The story.** 1: catch a spirit and sell anything. 2: the brazier puzzle in the Whispering Woods. 3: the bell puzzle in the Sunken Shrine (needs a water spirit). 4: the gear puzzle in the Clockwork Sky (needs a wind spirit). 5: beat the Great Spirit at the old gate. The ending mints the Jade Dragon. Madame Vey's three fate cards each day (a blessing, a curse and a secret) change the day's odds.
+
+**The barons and their stalls.** Kaito (tea), Rita (honey), Granny Pell (carrots), Bolt-9 (fish) and Luna (jade) each make a sealed call every morning, revealed at night. Peek for a price and follow or fade them. Out-trade a baron on their good over the season, and pay your debt, and their **stall NFT** is yours: rent every night and 10% better prices for that good. Next season they fight back. Hold all five and finish the story to become the Lantern Keeper.
+
+**Other players (the Bazaar Board, I).**
+- *Market:* list spirits and legendary fish for coins (up to 4 at a time). The contract holds the item until it sells or you take it back. 5% of every sale is burned.
+- *Island goal:* each week, one goal for every player together (harvest crops, catch fish, catch spirits or sell goods). Do your small part, and when the island reaches it, everyone who helped claims 80 coins.
+- *Calls and curses:* post one call a day (a right one pays and earns reputation); curse a rival, and carry charms to block curses.
+- *World boss:* rarely, one boss with one HP bar for everyone. Everyone who fights to the end gets a reward.
+
+**Seasons and omens.** From season 2, Madame Vey turns three omens at the start of the season and you keep one all season: Golden Soil (+1 crop per harvest), Full Nets (fish bite more), Spirit Moon (easier catches), Light Pick (mining costs 5 energy, not 8), Merchant's Luck (selling pays 5% more) or Harbor Tide (+15 coins a night).
+
+**Winning, in short:** farm and sell every day, trade only on rumors you trust, raise spirits for the worlds and the night crew, pay the debt early (by day 6 earns a badge), then take the barons' stalls season after season.
 
 ## What NEAR does in this game
 
@@ -45,6 +85,9 @@ On phones, tap **FULL SCREEN** at the top (on iPhone, use Share → Add to Home 
 | **Shared island state** | `get_feed`, `get_calls`, `get_boss`, `Action::PostCall/Curse/BuyCharm/BossHit/BossClaim` | Player calls (one a day; a right call pays and earns reputation), curses that land on another player's next move unless a charm blocks them, and a world boss with one HP bar for everyone. A boss window opens about once a month, decided by `sha256` of the time window; the operator can also summon one for a live event. |
 | **Agent barons with their own accounts** | `create_npc`, `get_npcs`, `settle_day`, `Action::Peek` | Kaito the Whale, Rita, Granny Pell (contrarian), Bolt-9 (gossip bot) and Luna Moonsong (stargazer) are sub-accounts with coin ledgers. Their calls are **sealed inside the morning commitment** and revealed at night (the hash must match); you can pay one to peek. Each holds the stall of one good: out-trade them on it over a season and the **stall NFT** moves to you, paying rent every night. Fade a baron and win, and you may earn a grudge (a curse). |
 | **Night crews** | `Action::SetCrew`, `crew_work` | Up to three fed spirits work while you sleep, by element: earth mines ore and jade, water fishes, nature farms, fire guards, wind delivers, spirit seeks shards, dark prowls for coins. Weather and events halve or double jobs; shinies bring more. |
+| **Player market** | `Action::List/Unlist/Buy`, `get_market`, `get_stats` | Players sell spirits and legendary fish to each other for coins. A listed NFT is held by the contract (a NEP-171 transfer to the contract account) until it is bought or taken back. 5% of every sale is burned; `get_stats` shows players, open listings, sales and coins burned. Coins from a sale after your season ended wait for your next season. |
+| **Weekly island goal** | `Action::ClaimGoal`, `get_goal` | One shared goal a week for every player, picked by `sha256` of the week. The target grows with the number of players. Each player's part is counted in their own moves; once the island reaches the goal, everyone who did their part claims 80 coins (last week's goal stays claimable for a week). |
+| **Seasons with rising stakes** | `start_season`, `Action::PickOmen` | The debt grows 500 each season up to 6,000. From season 2, three omens are dealt from `sha256(account, season)` and the player keeps one for the season; the contract applies its effect (harvest, fishing, catching, mining, selling or nightly coins). |
 | NEP-245 multi-token | `mt_balance_of`, `mt_transfer`, `get_inventory` | Barn goods (13 kinds), items (licenses, bridge, boat, stall) and the record of each badge. |
 
 ## The game
@@ -57,10 +100,11 @@ On phones, tap **FULL SCREEN** at the top (on iPhone, use Share → Add to Home 
 | **Daily hooks** | Madame Vey's three fate cards a day (a blessing, a curse and a secret, each with a real effect), three daily quests that pay automatically, and rumors in the morning paper. |
 | **Spirit duels** | Pick three spirits against Mei, Rita at the Moon Market night table, or the Great Spirit. Element wheel: fire › nature › water › fire, wind › earth › fire, spirit ⇄ dark. One duel a day per rival; the whole fight is decided on chain and shown hit by hit. |
 | **Fishing legends** | Five one-of-one fish that only bite when their riddle is true (with a fire companion, on a day of The River, after the sky...). |
-| **Bazaar Board** (I) | The barons' sealed calls with their records and PEEK, your own call, the race for each stall, the feed of every player, curses and charms, the world boss. |
+| **Bazaar Board** (I) | The number of players, the barons' sealed calls with their records and PEEK, your own call, the player market, the weekly island goal, the race for each stall, the feed of every player (with the barons' nightly results), curses and charms, the world boss. |
 | **Night crew** (B) | Three spirits that work while you sleep, by element, with a dawn report of their haul. |
 | **The bazaar** (Tomo) | Long or short on 12 goods with x1-x10 leverage against five barons. Sell your harvest, buy seeds and licenses, and take a baron's stall (an NFT that pays rent). Own all five and finish the story for the Bazaar Keeper badge. |
-| **Life sim** | Farm 9 crops (rain waters them, frost kills them), mine jade, fish, give gifts until locals trust you, rebuild the town. Pay the Harbor Master 3,000 to finish the season; your spirits, story and farm carry over. |
+| **Life sim** | Farm 9 crops (rain waters them, frost kills them), mine jade, fish, give gifts until locals trust you, rebuild the town. Pay the Harbor Master to finish the season (3,000, then 500 more each season); your spirits, story and farm carry over, and you pick an omen for the new season. |
+| **Made to be learned by playing** | Features open day by day in the first season, a 3-page guide, one-line hints the first times you walk up to something, and a saving dot that shows each move going to NEAR (moves show at once and are undone if NEAR says no). |
 
 Controls: arrows or WASD, E or Space to interact, 1-9 seeds, B spirits, Q quests, I Bazaar Board, Tab menu, P profile, J journal, M music. On phones (sideways): the thumb stick and the A button.
 
@@ -107,7 +151,7 @@ npm install --prefix server && MOCK=1 node server/index.mjs
 ```
 cd contract && cargo test
 ```
-63 contract unit tests, among them:
+70 contract unit tests, among them:
 - trading, liquidation, leverage licenses, the operator cannot change the event
 - farming, weather, energy, gifts, town projects, the stall, seasons and badges
 - spirits: catching, shinies, feeding, evolution with shards, NFT transfers and metadata, the wallet link (both sides needed)
@@ -118,6 +162,7 @@ cd contract && cargo test
 - ghost notes and votes, curses and charms, the shared world boss and its rewards, rare natural boss windows
 - agent barons settling on their own ledgers, sealed calls revealed at night, peeks, player calls, grudges, stalls won, defended and lost
 - night crews by element, with weather and event effects
+- the player market (5% burned, seller paid, rules on what and how much can be listed, sales after a season ends), omens and rising debt, the weekly island goal
 - 12 audit regression tests from the v3 security audit
 
 The JavaScript copy of the contract (`shared/engine.js`) runs the same rules; the duel code was checked to give the same result as the Rust code on 120 random fights. I also played every new feature in headless Chromium on desktop and phone sizes, in offline mode and against the server with two players at once (notes, curses and charms between them).
@@ -133,6 +178,8 @@ quests.js               fate cards, quest board, story chapters
 duel.js                 3 v 3 spirit duels
 island.js               the Bazaar Board: calls and peeks, the stall race, feed, curses and charms, world boss
 bazaar.js               the five baron stalls in town and the night crew tab
+market.js               the player market, the weekly island goal and the season's omen
+unlock.js               what opens on which day of the first season, and the first-time hints
 wallet.js               the built-in wallet: address + QR, balance, send NFTs, send NEAR
 life.js                 farm plots, mining, fishing, Mochi the cat, the `act` queue
 panels.js               morning paper, selling, seeds, gifts, town board, profile, share images

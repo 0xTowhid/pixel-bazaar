@@ -116,34 +116,51 @@ function showWelcome() {
 // ---------- 2b. how to play: what the game is, what to do, where the worlds are ----------
 const GUIDE = [
   { t: 'YOUR STORY', f: 'LanternRed', b: `You arrive on the Lantern Isles owing the <b class="gold">Harbor Master 3,000 coins</b>. You have 300 coins and <b class="gold">10 days</b>.
-      <br><br>Someone stole the <b class="gold">Great Lantern</b>, and the island's spirits are running wild. Earn your coins, catch the spirits, and find out who took the flame.` },
+      <br><br>Someone stole the <b class="gold">Great Lantern</b>, and the island's spirits are running wild. Earn your coins, catch the spirits, and find out who took the flame.
+      <br><br><b>You win the season</b> by paying him before day 10 ends. Then a new season starts: the debt grows, but you keep your farm, spirits and items.` },
   { t: 'ONE DAY', f: 'Owl', b: `<ol class="gList"><li><b>Morning:</b> the paper and the locals give you <b>rumors</b> about tomorrow's prices. Some lie.</li>
-      <li><b>Day:</b> farm, fish and mine, then sell your harvest: tea, honey, carrots, fish and jade at the <b>barons' stalls</b>, everything else at <b>Tomo's</b>. Catch spirits and raise them as companions. Bet on the rumors, do your 3 daily quests.</li>
-      <li><b>After 18:00:</b> walk home (your house by the farm) and press E on the door to <b>sleep</b>.</li>
-      <li><b>Night:</b> NEAR reveals what really happened. Your trades, crops and spirits update, and your <b>night crew</b> comes home with its haul. Energy refills.</li></ol>` },
-  { t: 'OWN THE BAZAAR', f: 'GoldRacoon', b: `Five <b>barons</b> hold the market stalls: Kaito (tea), Rita (honey), Granny Pell (carrots), Bolt-9 (fish) and Luna (jade).
-      <br><br>Out-trade a baron on their own good by the end of the season, and pay your debt, and their <b class="gold">stall NFT is yours</b>: rent every night, and that good sells 10% higher. Next season they fight back.
-      <br><br>Hold all five and finish the story to become the <b class="gold">Lantern Keeper</b>. Walk up to a stall, or open the <b>Bazaar Board</b> (I), to see the race.` },
-  { t: 'YOUR FIRST DAY', f: 'Flam', b: `<ol class="gList"><li>Talk to <b>Mei</b> by the market: your first rumor.</li>
-      <li>Shake an <b>apple tree</b> (E) and plant a seed on your farm plots.</li>
-      <li>Walk up to a <b>glowing wisp</b> and press E. Stop the bar in the green to <b>catch your first spirit</b>.</li>
-      <li><b>Sell</b> anything: apples at Tomo's, carrots at Granny Pell's stall. That finishes <b>Chapter 1</b>.</li>
-      <li>Visit <b>Madame Vey</b> for your 3 fate cards, then <b>sleep</b> after 18:00.</li></ol>
-      <div class="sub">The yellow arrow on screen always points at your next goal.</div>` },
-  { t: 'THE WORLDS', f: 'Spirit', b: `<div class="gWorlds">
-      <div><b class="gold">TOWN</b><span>start here: farm, market, harbor, Madame Vey</span></div>
-      <div><b class="gold">WHISPERING WOODS</b><span>north road. Open any time. Dark: a fire spirit lights the way. Chapter 2</span></div>
-      <div><b class="gold">MOON MARKET</b><span>the gate in the middle of town. Opens at 18:00. Rita's duel table</span></div>
-      <div><b class="gold">SUNKEN SHRINE</b><span>east shore. You need a WATER spirit. Chapter 3</span></div>
-      <div><b class="gold">CLOCKWORK SKY</b><span>north-east cliff. You need a WIND spirit. Chapter 4</span></div>
-      <div><b class="gold">THE OLD GATE</b><span>deep in the woods. The Great Spirit waits. Chapter 5</span></div></div>
-      <div class="sub">Gates are marked on the minimap. Each world has a puzzle that changes every day.</div>` },
-  { t: 'SPIRITS AND DUELS', f: 'KappaGreen', b: `Every spirit is a real <b>NFT you own</b>. Press <b>B</b> to see them. Your <b>companion</b> follows you and grows every night. Feed it to level up, and it evolves.
-      <br><br>Put up to 3 on your <b>night crew</b> (Spirits → NIGHT CREW). Feed them and they work while you sleep: earth mines, water fishes, nature farms, fire guards, and more. The night's event can halve or double the haul.
-      <br><br>Pick 3 spirits and <b>duel</b> Mei, Rita (Moon Market, at night) or the Great Spirit. A win trains your whole crew. Fire beats nature, nature beats water, water beats fire.` },
-  { t: 'THE BAZAAR BOARD', f: 'Skull', b: `Press <b>I</b> (or walk up to the board in the town square). Every agent makes a call at dawn, <b>sealed on NEAR</b> until night: pay to <b>peek</b> and follow or fade them. Make your own call too (a right one pays). Fade a baron and win, and they may <b>curse</b> you, so carry charms. Very rarely, everyone fights a <b>world boss</b> together.` },
-  { t: 'IT IS ALL ON NEAR', f: 'Eye2', b: `Your game account is a real NEAR account. Every move is a transaction (see the ✓ lines bottom-left). Open <b>WALLET</b> to see your address, receive NEAR, and send spirits, badges and fish to anyone.
-      <br><br>Keys: arrows/WASD move · E act · 1-9 seeds · B spirits · Q quests · I island · P profile · J journal.` },
+      <li><b>Day:</b> farm, fish, mine, catch spirits, sell, trade on the rumors and do your 3 daily quests. Most things use <b>energy</b>.</li>
+      <li><b>After 18:00:</b> walk home and press E on your door to <b>sleep</b>. (Stay up too late and you pass out.)</li>
+      <li><b>Night:</b> NEAR reveals what really happened. Prices move, trades pay out, crops grow, your night crew works. Energy refills.</li></ol>` },
+  { t: 'WHAT OPENS WHEN', f: 'Flam', b: `Your first season opens up a little each day:
+      <div class="gWorlds">
+      <div><b class="gold">DAY 1</b><span>farm, sell, fish, mine, catch spirits, rumors, trading</span></div>
+      <div><b class="gold">DAY 2</b><span>the other worlds, Madame Vey's fate cards, the night crew</span></div>
+      <div><b class="gold">DAY 3</b><span>spirit duels, your own calls and curses, the player market</span></div>
+      <div><b class="gold">DAY 4</b><span>the baron race for the five stalls</span></div></div>
+      <div class="sub">From season 2, everything is open from the start. The yellow arrow always points at your next goal.</div>` },
+  { t: 'MAKING COINS', f: 'GoldRacoon', b: `<ol class="gList"><li><b>Farm:</b> plant seeds (1-9) on the plots behind your house, water them, and harvest when ripe. Rain waters for you; frost kills crops.</li>
+      <li><b>Sell:</b> tea, honey, carrots, fish and jade at the <b>barons' stalls</b>; seeds, apples, ore and the rest at <b>Tomo's</b>.</li>
+      <li><b>Fish</b> at the pier, <b>mine</b> the rocks for ore and jade, shake <b>apple trees</b>, and pet <b>Mochi</b> the cat for a gift.</li>
+      <li><b>Quests</b> (Q) pay coins each day, and the <b>island goal</b> pays everyone who helped.</li></ol>` },
+  { t: 'TRADING ON RUMORS', f: 'Eye2', b: `At a stall or at Tomo's, go <b>LONG</b> (the price will rise) or <b>SHORT</b> (it will fall) on a good, with leverage. Trades settle at night on NEAR.
+      <br><br>Rumors come from the paper and the locals. Some always lie, some only lie on some days: learn who to trust. Gifts make friends, and friends tell you how sure they are.
+      <br><br>Higher leverage needs a <b>license</b> (x5, x10). Big leverage can wipe out your stake.` },
+  { t: 'THE STORY', f: 'Spirit', b: `<div class="gWorlds">
+      <div><b class="gold">1 · THE DEBT</b><span>catch your first spirit and sell anything</span></div>
+      <div><b class="gold">2 · WHISPERING WOODS</b><span>north road. Dark: a fire spirit lights the way. Brazier puzzle</span></div>
+      <div><b class="gold">3 · SUNKEN SHRINE</b><span>east shore. You need a WATER spirit. Bell puzzle</span></div>
+      <div><b class="gold">4 · CLOCKWORK SKY</b><span>north-east cliff. You need a WIND spirit. Gear puzzle</span></div>
+      <div><b class="gold">5 · THE OLD GATE</b><span>deep in the woods. Beat the Great Spirit in a duel</span></div>
+      <div><b class="gold">MOON MARKET</b><span>the gate in town, open after 18:00. Rita's duel table</span></div></div>
+      <div class="sub">Each world has its own spirits, a chest that refills daily, and a puzzle whose order changes every day.</div>` },
+  { t: 'SPIRITS AND DUELS', f: 'KappaGreen', b: `Every spirit is a real <b>NFT you own</b>. Press <b>B</b> to see them. Your <b>companion</b> follows you and grows every night. Feed it to level up, and it evolves (some need a lantern shard).
+      <br><br>Put up to 3 on your <b>night crew</b>. They work while you sleep: earth mines, water fishes, nature farms, fire guards, wind delivers, spirit seeks shards, dark prowls for coins.
+      <br><br><b>Duel</b> Mei, Rita (Moon Market) or the Great Spirit with 3 spirits, once a day each. Fire › nature › water › fire, wind › earth › fire, spirit ⇄ dark.` },
+  { t: 'OWN THE BAZAAR', f: 'Skull', b: `Five <b>barons</b> hold the stalls: Kaito (tea), Rita (honey), Granny Pell (carrots), Bolt-9 (fish) and Luna (jade). Each makes a <b>sealed call</b> every morning, revealed at night. Pay to <b>peek</b> and follow or fade them.
+      <br><br>Out-trade a baron on their own good this season, and pay your debt, and their <b class="gold">stall NFT is yours</b>: rent every night, and that good sells 10% higher. Next season they fight back.
+      <br><br>Hold all five and finish the story to become the <b class="gold">Lantern Keeper</b>.` },
+  { t: 'THE BAZAAR BOARD', f: 'Owl2', b: `Press <b>I</b> (or walk up to the board in the town square) to see the whole island:
+      <div class="gWorlds">
+      <div><b class="gold">CALLS</b><span>the barons' sealed calls, and your own (a right call pays)</span></div>
+      <div><b class="gold">MARKET</b><span>buy and sell spirits and legendary fish with other players. 5% of each sale is burned</span></div>
+      <div><b class="gold">GOAL</b><span>this week's goal for every player together. Do your part, get 80 coins</span></div>
+      <div><b class="gold">FEED · BOSS</b><span>what everyone did, and the rare world boss you all fight</span></div>
+      <div><b class="gold">CURSES</b><span>curse a rival; carry charms to block curses</span></div></div>` },
+  { t: 'NEW SEASONS', f: 'Bamboo', b: `After day 10 a new season begins. You keep your farm, spirits, stalls, badges and items. Coins start again at 300.
+      <br><br>The Harbor Master <b>raises the debt</b> 500 each season (up to 6,000). To help, Madame Vey turns three <b class="gold">omens</b>: pick one and it lasts all season (an extra crop per harvest, more fish, easier catches, cheaper mining, better prices or coins every night).` },
+  { t: 'IT IS ALL ON NEAR', f: 'Eye2', b: `Your game account is a real NEAR account and you never pay gas. Every move is saved on NEAR (watch the saving dot; the ✓ lines link to each transaction). Open <b>WALLET</b> to see your address, receive NEAR, and send spirits, badges and fish to anyone.
+      <br><br>Keys: arrows/WASD move · E act · 1-9 seeds · B spirits · Q quests · I island · P profile · J journal · Tab menu.` },
 ];
 // the short version for brand-new players: three pages, then you learn by playing (the hints teach each thing the first time)
 const GUIDE_SHORT = [
