@@ -75,8 +75,7 @@ function spiritDrawables(camX, camY) {
     const x = Math.round(comp.x - camX), y = Math.round(comp.y - camY + Math.sin(comp.t * 3) * 2);
     ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.beginPath(); ctx.ellipse(x, y + 1, 9, 3, 0, 0, 7); ctx.fill();
     drawSpiritAt(L.species, x, y, comp.moving ? comp.dir : 'down', comp.t, 2, L.shiny ? '#ffe9a0' : null);
-    ctx.font = '9px Joy, monospace'; ctx.textAlign = 'center'; const t = `Lv ${L.level} ${L.name.toUpperCase()}`, w2 = ctx.measureText(t).width + 8;
-    ctx.fillStyle = '#000a'; ctx.fillRect(x - w2 / 2, y - 48, w2, 12); ctx.fillStyle = elOf(L.species).color; ctx.fillText(t, x, y - 39);
+    // no floating label: your companion's level is in the spirits screen (B)
   } });
   return out;
 }

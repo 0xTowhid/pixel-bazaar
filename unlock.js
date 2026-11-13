@@ -28,3 +28,25 @@ function showUnlocks() {
     ${today.map(u => `<div class="uRow"><img src="assets/spirits/${u.icon}.png" alt=""><div><b class="gold">${u.title}</b><div class="sub">${u.text}</div></div></div>`).join('')}
     <div style="text-align:center;margin-top:.9em"><button class="btn big gold" id="cardBtn">LET'S GO</button></div>`, null, true);
 }
+
+// learn by doing: the first few times you walk up to something new, the prompt says what it is for
+const TIPS = {
+  wild: 'A wild spirit. Stop the bar in the green to catch it.',
+  plot: 'Pick a seed (1-9) and plant it. Water it; it grows overnight.',
+  plant: 'Water it each day. It grows while you sleep.', water: 'Water it each day. It grows while you sleep.',
+  harvest: "Ready! Sell it at Tomo's or at a stall.",
+  rock: "Mining uses energy. Ore sells at Tomo's.",
+  fish: "Fishing uses energy. Fish sell at Bolt-9's stall.",
+  stall: 'Sell this good here. Rumors say if it rises tomorrow.',
+  npc: "Talk every day: rumors about tomorrow's prices. Some lie.",
+  home: 'After 18:00, sleep to end the day.',
+  board: 'What every player and trader is doing.',
+  gate: 'Each world has its own spirits and a daily puzzle.',
+};
+const tipSeen = (() => { try { return JSON.parse(localStorage.getItem('pb_tips') || '{}'); } catch (e) { return {}; } })();
+function tipFor(t) {
+  if (!t || !TIPS[t.kind] || !S || !S.player || S.player.season > 1 || (tipSeen[t.kind] || 0) >= 2) return '';
+  if (t.kind === 'gate' && !unlocked('worlds')) return '';
+  return TIPS[t.kind];
+}
+function learnTip(t) { if (!t || !TIPS[t.kind]) return; tipSeen[t.kind] = (tipSeen[t.kind] || 0) + 1; try { localStorage.setItem('pb_tips', JSON.stringify(tipSeen)); } catch (e) {} }

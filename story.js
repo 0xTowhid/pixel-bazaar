@@ -107,7 +107,7 @@ function showWelcome() {
         ${item('Mushroom', 'FARM · FISH · TRADE', 'The cozy life between adventures')}
         ${item('Skull', 'PRANK OTHER PLAYERS', 'Ghost notes, curses, a rare world boss')}
       </div>
-      <div style="text-align:center;margin-top:1.2em"><button class="btn big gold" id="cardBtn">HOW TO PLAY (2 MIN)</button> <button class="btn big" id="wSkip">SKIP, LET ME PLAY</button></div>
+      <div style="text-align:center;margin-top:1.2em"><button class="btn big gold" id="cardBtn">HOW TO PLAY (30 SEC)</button> <button class="btn big" id="wSkip">SKIP, LET ME PLAY</button></div>
       <div class="sub" style="text-align:center;margin-top:.8em">No wallet needed. Everything you earn is saved on NEAR.</div>`, () => res(true));
     $('wSkip').onclick = e => { e.stopPropagation(); cardCb = null; $('card').classList.remove('on'); sfx('ok'); res(false); };
   });
@@ -145,16 +145,29 @@ const GUIDE = [
   { t: 'IT IS ALL ON NEAR', f: 'Eye2', b: `Your game account is a real NEAR account. Every move is a transaction (see the ✓ lines bottom-left). Open <b>WALLET</b> to see your address, receive NEAR, and send spirits, badges and fish to anyone.
       <br><br>Keys: arrows/WASD move · E act · 1-9 seeds · B spirits · Q quests · I island · P profile · J journal.` },
 ];
-function showGuide() {
+// the short version for brand-new players: three pages, then you learn by playing (the hints teach each thing the first time)
+const GUIDE_SHORT = [
+  { t: 'YOUR GOAL', f: 'LanternRed', b: `You owe the <b class="gold">Harbor Master 3,000 coins</b>. You have 300 and <b class="gold">10 days</b>.
+      <br><br>Farm, fish, catch spirits and trade on rumors to pay him. Someone also stole the Great Lantern: find out who.` },
+  { t: 'ONE DAY', f: 'Owl', b: `<ol class="gList"><li><b>Day:</b> farm, sell, catch spirits, listen to rumors about tomorrow's prices.</li>
+      <li><b>After 18:00:</b> go home and <b>sleep</b>.</li>
+      <li><b>Night:</b> NEAR reveals the real prices. Crops grow, trades pay out.</li></ol>
+      <div class="sub">The yellow arrow always points at your next goal.</div>` },
+  { t: 'LEARN AS YOU GO', f: 'Flam', b: `Walk up to anything and a hint tells you what it does.
+      <br><br>New things open each day: <b class="gold">day 2</b> the other worlds, fate cards and your night crew · <b class="gold">day 3</b> spirit duels and calls · <b class="gold">day 4</b> the baron race for the stalls.
+      <div class="sub" style="margin-top:.8em">The full guide is in your Journal (J).</div>` },
+];
+function showGuide(short) {
+  const pages = short ? GUIDE_SHORT : GUIDE;
   return new Promise(res => {
     let i = 0;
     const page = () => {
-      const g = GUIDE[i], last = i === GUIDE.length - 1;
-      openCard(`<div class="gHead"><img src="assets/spirits/f_${g.f}.png" alt=""><div><div class="sub">HOW TO PLAY · ${i + 1} OF ${GUIDE.length}</div><div class="ntitle" style="text-align:left;margin:0">${g.t}</div></div></div>
+      const g = pages[i], last = i === pages.length - 1;
+      openCard(`<div class="gHead"><img src="assets/spirits/f_${g.f}.png" alt=""><div><div class="sub">HOW TO PLAY · ${i + 1} OF ${pages.length}</div><div class="ntitle" style="text-align:left;margin:0">${g.t}</div></div></div>
         <div class="gBody">${g.b}</div>
-        <div class="tDots">${GUIDE.map((_, k) => `<i class="${k <= i ? 'on' : ''}"></i>`).join('')}</div>
+        <div class="tDots">${pages.map((_, k) => `<i class="${k <= i ? 'on' : ''}"></i>`).join('')}</div>
         <div class="gBtns"><span>${i ? '<button class="btn big" id="gBack">BACK</button>' : ''}</span>
-          <span>${last ? '<button class="btn big" id="gTour">SHOW ME THE SCREEN</button> ' : ''}<button class="btn big gold" id="cardBtn">${last ? "LET'S PLAY" : 'NEXT ▸'}</button></span></div>`, null, false);
+          <span>${last && !short ? '<button class="btn big" id="gTour">SHOW ME THE SCREEN</button> ' : ''}<button class="btn big gold" id="cardBtn">${last ? "LET'S PLAY" : 'NEXT ▸'}</button></span></div>`, null, false);
       $('cardBtn').onclick = () => { sfx('ok'); if (last) { $('card').classList.remove('on'); res(false); } else { i++; page(); } };
       if ($('gBack')) $('gBack').onclick = () => { i--; sfx('ok'); page(); };
       if ($('gTour')) $('gTour').onclick = () => { $('card').classList.remove('on'); sfx('ok'); res(true); };

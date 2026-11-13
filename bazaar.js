@@ -23,10 +23,11 @@ function stallDrawables(camX, camY) {
     // Kaito and Rita walk the town themselves (Rita stands at her stall on the days she lies); the others mind theirs, and a stall you hold gets your clerk
     const keeper = heldStall(k) ? { ...KEEPERS[k], sheet: 'player' } : k >= 2 ? KEEPERS[k] : null;
     if (keeper) out.push({ base: (STALL_Y + 2) * TW - 1, draw: () => drawChar(ctx, keeper, camX, camY) });
-    out.push({ base: (STALL_Y + 2) * TW, draw: () => drawStall(k, sx - camX, sy - camY) });
+    out.push({ base: (STALL_Y + 2) * TW, draw: () => { camX0 = camX; camY0 = camY; drawStall(k, sx - camX, sy - camY); } });
   });
   return out;
 }
+let camX0 = 0, camY0 = 0;
 function drawStall(k, x, y) {
   const w = 2 * TW, g = stallGood(k), mine = heldStall(k), col = STALL_COL[k];
   if (!stallIcon[g.id]) { stallIcon[g.id] = new Image(); stallIcon[g.id].src = goodIcon(goodIdx(g.id)); }
@@ -35,6 +36,7 @@ function drawStall(k, x, y) {
   ctx.fillStyle = '#00000044'; ctx.fillRect(x - 4, y + 26, w + 8, 4);
   ctx.fillStyle = '#8a5a32'; ctx.fillRect(x - 2, y + 46, w + 4, 18); ctx.fillStyle = '#6a4224'; ctx.fillRect(x - 2, y + 60, w + 4, 4);
   if (stallIcon[g.id].complete) for (let i = 0; i < 3; i++) ctx.drawImage(stallIcon[g.id], x + 4 + i * 18, y + 32, 16, 16);
+  if (Math.hypot(x + w / 2 - (player.x - (camX0 || 0)), y + 40 - (player.y - (camY0 || 0))) > 5 * TW) return; // the sign only when you are close
   ctx.save(); ctx.font = '10px Joy, monospace'; ctx.textAlign = 'center';
   const t1 = g.name.toUpperCase(), t2 = mine ? 'YOU · LV' + mine[2] : ['KAITO', 'RITA', 'PELL', 'BOLT-9', 'LUNA'][k]; // short: five plates share one row
   const ww = Math.max(ctx.measureText(t1).width, ctx.measureText(t2).width) + 12;

@@ -135,7 +135,7 @@ async function boot() {
   await beginDay(true);
   const firstTime = !safeGet('pb_intro|' + Backend.accountId);
   let tour = false;
-  if (firstTime) { await playIntro(); tour = await showWelcome(); if (tour) tour = await showGuide(); safeSet('pb_intro|' + Backend.accountId, '1'); }
+  if (firstTime) { await playIntro(); tour = await showWelcome(); if (tour) tour = await showGuide(true); safeSet('pb_intro|' + Backend.accountId, '1'); }
   showPaper(() => { if (tour) startTour(); else toast('You owe the Harbor Master 3,000 coins. You have ' + fmt(S.coins) + ' and ' + (SEASON_DAYS - S.day + 1) + ' days.', 6); });
 }
 // What the chain does not keep (your notes on who lies, the tutorial step, price history) lives in this browser.
@@ -721,6 +721,7 @@ function interact() {
   if (dlg) { chooseDlg(); return; }
   if ($('trade').classList.contains('on') || $('journal').classList.contains('on') || S.over) return;
   const t = nearest(); if (!t) return;
+  learnTip(t);
   const P = World.P, me = { name: 'You', sheet: 'player', color: '#ffd86b' };
   if (busyN) return;
   if (t.none) return;
@@ -942,11 +943,13 @@ function draw() {
     ctx.globalAlpha = 1;
   }
   ctx.font = '10px Joy, monospace'; ctx.textAlign = 'center';
-  for (const n of WD.id === 'town' ? Object.values(NPCS) : []) {
-    if (!n.color || !vis(n.x - 32, n.y - 60, 64, 64)) continue;
+  // only the nearest person within a few steps gets a name tag (and Rita's tell), so the town stays readable
+  const tagged = WD.id === 'town' ? Object.values(NPCS).filter(n => n.color && Math.hypot(n.x - player.x, n.y - player.y) < 4 * TW).sort((a, b) => Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y)).slice(0, 1) : [];
+  for (const n of tagged) {
+    if (!vis(n.x - 32, n.y - 60, 64, 64)) continue;
     const w = ctx.measureText(n.name).width + 8; ctx.fillStyle = '#000a'; ctx.fillRect(n.x - camX - w / 2, n.y - camY - 74, w, 13);
     ctx.fillStyle = n.color; ctx.fillText(n.name, n.x - camX, n.y - camY - 64);
-    if (n.selling) { const t = n === NPCS.kaito ? n.selling : 'SELLING ' + n.selling.toUpperCase() + '!'; const w2 = ctx.measureText(t).width + 10; ctx.fillStyle = '#fff3d6'; ctx.fillRect(n.x - camX - w2 / 2, n.y - camY - 92, w2, 15); ctx.fillStyle = '#1c1630'; ctx.fillText(t, n.x - camX, n.y - camY - 81); }
+    if (n.selling && n !== NPCS.kaito) { const t = 'SELLING ' + n.selling.toUpperCase() + '!'; const w2 = ctx.measureText(t).width + 10; ctx.fillStyle = '#fff3d6'; ctx.fillRect(n.x - camX - w2 / 2, n.y - camY - 92, w2, 15); ctx.fillStyle = '#1c1630'; ctx.fillText(t, n.x - camX, n.y - camY - 81); }
   }
   // evening, night and the weather clue
   const f = S.t / DAY_SECONDS;
@@ -990,7 +993,8 @@ function draw() {
   ctx.fillStyle = '#ff4d6d'; ctx.fillRect(mx + player.x * sx - 2, my + player.y * sy - 3, 5, 5);
   }
   const t = !uiOpen() && !S.over && !S.night && nearest();
-  $('hint').style.display = t ? 'block' : 'none'; if (t) $('hint').textContent = (matchMedia('(pointer:coarse)').matches ? 'A: ' : 'E: ') + t.label;
+  $('hint').style.display = t ? 'block' : 'none';
+  if (t) { const k = (matchMedia('(pointer:coarse)').matches ? 'A: ' : 'E: ') + t.label, tip = tipFor(t), html = esc(k) + (tip ? `<div class="hTip">${esc(tip)}</div>` : ''); if ($('hint').dataset.h !== html) { $('hint').innerHTML = html; $('hint').dataset.h = html; } }
 }
 const STARS = Array.from({ length: 90 }, () => [Math.random(), Math.random() * .55, Math.random()]);
 function drawNight(camX, camY) {

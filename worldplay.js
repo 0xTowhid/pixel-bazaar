@@ -19,6 +19,7 @@ function drawGateSigns(camX, camY) {
   for (const g of World.P.gates) {
     const x = g.x * TW - camX; let y = g.y * TW - camY - 34; if (y < 34) y = g.y * TW - camY + 70; // too close to the top: sign below
     if (x < -120 || x > VW + 120 || y < -40 || y > VH + 40) continue;
+    if (Math.hypot(g.x * TW - player.x, g.y * TW - player.y) > 7 * TW) continue; // signs only when you are near
     const st = gateStatus(g), t1 = GATE_NAME[g.to], t2 = st.open ? '▸ OPEN' : '🔒 ' + st.why.toUpperCase();
     const w = Math.max(ctx.measureText(t1).width, ctx.measureText(t2).width) + 14;
     ctx.fillStyle = 'rgba(28,22,48,.85)'; ctx.fillRect(x - w / 2, y - 26, w, 30); ctx.strokeStyle = st.open ? '#8ee68a' : '#ff9a8a'; ctx.lineWidth = 2; ctx.strokeRect(x - w / 2, y - 26, w, 30);

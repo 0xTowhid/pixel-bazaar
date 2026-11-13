@@ -10,6 +10,7 @@
 <title>Pixel Bazaar</title>
 <style>
 @font-face{font-family:Joy;src:url(assets/fonts/joystix.ttf)}
+@font-face{font-family:Pix;src:url(assets/fonts/pixelify.woff2)}
 :root{--ink:#fff3d6;--gold:#ffd86b;--pan:#1c1630;--pan2:#2b2247;--mut:#a79cc9;--good:#8ee68a;--bad:#ff7a6e;color-scheme:dark}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:#120e1f;color:var(--ink);font-family:Joy,"Courier New",monospace;overflow:hidden;user-select:none;-webkit-user-select:none}
@@ -33,7 +34,10 @@ button{font:inherit;color:inherit}
 #dialog.on{display:flex}
 #portrait{width:6.5em;height:6.5em;flex:none;background:var(--pan2);border:3px solid var(--ink);border-radius:4px;image-rendering:pixelated}
 #dlgName{margin-bottom:.5em}
-#dlgText{line-height:1.6;font-size:1.08em;min-height:2.6em}
+#dlgText{line-height:1.45;font-size:1.3em;min-height:2.6em;font-family:Pix,sans-serif}
+/* readable text: the pixel font with lowercase for sentences; the blocky font stays for titles and buttons */
+.sub,#toast,.gBody,.fText,.qR,.wNote,.cHint,.dEnd>div:not(.gname),#card .txt{font-family:Pix,sans-serif;letter-spacing:.01em}
+.sub{font-size:1.08em}#toast{font-size:1.15em}
 #dlgChoices{margin-top:.7em;display:flex;gap:1.4em;flex-wrap:wrap}
 .choice{color:var(--gold);cursor:pointer}.choice:hover,.choice.sel{color:#fff}.choice.sel:before{content:"> "}
 .panel{left:50%;top:50%;transform:translate(-50%,-50%);padding:1.1em 1.3em;display:none;max-height:94%;overflow:auto}
@@ -273,6 +277,7 @@ body.dlgOn #hotbar,body.dlgOn #chainlog{display:none}
 .ph{font-size:1.4em;margin:.3em 0}.pp{font-size:.9em;line-height:1.5;margin-bottom:.4em}.pk{color:#962b1e;margin-top:.7em;font-size:1em}.pcols{display:grid;grid-template-columns:1fr 1fr;gap:1.2em}
 .pr{display:flex;justify-content:space-between;font-size:.85em;padding:.1em 0}.pr img{width:1.2em;vertical-align:middle;margin-right:.3em;image-rendering:pixelated}.pu{color:#1e7a2e}.pd{color:#a8281e}.letter{font-size:.85em;line-height:1.5;margin:.2em 0}
 .btn.dark{background:#2a1e17;color:#ece0c4;border-color:#2a1e17}
+#hint .hTip{font-family:Pix,sans-serif;color:var(--ink);font-size:1.05em;margin-top:.25em;text-align:center}
 .uRow{display:flex;gap:.8em;align-items:center;margin:.6em 0;text-align:left}.uRow img{width:3em;height:3em;image-rendering:pixelated;border-radius:6px;background:#2a2346}
 .deskT{text-align:center;margin-bottom:.5em;color:var(--gold)}
 .srow{display:grid;grid-template-columns:2.2em 1fr 4em auto;gap:.6em;align-items:center;padding:.45em 0;border-top:2px dashed #3d3363;text-align:left}.srow img{width:2em;image-rendering:pixelated}
