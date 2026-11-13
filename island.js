@@ -148,13 +148,14 @@ function curseHTML() {
 async function openIsland(tab) {
   if (tab) ISL.tab = tab; $('iDot').classList.remove('on');
   if (ISL.tab === 'town') { ISL.tab = 'calls'; closeIsland(); openTown(); return; } // projects and records keep their own screen
-  if (ISL.tab === 'notes' || !['calls', 'barons', 'feed', 'boss', 'curse'].includes(ISL.tab)) ISL.tab = 'calls'; // ghost notes became calls
+  const TABS = [['calls', 'CALLS', 'calls'], ['barons', `BARONS · ${(S.stalls || []).length}/5`, 'barons'], ['feed', 'FEED'], ['boss', bossUp() ? '⚠ BOSS' : 'BOSS'], ['curse', 'CURSES', 'calls'], ['town', 'TOWN']].filter(x => !x[2] || unlocked(x[2]));
+  if (ISL.tab === 'notes' || !TABS.some(x => x[0] === ISL.tab)) ISL.tab = TABS[0][0]; // ghost notes became calls
   if (!$('island').classList.contains('on')) { await pollIsland(true); }
   if (ISL.tab === 'calls') { try { ISL.posts = await Backend.view('get_calls', {}); } catch (e) { ISL.posts = ISL.posts || []; } }
   const el = $('island'), t = ISL.tab;
   const feed = ISL.feed.slice().reverse().map(f => `<div class="fRowI"><span class="sub">${ago(f.at)}</span> ${f.who === Backend.contractId ? `<b class="dn">⚠ ${f.text}</b>` : `<b class="${f.who === Backend.accountId ? 'gold' : 'cy'}">${f.who === Backend.accountId ? 'You' : shortName(f.who)}</b> ${shortText(f.text)}`}</div>`).join('') || '<div class="sub">Quiet so far. Catch something rare, beat a rival or pay the debt and the whole island hears about it.</div>';
   el.innerHTML = `<div class="gname">THE BAZAAR BOARD</div><div class="sub">in the town square · calls are sealed on NEAR and revealed at night · rep ${S.player.rep || 0}</div>
-    <div class="tabs">${[['calls', 'CALLS'], ['barons', `BARONS · ${(S.stalls || []).length}/5`], ['feed', 'FEED'], ['boss', bossUp() ? '⚠ BOSS' : 'BOSS'], ['curse', 'CURSES'], ['town', 'TOWN']].map(([k, n]) => `<button class="tab ${t === k ? 'on' : ''}" data-it="${k}">${n}</button>`).join('')}</div>
+    <div class="tabs">${TABS.map(([k, n]) => `<button class="tab ${t === k ? 'on' : ''}" data-it="${k}">${n}</button>`).join('')}</div>
     <div class="isBody">${t === 'calls' ? callsHTML() : t === 'barons' ? baronsHTML() : t === 'feed' ? `<div class="fList">${baronActivity()}${feed}</div>` : t === 'boss' ? bossHTML() : curseHTML()}</div>
     <div style="text-align:right;margin-top:.8em"><button class="btn big" id="iClose">CLOSE (I)</button></div>`;
   el.classList.add('on'); sfx('menu');

@@ -152,6 +152,7 @@ async function finishCatch(ok, ran) {
 let bookTab = 'mine';
 async function openBook(tab) {
   if (tab) bookTab = tab;
+  if (bookTab === 'crew' && !unlocked('crew')) bookTab = 'mine';
   const el = $('book'), sps = S.spirits || [], lead = S.player.lead;
   const card = s => {
     const sp = Rules.SPECIES[s.species], e = Rules.ELEMENTS[sp.el], next = sp.evo >= 0 ? Rules.SPECIES[sp.evo] : null;
@@ -178,7 +179,7 @@ async function openBook(tab) {
   }).join('');
   const count = Rules.SPECIES.filter((_, i) => (caughtBits >> BigInt(i)) & 1n).length;
   el.innerHTML = `<div class="gname">SPIRITS</div>
-    <div class="tabs"><button class="tab ${bookTab === 'mine' ? 'on' : ''}" data-tab="mine">MY SPIRITS · ${sps.length}</button><button class="tab ${bookTab === 'book' ? 'on' : ''}" data-tab="book">SPIRIT BOOK · ${count} / ${Rules.SPECIES.length}</button><button class="tab ${bookTab === 'crew' ? 'on' : ''}" data-tab="crew">NIGHT CREW · ${(S.player.crew || []).length} / ${Rules.CREW.MAX}</button><button class="tab ${bookTab === 'fish' ? 'on' : ''}" data-tab="fish">LEGENDS · ${popcount(S.player.legends || 0)} / 5</button></div>
+    <div class="tabs"><button class="tab ${bookTab === 'mine' ? 'on' : ''}" data-tab="mine">MY SPIRITS · ${sps.length}</button><button class="tab ${bookTab === 'book' ? 'on' : ''}" data-tab="book">SPIRIT BOOK · ${count} / ${Rules.SPECIES.length}</button>${unlocked('crew') ? `<button class="tab ${bookTab === 'crew' ? 'on' : ''}" data-tab="crew">NIGHT CREW · ${(S.player.crew || []).length} / ${Rules.CREW.MAX}</button>` : ''}<button class="tab ${bookTab === 'fish' ? 'on' : ''}" data-tab="fish">LEGENDS · ${popcount(S.player.legends || 0)} / 5</button></div>
     ${bookTab === 'mine' ? (sps.length ? `<div class="sub" style="margin:.4em 0">Your companion follows you and grows every night. Lantern shards: ${S.player.shards || 0}. Feed: up to ${Rules.FEEDS_A_DAY} a day (crops +6 XP, fish/honey/sushi +12, jade +25).</div>${companionTips(sps, lead)}<div class="sGrid">${sps.map(card).join('')}</div>`
       : '<div class="sub" style="margin:1em 0;line-height:1.7">No spirits yet. Look for glowing wisps around the farm, the town, and the Whispering Woods (north). Walk up and press E / A.</div>')
       : bookTab === 'crew' ? (sps.length ? crewHTML(sps) : '<div class="sub" style="margin:1em 0">Catch a spirit first: your crew is made of your spirits.</div>')

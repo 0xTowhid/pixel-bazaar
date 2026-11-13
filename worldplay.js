@@ -6,6 +6,7 @@ const ownsElement = el => (S.spirits || []).some(s => Rules.SPECIES[s.species].e
 // ---------- gates in town ----------
 const GATE_NAME = { woods: 'WHISPERING WOODS', moon: 'MOON MARKET', shrine: 'SUNKEN SHRINE', sky: 'CLOCKWORK SKY' };
 function gateStatus(g) {
+  if (!unlocked('worlds')) return { open: false, why: 'opens on day ' + unlockDay('worlds') };
   if (g.night && !isNight()) return { open: false, why: 'opens at 18:00' };
   const spec = Worlds.SPECS[g.to];
   if (spec.needs !== undefined && !ownsElement(spec.needs)) return { open: false, why: `needs a ${Rules.ELEMENTS[spec.needs].name.toLowerCase()} spirit` };
@@ -40,6 +41,7 @@ function drawMiniMarks(mx, my, sx, sy) {
 function gateTarget() {
   for (const g of World.P.gates) {
     if (Math.hypot(player.x - g.x * TW, player.y - g.y * TW) > 52) continue;
+    if (!unlocked('worlds')) return { kind: 'gate', none: true, label: `THIS ROAD OPENS ON DAY ${unlockDay('worlds')}` };
     if (g.night && !isNight()) return { kind: 'gate', none: true, label: 'THE MOON GATE OPENS AT 18:00' };
     const spec = Worlds.SPECS[g.to];
     if (spec.needs !== undefined && !ownsElement(spec.needs)) return { kind: 'gate', none: true, label: `YOU NEED A ${Rules.ELEMENTS[spec.needs].name} SPIRIT TO GO HERE` };

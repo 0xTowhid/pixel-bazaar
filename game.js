@@ -424,7 +424,7 @@ function showNight(ev, prev, results, truths, notes, before, after, lost, finish
       try {
         await beginDay(false);
         showHaul(S.lastLog, () => showPaper(() => {
-          stepOutside();
+          stepOutside(); showUnlocks();
           if (S.step === 3) advance();
           if (DAILY_TIPS[S.day]) toast(DAILY_TIPS[S.day], 6);
         }));
@@ -544,7 +544,7 @@ function rumorText(k) {
 }
 function hear(k) {
   const first = !S.heard[k]; S.heard[k] = true;
-  say(NPCS[k], '"' + rumorText(k) + '"', [{ t: 'THANKS', fn: closeDlg }, { t: 'GIVE A GIFT', fn: () => giftMenu(k) }, ...(k === 'mei' && (S.spirits || []).length ? [duelChoice(0)] : [])]);
+  say(NPCS[k], '"' + rumorText(k) + '"', [{ t: 'THANKS', fn: closeDlg }, { t: 'GIVE A GIFT', fn: () => giftMenu(k) }, ...(k === 'mei' && (S.spirits || []).length && unlocked('duels') ? [duelChoice(0)] : [])]);
   if (k === 'mei' && S.step === 0) advance();
 }
 function talkTo(n) {
@@ -554,6 +554,7 @@ function talkTo(n) {
     const rumor = S.heard.seer || S.seerDay === S.day
       ? { t: "TOMORROW'S RUMOR", fn: () => { closeDlg(); S.heard.seer = true; hear('seer'); } }
       : { t: "TOMORROW'S RUMOR (40)", fn: async () => { closeDlg(); if (S.coins < 40) { toast('Not enough coins.', 2); return; } if (await claim('seer', 'Paying Madame Vey')) hear('seer'); } };
+    if (!unlocked('fate')) { say(n, 'The cards need a day to know you, dear. Come back tomorrow. Or 40 coins and I tell you tomorrow\'s news now.', [rumor, { t: 'LEAVE', fn: closeDlg }]); return; }
     say(n, fateDone ? 'Your cards are drawn for today, dear. Shall I show them again?' : 'Sit, sit. Three cards a day, free for a friend of the spirits. Or 40 coins and I tell you tomorrow.', [
       { t: fateDone ? 'SHOW MY CARDS' : 'READ MY FATE', fn: () => { closeDlg(); readFate(); } }, rumor, { t: 'LEAVE', fn: closeDlg }]);
     return;
@@ -737,7 +738,8 @@ function interact() {
   else if (t.kind === 'wchest') openWorldChest(t.o);
   else if (t.kind === 'read') {
     const o = t.o, who = { name: o.kind === 'merchant' ? 'Rita, at the night table' : 'Old stone', sheet: o.kind === 'merchant' ? 'rita' : null, color: '#b9a8e8' };
-    if (o.kind === 'merchant') say(who, 'Darling! By day I sell rumors, by moonlight I duel. Three spirits each. Winner takes the pot.', [duelChoice(1), { t: 'LEAVE', fn: closeDlg }]);
+    if (o.kind === 'merchant' && !unlocked('duels')) say(who, 'Darling, the duel table opens on day ' + unlockDay('duels') + '. Bring three good spirits.');
+    else if (o.kind === 'merchant') say(who, 'Darling! By day I sell rumors, by moonlight I duel. Three spirits each. Winner takes the pot.', [duelChoice(1), { t: 'LEAVE', fn: closeDlg }]);
     else if (o.kind === 'gate' && WD.id === 'woods' && S.player.chapter >= 5) say({ name: 'The old spirit gate', color: '#b9a8e8' }, S.player.boss_wins & 1 ? 'The Great Spirit rests. It bows when it sees you. (You can still spar with it once a day.)' : 'The seal is cracking. Something huge breathes behind it. The thief of the Lantern?', [duelChoice(2), { t: 'NOT YET', fn: closeDlg }]);
     else say(o.kind === 'sign' ? { name: 'Signpost', color: '#d9b88a' } : who, o.text + (o.kind === 'tablet' ? puzzleHint() : ''));
   }

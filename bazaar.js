@@ -48,7 +48,7 @@ function stallTarget() {
   if (WD.id !== 'town') return null;
   for (let k = 0; k < 5; k++) {
     const cx = (STALL_ROW[k] + 1) * TW, cy = (STALL_Y - .3) * TW; // in front of the counter, on the road
-    if (Math.hypot(player.x - cx, player.y - cy) < 46) return { kind: 'stall', k, label: `${stallGood(k).name.toUpperCase()} STALL: THE BARON RACE` };
+    if (Math.hypot(player.x - cx, player.y - cy) < 46) return { kind: 'stall', k, label: `${stallGood(k).name.toUpperCase()} STALL: SELL AND TRADE` };
   }
   return null;
 }
@@ -104,10 +104,11 @@ function stallTalk(k) {
   const line = h
     ? `Your ${g.name} stall (level ${h[2]}). ${a.name} wants it back: keep your ${g.name.toLowerCase()} score above ${fmt(bar)} this season. You have ${fmt(mine)}.`
     : `The only place to buy, sell and bet on ${g.name.toLowerCase()}. Out-trade ${a.name} here: you have ${fmt(mine)} of ${fmt(bar)}. Beat it by season's end (and pay your debt) and the stall NFT is yours, with rent every night.`;
-  say({ name: h ? `Your ${g.name} stall` : `${a.name} · ${g.name} stall`, sheet: h ? null : a.sheet, color: '#ffd86b' }, line, [
+  const race = unlocked('barons');
+  say({ name: h ? `Your ${g.name} stall` : `${a.name} · ${g.name} stall`, sheet: h ? null : a.sheet, color: '#ffd86b' }, race ? line : `The only place to buy, sell and bet on ${g.name.toLowerCase()}.`, [
     { t: `SELL ${g.name.toUpperCase()}`, fn: () => { closeDlg(); openSell(k); } },
     { t: `TRADE ${g.name.toUpperCase()}`, fn: () => { closeDlg(); openTrade(k); } },
-    { t: 'ALL STALLS', fn: () => { closeDlg(); openIsland('barons'); } },
+    ...(race ? [{ t: 'ALL STALLS', fn: () => { closeDlg(); openIsland('barons'); } }] : []),
     { t: 'BYE', fn: closeDlg }]);
 }
 

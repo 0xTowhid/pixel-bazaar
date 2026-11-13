@@ -35,6 +35,7 @@ function currentGoal() {
     if (!p.book) { const w = typeof wilds !== 'undefined' && wilds[0]; return { text: tag + 'Catch a spirit: walk up to a glowing wisp, press E', target: w ? { x: w.x, y: w.y } : null }; }
     return { text: tag + "Sell anything (apples at Tomo's stall)", target: inTownAt({ x: NPCS.tomo.x / TW, y: NPCS.tomo.y / TW }) };
   }
+  if (ch >= 2 && ch <= 5 && !unlocked('worlds')) return { text: tag + `The other worlds open on day ${unlockDay('worlds')}. Earn coins, then sleep after 18:00`, target: null };
   if (ch === 2) return goWorld('woods', 'tablet', tag + 'Read the stone tablet, then light the braziers', tag + 'Go north to the Whispering Woods');
   if (ch === 3) {
     if (!ownsElement(1)) return { text: tag + 'Catch a WATER spirit (slimes and axolotls, around town)', target: null };
@@ -119,7 +120,8 @@ async function openQuests() {
   const clues = [['woods', p.clues & 1], ['shrine', p.clues & 2], ['sky', p.clues & 4], ['the old gate', p.boss_wins & 1]];
   const quests = slots ? slots.map((q, slot) => {
     const [ctr, target, coins, text] = Rules.QUESTS[q], have = Math.min(target, p.daily[ctr]), claimed = p.quests_claimed & (1 << slot);
-    return `<div class="qNote ${claimed ? 'done' : ''}"><div class="sub2"><span>DAILY</span><span>${claimed ? '✓ PAID' : have + ' / ' + target}</span></div><div class="qT">${text}</div><div class="qR">reward: ${coins} coins${p.lead ? ' + companion XP' : ''}</div></div>`;
+    const later = q === 5 && !unlocked('worlds') ? `<div class="qR">the world puzzles open on day ${unlockDay('worlds')}</div>` : '';
+    return `<div class="qNote ${claimed ? 'done' : ''}"><div class="sub2"><span>DAILY</span><span>${claimed ? '✓ PAID' : have + ' / ' + target}</span></div><div class="qT">${text}</div>${later}<div class="qR">reward: ${coins} coins${p.lead ? ' + companion XP' : ''}</div></div>`;
   }).join('') : '<div class="sub">The board fills up once the day has started on NEAR.</div>';
   const el = $('quests');
   el.innerHTML = `<div class="qCols"><div class="qStory"><div class="gname">THE LANTERN MYSTERY</div><div class="sub" style="margin-bottom:.6em">who stole the Great Lantern?</div>${chapters}
