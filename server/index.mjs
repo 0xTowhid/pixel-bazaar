@@ -303,8 +303,15 @@ const routes = {
     let res = null;
     try { res = await operatorCall('settle_day', { player: body.accountId, day: p.day, event: d.truth, rumors: d.rumorText, salt: d.salt, npc_moves: d.npc_moves }); }
     catch (e) { const q = await view('get_player', { account_id: body.accountId }); if (q.asleep || q.day === p.day && !q.finished) throw e; }
-    const after = await view('get_player', { account_id: body.accountId });
-    return { log: after.history.find(h => h.day === p.day) || after.history[after.history.length - 1], salt: d.salt, tx: txHash(res) };
+    // RPC nodes can lag a moment behind the transaction: wait until the new night is in the history, never hand back an older night
+    let log = null;
+    for (let i = 0; i < 12 && !log; i++) {
+      const after = await view('get_player', { account_id: body.accountId });
+      log = (after.history || []).find(h => h.day === p.day) || null;
+      if (!log) await new Promise(r => setTimeout(r, 700));
+    }
+    if (!log) throw new Error('The night was settled, but NEAR has not shown it yet. Try again in a moment.');
+    return { log, salt: d.salt, tx: txHash(res) };
   }),
 };
 function txHash(r) { return r && typeof r === 'object' ? (r.transaction?.hash || r.transaction_outcome?.id || null) : null; }

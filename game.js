@@ -369,7 +369,11 @@ async function sleep(passedOut) {
       catch (e) { if (/already asleep/.test(e.message)) return null; throw e; }
     }, 'sleep');
     const day = p.day;
-    const r = await mustDo('Revealing the night', () => Backend.settle(day), 'settle_day · reveal checked against commitment');
+    const r = await mustDo('Revealing the night', async () => {
+      const res = await Backend.settle(day);
+      if (res && res.log && res.log.day !== day) throw new Error('NEAR is still catching up on tonight. One moment...'); // never show an older night
+      return res;
+    }, 'settle_day · reveal checked against commitment');
     if (r && r.voided) { toast('That night could not be revealed, so it was cancelled and your trades refunded. Starting the day again...', 5); setTimeout(() => location.reload(), 4000); return; }
     await minNight;
     S.night.dawn = performance.now(); quietBusy = false;
