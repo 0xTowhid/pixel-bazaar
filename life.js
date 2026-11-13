@@ -33,10 +33,13 @@ async function flush() {
   }
   Q.sending = false;
   await sync();
-  flush.after && flush.after(before);
-  flush.after = null;
+  for (const fn of flushAfter.splice(0)) { try { await fn(before); } catch (e) { console.error('after flush', e); } }
   if (Q.list.length) flush();
 }
+// "flush.after = fn" adds a one-time callback for when the queued moves have landed. It used to be a single slot, so a
+// second caller (a quest or chapter finishing at the same moment) silently dropped the first one's callback.
+const flushAfter = [];
+Object.defineProperty(flush, 'after', { get: () => flushAfter[flushAfter.length - 1] || null, set: fn => { if (fn) flushAfter.push(fn); } });
 const flushNow = () => flush();
 
 // ---------- farm ----------

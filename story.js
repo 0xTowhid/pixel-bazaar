@@ -30,7 +30,7 @@ const INTRO = [
 ];
 function playIntro() {
   return new Promise(done => {
-    S.story = true; playMusic('story');
+    S.story = true; S.cine = true; document.body.classList.add('cineOn'); playMusic('story');
     const el = $('cine'); el.classList.add('on');
     let i = 0;
     const fcv = $('fxcv'), fx = fcv.getContext('2d');
@@ -39,20 +39,20 @@ function playIntro() {
     resize();
     const burst = () => {
       const w = fcv.width, h = fcv.height;
-      for (let k = 0; k < 14; k++) FX.spirits.push({ n: FX_SPIRITS[k % FX_SPIRITS.length], x: w / 2, y: h * .2, vx: (Math.random() * 2 - 1) * 260, vy: 60 + Math.random() * 180, s: 2.4 + Math.random() * 1.6, ph: Math.random() * 6 });
+      for (let k = 0; k < 14; k++) FX.spirits.push({ n: FX_SPIRITS[k % FX_SPIRITS.length], x: w / 2, y: h * .27, vx: (Math.random() * 2 - 1) * w * .28, vy: (.12 + Math.random() * .3) * h, s: (2.4 + Math.random() * 1.6) * Math.min(1, Math.max(.6, h / 450)), ph: Math.random() * 6 });
     };
     let lastT = performance.now();
     const frame = now => {
       const dt = Math.min(.05, (now - lastT) / 1000); lastT = now; FX.t += dt;
       const w = fcv.width, h = fcv.height; fx.clearRect(0, 0, w, h);
       // night over the town
-      fx.fillStyle = 'rgba(8,6,32,.78)'; fx.fillRect(0, 0, w, h);
+      fx.fillStyle = 'rgba(8,6,32,.86)'; fx.fillRect(0, 0, w, h);
       // the Great Lantern
       const cur = INTRO[i] || INTRO[INTRO.length - 1];
       const target = cur.lantern;
       FX.lantern += (target - FX.lantern) * Math.min(1, dt * 3);
       let glow = FX.lantern; if (cur.flicker) glow *= .55 + .45 * Math.abs(Math.sin(FX.t * 11) * Math.sin(FX.t * 4.3));
-      const lx = w / 2, ly = h * .2, s = Math.max(1, h / 450);
+      const lx = w / 2, ly = h * .27, s = Math.max(.7, h / 450);
       if (glow > .02) { const g = fx.createRadialGradient(lx, ly, 4, lx, ly, 200 * s); g.addColorStop(0, `rgba(255,214,120,${.55 * glow})`); g.addColorStop(1, 'rgba(255,170,80,0)'); fx.fillStyle = g; fx.fillRect(0, 0, w, h); }
       fx.fillStyle = '#2c2018'; fx.fillRect(lx - 7 * s, ly + 18 * s, 14 * s, 70 * s); fx.fillRect(lx - 16 * s, ly - 26 * s, 32 * s, 6 * s);
       fx.fillStyle = `rgb(${80 + 175 * glow},${60 + 150 * glow},${40 + 80 * glow})`; fx.fillRect(lx - 13 * s, ly - 20 * s, 26 * s, 38 * s);
@@ -79,7 +79,7 @@ function playIntro() {
       sfx('voice');
     };
     const end = () => {
-      storyHandler = null; cancelAnimationFrame(FX.raf); el.classList.remove('on'); S.story = false; playMusic('village');
+      storyHandler = null; cancelAnimationFrame(FX.raf); el.classList.remove('on'); S.story = false; S.cine = false; document.body.classList.remove('cineOn'); playMusic('village');
       fx.clearRect(0, 0, fcv.width, fcv.height); done();
     };
     storyHandler = a => {

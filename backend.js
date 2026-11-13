@@ -145,10 +145,26 @@ const Backend = (() => {
       if (mode === 'mock') { await api('/mock/call', { accountId: me.accountId, method, args }); return null; }
       await loadNear();
       if (!account) account = new near.Account(me.accountId, provider, me.secretKey);
-      const r = await account.callFunctionRaw({ contractId: cfg.contractId, methodName: method, args, gas: near.teraToGas(method === 'act' ? '50' : '15'), deposit: 0n });
-      const fail = r?.status?.Failure;
-      if (fail) throw new Error(JSON.stringify(fail).replace(/.*panicked: ?/, '').replace(/["\\}]+$/g, '').slice(0, 160));
-      return r?.transaction?.hash || null;
+      const send = async () => {
+        const r = await account.callFunctionRaw({ contractId: cfg.contractId, methodName: method, args, gas: near.teraToGas(method === 'act' ? '50' : '15'), deposit: 0n });
+        const fail = r?.status?.Failure;
+        if (fail) { const raw = JSON.stringify(fail); const err = new Error(raw.replace(/.*panicked: ?/, '').replace(/["\\}]+$/g, '').slice(0, 160)); err.raw = raw; throw err; }
+        return r?.transaction?.hash || null;
+      };
+      try { return await send(); }
+      catch (e) {
+        // NEAR refused the move because an account could not pay: not a game rule, so fix it instead of telling the player off
+        const raw = `${e && e.raw || ''} ${e && e.message || e} ${e && e.type || ''}`;
+        if (!/NotEnoughBalance|LackBalanceForState|not have enough balance/i.test(raw)) throw e;
+        console.warn('gas problem:', raw.slice(0, 400));
+        const who = (raw.match(/"(?:account_id|signer_id)"\s*:\s*"([^"]+)"/) || [])[1];
+        if (who && who === cfg.contractId) throw new Error('GAME_STORAGE_LOW');
+        let t; try { t = await api('/api/topup', { accountId: me.accountId }); } catch (x) { t = { sent: false, reason: 'server' }; }
+        if (!t.sent) throw new Error('GAS_LOW:' + (t.reason || ''));
+        await new Promise(r => setTimeout(r, 1500));
+        try { return await send(); }
+        catch (e2) { if (/NotEnoughBalance|LackBalanceForState|not have enough balance/i.test(`${e2 && e2.raw || ''} ${e2 && e2.message || e2}`)) throw new Error('GAS_LOW:again'); throw e2; }
+      }
     },
     /** Start or resume today: the event is committed before you can act. */
     async beginDay() {
