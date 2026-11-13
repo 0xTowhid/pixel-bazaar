@@ -288,6 +288,28 @@ body.dlgOn #hotbar,body.dlgOn #chainlog{display:none}
 .mRow{display:flex;align-items:center;gap:.7em;background:#2a2346;padding:.45em .7em;border-radius:8px}.mRow img{width:2.6em;height:2.6em;image-rendering:pixelated}.mRow .btn{font-size:.75em}
 .goalBox{text-align:center;padding:.6em}.gGoal{margin:.5em auto;max-width:28em}.gGoal i{background:linear-gradient(90deg,#8ee68a,#ffd86b)!important}
 button.uRow{width:100%;font:inherit;color:inherit;background:#2a2346;border:2px solid #4a3f78;border-radius:10px;padding:.5em .7em;cursor:pointer}button.uRow:hover{border-color:var(--gold)}
+#gbook{inset:0;display:none;align-items:center;justify-content:center;background:#120e20cc;z-index:40;font-size:clamp(7px,min(1.25vw,2.3vh),15px)}#gbook.on{display:flex}
+.gbWrap{position:relative;display:flex;flex-direction:column;align-items:center;gap:1.6em;padding-right:9em}
+.gbBook{position:relative;width:62em;height:35em;display:flex;filter:drop-shadow(0 .9em 0 #0006);touch-action:pan-y;user-select:none}
+.gbCover{position:absolute;inset:-1.2em -1.5em -1.5em -1.5em;background:#6b2f2a;border:.4em solid #3b1714;border-radius:.9em;box-shadow:inset 0 0 0 .27em #a8553f}
+.gbRibbon{position:absolute;left:calc(50% - .8em);top:-1.5em;width:1.6em;height:38em;background:linear-gradient(#b8322a,#8d1f19);clip-path:polygon(0 0,100% 0,100% 100%,50% 95%,0 100%);z-index:5;pointer-events:none}
+.gbPg{position:relative;flex:none;width:31em;height:35em;background:#f3e3bf;border:.27em solid #c9a873;padding:1.8em 2.3em;color:#3b2a1a;background-image:repeating-linear-gradient(0deg,transparent 0 2.07em,#e2cd9e 2.07em 2.13em);overflow:hidden;font-family:Pix,sans-serif}
+.gbPg.l{border-radius:.5em .1em .1em .5em;box-shadow:inset -1.7em 0 2em -1.2em #8a6a3a}.gbPg.r{border-radius:.1em .5em .5em .1em;box-shadow:inset 1.7em 0 2em -1.2em #8a6a3a}
+.gbCh{font-family:Joy,monospace;font-size:.75em;color:#9b6a2c;letter-spacing:.15em}
+.gbPg h2{font-family:Joy,monospace;font-size:1.75em;margin:.3em 0 .5em;color:#4a2412;font-weight:normal}
+.gbArt{display:flex;justify-content:center;margin:.2em 0 .6em}.gbArt img{width:6.5em;height:6.5em;image-rendering:pixelated;background:#e8d3a4;border:.27em solid #c9a873;border-radius:.8em;padding:.4em}
+.gbTxt{font-size:1.25em;line-height:1.42}.gbTxt b{color:#8c2f12}.gbTxt ol{margin:.3em 0 0;padding-left:1.2em}.gbTxt li{margin-bottom:.35em}
+.gbTip{margin-top:.8em;background:#e6cf9c;border-left:.33em solid #c77b2a;padding:.45em .75em;font-size:1.08em;line-height:1.35;border-radius:.27em}
+.gbNum{position:absolute;bottom:.8em;font-family:Joy,monospace;font-size:.75em;color:#9b6a2c}.gbPg.l .gbNum{left:2.6em}.gbPg.r .gbNum{right:6em}
+.gbCurl{position:absolute;right:-.27em;bottom:-.27em;width:4em;height:4em;background:linear-gradient(135deg,transparent 50%,#d8bd85 50%,#b89a62);border-radius:0 0 .5em 0;box-shadow:-.27em -.27em .5em #0003}
+.gbTabs{position:absolute;right:0;top:.3em;display:flex;flex-direction:column;gap:.4em}
+.gbTabs button{font-family:Joy,monospace;font-size:.68em;color:#fff3d6;background:#8a4b2a;padding:.8em .9em .8em 1.2em;border-radius:0 .7em .7em 0;width:11em;border:.15em solid #3b1714;text-align:left;cursor:pointer}
+.gbTabs button.on{background:#c77b2a;width:12.4em}.gbTabs button:hover{background:#a65f33}
+.gbNav{width:62em;display:flex;justify-content:space-between;align-items:center;font-family:Joy,monospace;color:var(--ink);font-size:.85em}.gbNav .btn{font-size:1.1em}.gbNav a{color:var(--mut);cursor:pointer;text-decoration:underline}
+.gbLeaf{position:absolute;top:0;width:31em;height:35em;transform-style:preserve-3d;transition:transform .6s cubic-bezier(.4,.1,.3,1);z-index:4;pointer-events:none}
+.gbLeaf.fwd{left:31em;transform-origin:left center;transform:perspective(160em) rotateY(0)}.gbLeaf.fwd.go{transform:perspective(160em) rotateY(-180deg)}
+.gbLeaf.bwd{left:0;transform-origin:right center;transform:perspective(160em) rotateY(0)}.gbLeaf.bwd.go{transform:perspective(160em) rotateY(180deg)}
+.gbFace{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden}.gbFace.back{transform:rotateY(180deg)}
 .uRow{display:flex;gap:.8em;align-items:center;margin:.6em 0;text-align:left}.uRow img{width:3em;height:3em;image-rendering:pixelated;border-radius:6px;background:#2a2346}
 .deskT{text-align:center;margin-bottom:.5em;color:var(--gold)}
 .srow{display:grid;grid-template-columns:2.2em 1fr 4em auto;gap:.6em;align-items:center;padding:.45em 0;border-top:2px dashed #3d3363;text-align:left}.srow img{width:2em;image-rendering:pixelated}
@@ -355,6 +377,7 @@ button.uRow{width:100%;font:inherit;color:inherit;background:#2a2346;border:2px 
     <button class="btn" id="cineSkip">SKIP ▸▸</button><div id="cineBox" class="box"></div></div>
   <div id="tour"><div id="tourSpot"></div><div id="tourBox" class="box"></div></div>
   <div id="card" class="ui box panel"></div>
+  <div id="gbook" class="ui"></div>
 </div>
 <div id="rotate">Turn your phone sideways to play.</div>
 <div id="pad">
@@ -374,6 +397,7 @@ button.uRow{width:100%;font:inherit;color:inherit;background:#2a2346;border:2px 
 <script src="worldplay.js"></script>
 <script src="quests.js"></script>
 <script src="duel.js"></script>
+<script src="book.js"></script>
 <script src="unlock.js"></script>
 <script src="market.js"></script>
 <script src="island.js"></script>

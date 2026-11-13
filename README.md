@@ -18,7 +18,7 @@ Built for NEAR HACKATHON 2026, **Games With Real Economies** track.
 
 ## For judges: a 5-minute run
 
-1. Open the game. A short intro plays (SKIP works), then a 3-page **HOW TO PLAY**. After that you learn by playing: walk up to anything and the prompt says what it is for. The goal line at the top and a yellow arrow always point to your next step. (The full guide is in the Journal, J.)
+1. Open the game. A short intro plays (SKIP works), then a short **HOW TO PLAY** book (turn the pages with the arrows or a swipe). After that you learn by playing: walk up to anything and the prompt says what it is for. The goal line at the top and a yellow arrow always point to your next step. (The full 22-page book, with chapter tabs, is in the Journal, J.)
 2. Choose **NEW TRADER**, pick a name and a password. The game creates `yourname.pixelbazaar8-tow69.testnet` and shows a 12-word recovery code. Every ✓ line at the bottom of the screen links to the transaction on the explorer.
 3. Read the morning paper and press **START DAY**. The day is committed on chain before you see any rumors (`✓ commit_day`).
 4. Catch a spirit: walk up to a glowing wisp in the grass, press E (A on phones) and stop the bar in the green. The contract decides the catch, and the spirit is minted to you as an NFT. It follows you as your companion.
@@ -171,7 +171,8 @@ The JavaScript copy of the contract (`shared/engine.js`) runs the same rules; th
 
 ```
 index.html, game.js     the game: rendering, UI, game loop, trading, agents board, night and dawn, login
-story.js                intro, welcome card, HOW TO PLAY guide and the spotlight tour
+story.js                intro, welcome card and the spotlight tour
+book.js                 HOW TO PLAY as a book you can turn: 22 pages in 11 chapters, chapter tabs, page flips
 spirits.js              wild spirits, catching, companion, Spirit Book, legends tab
 worlds.js, worldplay.js the four extra worlds, their people, chests, puzzles, gate signs, lights and moods
 quests.js               fate cards, quest board, story chapters

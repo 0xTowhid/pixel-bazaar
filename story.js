@@ -174,24 +174,7 @@ const GUIDE_SHORT = [
       <br><br>New things open each day: <b class="gold">day 2</b> the other worlds, fate cards and your night crew · <b class="gold">day 3</b> spirit duels and calls · <b class="gold">day 4</b> the baron race for the stalls.
       <div class="sub" style="margin-top:.8em">The full guide is in your Journal (J).</div>` },
 ];
-function showGuide(short) {
-  const pages = short ? GUIDE_SHORT : GUIDE;
-  return new Promise(res => {
-    let i = 0;
-    const page = () => {
-      const g = pages[i], last = i === pages.length - 1;
-      openCard(`<div class="gHead"><img src="assets/spirits/f_${g.f}.png" alt=""><div><div class="sub">HOW TO PLAY · ${i + 1} OF ${pages.length}</div><div class="ntitle" style="text-align:left;margin:0">${g.t}</div></div></div>
-        <div class="gBody">${g.b}</div>
-        <div class="tDots">${pages.map((_, k) => `<i class="${k <= i ? 'on' : ''}"></i>`).join('')}</div>
-        <div class="gBtns"><span>${i ? '<button class="btn big" id="gBack">BACK</button>' : ''}</span>
-          <span>${last && !short ? '<button class="btn big" id="gTour">SHOW ME THE SCREEN</button> ' : ''}<button class="btn big gold" id="cardBtn">${last ? "LET'S PLAY" : 'NEXT ▸'}</button></span></div>`, null, false);
-      $('cardBtn').onclick = () => { sfx('ok'); if (last) { $('card').classList.remove('on'); res(false); } else { i++; page(); } };
-      if ($('gBack')) $('gBack').onclick = () => { i--; sfx('ok'); page(); };
-      if ($('gTour')) $('gTour').onclick = () => { $('card').classList.remove('on'); sfx('ok'); res(true); };
-    };
-    page();
-  });
-}
+// showGuide now opens the book (book.js); GUIDE and GUIDE_SHORT above stay as plain text for reference
 
 // ---------- 3. the spotlight tour ----------
 const domTarget = sel => () => { const e = typeof sel === 'string' ? document.querySelector(sel) : sel(); if (!e) return null; const r = e.getBoundingClientRect(), st = $('stage').getBoundingClientRect(); return { x: r.left - st.left, y: r.top - st.top, w: r.width, h: r.height }; };

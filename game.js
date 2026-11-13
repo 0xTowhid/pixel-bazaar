@@ -490,7 +490,7 @@ function advance() { S.step = Math.min(S.step + 1, STEPS.length - 1); sfx('ok');
 
 // ---------- UI ----------
 let dlg = null, cardCb = null;
-const uiOpen = () => !!dlg || (S && (S.fishing || S.story || S.catching)) || ['trade', 'card', 'journal', 'profile', 'netErr', 'book', 'quests', 'fate', 'duel', 'island', 'wallet'].some(id => $(id)?.classList.contains('on'));
+const uiOpen = () => !!dlg || (S && (S.fishing || S.story || S.catching)) || ['trade', 'card', 'gbook', 'journal', 'profile', 'netErr', 'book', 'quests', 'fate', 'duel', 'island', 'wallet'].some(id => $(id)?.classList.contains('on'));
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // what the chain said, in words a player understands
 function niceErr(m) {
@@ -798,6 +798,7 @@ addEventListener('keydown', e => {
   if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
   if (window.storyKey && storyKey(e)) return; // the intro and the tour take the keyboard while they run
   if (window.catchKey && catchKey(e)) return;  // so does catching a spirit
+  if (window.guideKey && guideKey(e)) return;  // and the HOW TO PLAY book
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; keys[k] = true;
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
   if (k === 'e' || k === ' ' || k === 'Enter') interact();
@@ -896,7 +897,7 @@ addEventListener('resize', () => { fit(); layoutTop(); }); fit(); setTimeout(lay
 let MINI, last = performance.now(), wx = [];
 for (let i = 0; i < 160; i++) wx.push({ x: Math.random() * VW, y: Math.random() * VH, s: .6 + Math.random() * .8 });
 function update(dt) {
-  const pOn = ['trade', 'card', 'journal', 'profile', 'netErr', 'cine', 'tour', 'book', 'catch', 'quests', 'fate', 'duel', 'island', 'wallet'].some(id => $(id)?.classList.contains('on'));
+  const pOn = ['trade', 'card', 'gbook', 'journal', 'profile', 'netErr', 'cine', 'tour', 'book', 'catch', 'quests', 'fate', 'duel', 'island', 'wallet'].some(id => $(id)?.classList.contains('on'));
   document.body.classList.toggle('dlgOn', !!dlg);
   if ((layoutTop.n = (layoutTop.n || 0) + 1) % 20 === 0) layoutTop();
   if (pOn !== document.body.classList.contains('panelOn')) { document.body.classList.toggle('panelOn', pOn); if (pOn) for (const k in keys) keys[k] = false; }
