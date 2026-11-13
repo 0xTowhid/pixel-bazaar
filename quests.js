@@ -33,7 +33,7 @@ function currentGoal() {
   const ch = p.chapter, tag = ch <= 5 ? `CH.${ch} · ` : '';
   if (ch === 1) {
     if (!p.book) { const w = typeof wilds !== 'undefined' && wilds[0]; return { text: tag + 'Catch a spirit: walk up to a glowing wisp, press E', target: w ? { x: w.x, y: w.y } : null }; }
-    return { text: tag + "Sell anything at Tomo's stall", target: inTownAt({ x: NPCS.tomo.x / TW, y: NPCS.tomo.y / TW }) };
+    return { text: tag + "Sell anything (apples at Tomo's stall)", target: inTownAt({ x: NPCS.tomo.x / TW, y: NPCS.tomo.y / TW }) };
   }
   if (ch === 2) return goWorld('woods', 'tablet', tag + 'Read the stone tablet, then light the braziers', tag + 'Go north to the Whispering Woods');
   if (ch === 3) {

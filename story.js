@@ -118,7 +118,7 @@ const GUIDE = [
   { t: 'YOUR STORY', f: 'LanternRed', b: `You arrive on the Lantern Isles owing the <b class="gold">Harbor Master 3,000 coins</b>. You have 300 coins and <b class="gold">10 days</b>.
       <br><br>Someone stole the <b class="gold">Great Lantern</b>, and the island's spirits are running wild. Earn your coins, catch the spirits, and find out who took the flame.` },
   { t: 'ONE DAY', f: 'Owl', b: `<ol class="gList"><li><b>Morning:</b> the paper and the locals give you <b>rumors</b> about tomorrow's prices. Some lie.</li>
-      <li><b>Day:</b> farm, fish and mine, then sell your harvest (crops, fish, honey, jade) at <b>Tomo's stall</b>. Catch spirits and raise them as companions. Bet on the rumors, do your 3 daily quests.</li>
+      <li><b>Day:</b> farm, fish and mine, then sell your harvest: tea, honey, carrots, fish and jade at the <b>barons' stalls</b>, everything else at <b>Tomo's</b>. Catch spirits and raise them as companions. Bet on the rumors, do your 3 daily quests.</li>
       <li><b>After 18:00:</b> walk home (your house by the farm) and press E on the door to <b>sleep</b>.</li>
       <li><b>Night:</b> NEAR reveals what really happened. Your trades, crops and spirits update, and your <b>night crew</b> comes home with its haul. Energy refills.</li></ol>` },
   { t: 'OWN THE BAZAAR', f: 'GoldRacoon', b: `Five <b>barons</b> hold the market stalls: Kaito (tea), Rita (honey), Granny Pell (carrots), Bolt-9 (fish) and Luna (jade).
@@ -127,7 +127,7 @@ const GUIDE = [
   { t: 'YOUR FIRST DAY', f: 'Flam', b: `<ol class="gList"><li>Talk to <b>Mei</b> by the market: your first rumor.</li>
       <li>Shake an <b>apple tree</b> (E) and plant a seed on your farm plots.</li>
       <li>Walk up to a <b>glowing wisp</b> and press E. Stop the bar in the green to <b>catch your first spirit</b>.</li>
-      <li><b>Sell</b> anything at Tomo's stall. That finishes <b>Chapter 1</b>.</li>
+      <li><b>Sell</b> anything: apples at Tomo's, carrots at Granny Pell's stall. That finishes <b>Chapter 1</b>.</li>
       <li>Visit <b>Madame Vey</b> for your 3 fate cards, then <b>sleep</b> after 18:00.</li></ol>
       <div class="sub">The yellow arrow on screen always points at your next goal.</div>` },
   { t: 'THE WORLDS', f: 'Spirit', b: `<div class="gWorlds">

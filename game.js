@@ -559,7 +559,7 @@ function talkTo(n) {
     return;
   }
   if (n.src) { hear(n.src); return; }
-  if (n === NPCS.tomo) { say(n, 'Welcome! Bet on tomorrow, sell your harvest, or stock up on seeds.', [{ t: 'TRADE', fn: () => { closeDlg(); openTrade(); } }, { t: 'SELL', fn: () => { closeDlg(); openSell(); } }, { t: 'SEEDS', fn: () => { closeDlg(); openSeeds(); } }, { t: 'GIFT', fn: () => giftMenu('tomo') }, { t: 'LEAVE', fn: closeDlg }]); return; }
+  if (n === NPCS.tomo) { say(n, 'Welcome! Seeds, and everything the barons don\'t sell: crops, apples, sushi. Tea, honey, carrots, fish and jade? Their stalls are just below.', [{ t: 'TRADE', fn: () => { closeDlg(); openTrade(); } }, { t: 'SELL', fn: () => { closeDlg(); openSell(); } }, { t: 'SEEDS', fn: () => { closeDlg(); openSeeds(); } }, { t: 'GIFT', fn: () => giftMenu('tomo') }, { t: 'LEAVE', fn: closeDlg }]); return; }
   if (n === NPCS.kaito) { const k = S.kaito; say(n, k ? `You paid, so here it is: ${k.long ? 'long' : 'short'} ${GOODS[k.good].name.toLowerCase()}, five times over. Follow me if you dare.` : heldStall(0) ? 'Enjoy MY tea stall while it lasts. I want it back by season\'s end.' : `My call is sealed on NEAR until tonight. ${Rules.AGENTS[0].peek} coins at the Bazaar Board and I'll show you. I'm right more often than not.`, [{ t: 'BAZAAR BOARD', fn: () => { closeDlg(); openIsland('calls'); } }, { t: 'LEAVE', fn: closeDlg }]); return; }
   if (n === NPCS.master) {
     if (S.coins >= DEBT) { say(n, `${fmt(S.coins)} coins? Well, well. Pay the 3,000 and the stall is yours for good.`, [{ t: 'PAY 3,000', fn: async () => { closeDlg(); const r = await guarded('Paying the Harbor Master', () => Backend.call('pay_debt'), 'pay_debt'); if (r === null && Backend.mode === 'chain') return; await sync(); endSeason(true, true); } }, { t: 'NOT YET', fn: closeDlg }]); return; }
@@ -593,12 +593,22 @@ async function openAgents() {
 }
 
 // ---------- trading screen ----------
-function openTrade() { hideToast(); renderTrade(); $('trade').classList.add('on'); sfx('menu'); }
+// Which goods a desk trades: a baron's stall only its own good; Tomo everything the barons don't sell (ore is never traded)
+const BARON_GOODS = () => Rules.AGENTS.map(a => a.stall);
+function deskGoods(desk) { return desk === null || desk === undefined ? GOODS.map((g, i) => i).filter(i => g_tradable(i) && !BARON_GOODS().includes(i)) : [Rules.AGENTS[desk].stall]; }
+const g_tradable = i => GOODS[i].id !== 'ore';
+function openTrade(desk = null) {
+  hideToast(); S.desk = desk; const list = deskGoods(desk); if (!list.includes(S.sel)) S.sel = list[0];
+  renderTrade(); $('trade').classList.add('on'); sfx('menu');
+}
 function closeTrade() { $('trade').classList.remove('on'); }
 function renderTrade() {
   $('trade').classList.remove('wideAg');
+  const list = deskGoods(S.desk); if (!list.includes(S.sel)) S.sel = list[0];
   const g = GOODS[S.sel], price = S.price[g.id];
   const gi = goodIdx(g.id);
+  const deskHead = S.desk === null || S.desk === undefined ? `<div class="sub deskT">TOMO'S STALL · tea, honey, carrots, fish and jade trade at the barons' stalls below</div>`
+    : `<div class="sub deskT">${Rules.AGENTS[S.desk].name.toUpperCase()}'S ${g.name.toUpperCase()} STALL · trading ${g.name.toLowerCase()} here scores in the race for this stall</div>`;
   const chips = Object.keys(S.heard).map(k => {
     const r = S.rumors[k]; if (r.quiet) return '';
     const fx = r.ev.fx.find(([x]) => x === gi); if (!fx) return '';
@@ -608,8 +618,8 @@ function renderTrade() {
     + Object.entries(S.agents || {}).filter(([, m]) => m.good === gi).map(([id, m]) => `<span class="chip" title="${Rules.AGENTS.find(a => a.id === id).name}"><canvas data-face="${Rules.AGENTS.find(a => a.id === id).sheet}" width="40" height="40"></canvas><span class="${m.long ? 'up' : 'dn'}">${m.long ? '▲ LONG' : '▼ SHORT'}</span></span>`).join('');
   const o = previewOutcome(S.stake, S.mult);
   const open = S.positions.map(p => `${p.dir > 0 ? '▲' : '▼'} ${GOOD(p.good).name} x${p.lev} · ${p.stake}`).join('   ');
-  $('trade').innerHTML = `
-    <div class="tg"><button class="arrow" id="tPrev">◀</button><img src="${goodIcon(gi)}"><div><div class="gname">${g.name.toUpperCase()}</div><div class="gprice">${fmt(price)}</div></div><button class="arrow" id="tNext">▶</button></div>
+  $('trade').innerHTML = `${deskHead}
+    <div class="tg"><button class="arrow" id="tPrev" ${list.length < 2 ? 'style="visibility:hidden"' : ''}>◀</button><img src="${goodIcon(gi)}"><div><div class="gname">${g.name.toUpperCase()}</div><div class="gprice">${fmt(price)}</div></div><button class="arrow" id="tNext" ${list.length < 2 ? 'style="visibility:hidden"' : ''}>▶</button></div>
     <div class="chips">${chips || '<span class="sub">No rumors about ' + g.name.toLowerCase() + ' yet</span>'}</div>
     <div class="ls"><button class="dirb ${S.dir > 0 ? 'on long' : ''}" id="tLong">LONG</button><button class="dirb ${S.dir < 0 ? 'on short' : ''}" id="tShort">SHORT</button></div>
     <div class="mults">${[1, 2, 5, 10].map(m => `<button class="pill ${S.mult === m ? 'on' : ''} ${m > S.lev ? 'lock' : ''}" data-m="${m}">x${m}</button>`).join('')}</div>
@@ -618,9 +628,9 @@ function renderTrade() {
     <button class="btn big gold wide" id="tOpen">OPEN</button>
     <div class="tfoot"><span>${open || 'Coins ' + fmt(S.coins)}</span><span><button class="link" id="tAg">AGENTS</button> · <button class="link" id="tLic">UPGRADES</button> · <button class="link" id="tClose">CLOSE</button></span></div>`;
   $('trade').querySelectorAll('canvas[data-face]').forEach(c => portrait(c.dataset.face, c));
-  const N = GOODS.length - 1; // ore is not traded
-  $('tPrev').onclick = () => { S.sel = (S.sel + N - 1) % N; sfx('menu'); renderTrade(); };
-  $('tNext').onclick = () => { S.sel = (S.sel + 1) % N; sfx('menu'); renderTrade(); };
+  const at = list.indexOf(S.sel), N = list.length;
+  $('tPrev').onclick = () => { S.sel = list[(at + N - 1) % N]; sfx('menu'); renderTrade(); };
+  $('tNext').onclick = () => { S.sel = list[(at + 1) % N]; sfx('menu'); renderTrade(); };
   $('tLong').onclick = () => { S.dir = 1; renderTrade(); }; $('tShort').onclick = () => { S.dir = -1; renderTrade(); };
   $('trade').querySelectorAll('[data-m]').forEach(b => b.onclick = () => { const m = +b.dataset.m; if (m > S.lev) { toast('x' + m + ' needs a Leverage License (see LICENSES).', 2.5); sfx('alert'); return; } S.mult = m; renderTrade(); });
   $('tMinus').onclick = () => { S.stake = Math.max(STAKE_STEP, S.stake - STAKE_STEP); renderTrade(); };

@@ -36,21 +36,23 @@ function projectPct(j) {
 }
 
 // ---------- selling the harvest ----------
-function openSell() {
-  hideToast();
-  const rows = GOODS.map((g, i) => ({ g, i })).filter(x => x.g.id !== 'sushi');
+function openSell(desk = null) {
+  hideToast(); S.desk = desk;
+  const only = deskGoods(desk).concat(desk === null ? [GOODS.findIndex(g => g.id === 'ore')] : []);
+  const rows = GOODS.map((g, i) => ({ g, i })).filter(x => x.g.id !== 'sushi' && only.includes(x.i));
+  const other = desk === null ? ' Tea, honey, carrots, fish and jade sell at the barons\' stalls below.' : ` Selling ${GOODS[only[0]].name.toLowerCase()} here scores in the race for this stall${heldStall(desk) ? ' (it is yours: +10%)' : ''}.`;
   const has = rows.filter(x => S.barn[x.i] > 0);
-  $('trade').innerHTML = `<div class="gname">SELL YOUR HARVEST</div>
-    <div class="sub">Each sale nudges the price down 2%. Prices change every night, so time your sales with the rumors.</div>
+  $('trade').innerHTML = `<div class="gname">${desk === null ? 'SELL AT TOMO\'S' : 'SELL AT ' + Rules.AGENTS[desk].name.toUpperCase() + '\'S STALL'}</div>
+    <div class="sub">Each sale nudges the price down 2%. Prices change every night, so time your sales with the rumors.${other}</div>
     ${has.length ? has.map(({ g, i }) => `<div class="srow"><img src="${goodIcon(i)}"><span>${g.name}<br><span class="sub">you have ${S.barn[i]}</span></span><span>${fmt(S.price[g.id] * (g.id === 'tea' && S.player.projects[2] ? 1.15 : 1))}</span>
-      <span><button class="btn" data-s="${i}" data-q="1">SELL 1</button><button class="btn" data-s="${i}" data-q="${S.barn[i]}">ALL</button></span></div>`).join('') : '<div class="sub" style="margin:1em 0">Your barn is empty. Harvest crops, mine or fish first.</div>'}
+      <span><button class="btn" data-s="${i}" data-q="1">SELL 1</button><button class="btn" data-s="${i}" data-q="${S.barn[i]}">ALL</button></span></div>`).join('') : `<div class="sub" style="margin:1em 0">Nothing to sell here. ${desk === null ? 'Harvest crops, pick apples or mine first.' : 'Bring ' + GOODS[only[0]].name.toLowerCase() + ' (your night crew can gather it).'}</div>`}
     <div class="tfoot"><span>Barn ${S.barn.reduce((a, b) => a + b, 0)}/40 · Coins ${fmt(S.coins)}</span><button class="link" id="tClose">CLOSE</button></div>`;
   $('trade').querySelectorAll('[data-s]').forEach(b => b.onclick = () => {
     const i = +b.dataset.s, q = Math.min(+b.dataset.q, S.barn[i]); if (!q) return;
     let got = 0; for (let n = 0; n < q; n++) { got += S.price[GOODS[i].id] * (i === 0 && S.player.projects[2] ? 1.15 : 1); S.price[GOODS[i].id] *= .98; }
     S.barn[i] -= q; S.coins += got; sfx('coin');
     queue({ t: 'Sell', good: i, qty: q }, 'sell ' + GOODS[i].name.toLowerCase());
-    openSell();
+    openSell(desk);
   });
   $('tClose').onclick = closeTrade;
   $('trade').classList.add('on'); hud();
