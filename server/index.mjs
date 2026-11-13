@@ -319,7 +319,7 @@ async function handle(req, res) {
     return;
   }
   if (url.pathname === '/config.js') {
-    res.writeHead(200, { 'content-type': 'text/javascript' });
+    res.writeHead(200, { 'content-type': 'text/javascript', 'cache-control': 'no-cache' });
     return res.end(`window.PB_CONFIG=${JSON.stringify({ mode: MOCK ? 'mock' : 'chain', api: '', network: NETWORK, nodeUrl: NODE_URL, contractId: CONTRACT,
       explorer: NETWORK === 'mainnet' ? 'https://nearblocks.io' : 'https://testnet.nearblocks.io' })};`);
   }
@@ -327,7 +327,9 @@ async function handle(req, res) {
   let decoded; try { decoded = decodeURIComponent(url.pathname); } catch { res.writeHead(400); return res.end('bad request'); }
   let path = normalize(decoded).replace(/^([/\\])+/, '') || 'index.html';
   if (!/^(index\.html|[a-z]+\.js|shared\/[a-z]+\.js|vendor\/[a-z-]+\.mjs|assets\/.+|nft\/(spirits|badges|fish|stalls)\/[A-Za-z0-9_]+\.png)$/.test(path.replace(/\\/g, '/'))) { res.writeHead(404); return res.end('not found'); }
-  try { const data = await readFile(join(ROOT, path)); res.writeHead(200, { 'content-type': MIME[extname(path)] || 'application/octet-stream' }); res.end(data); }
+  try { const data = await readFile(join(ROOT, path)); // the game code is always checked for a newer version (no stale game after an update); art can be cached for a day
+    const code = /\.(html|js|mjs|css)$/.test(path);
+    res.writeHead(200, { 'content-type': MIME[extname(path)] || 'application/octet-stream', 'cache-control': code ? 'no-cache' : 'public, max-age=86400' }); res.end(data); }
   catch { res.writeHead(404); res.end('not found'); }
 }
 http.createServer(async (req, res) => {
