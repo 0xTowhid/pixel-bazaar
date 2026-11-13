@@ -11,6 +11,14 @@ const Backend = (() => {
   const mode = cfg.mode || 'local';
   const KEY = 'pb_account_' + (cfg.contractId || 'local');
   const store = { get() { try { return JSON.parse(localStorage.getItem(KEY)); } catch (e) { return null; } }, set(v) { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) {} }, clear() { try { localStorage.removeItem(KEY); } catch (e) {} } };
+  // same shape as the server's callsFor(): who made a call today, and the call itself only if you peeked
+  function localCalls(p) {
+    const moves = (local && local.plan && local.plan.moves) || [];
+    const calls = Rules.AGENTS.map((a, k) => { const m = moves.find(x => Rules.agentOf(x.npc) === k), open = !!(p.peeked & (1 << k)); return { agent: k, has: !!m, open, ...(m && open ? { good: m.good, long: m.long } : {}) }; });
+    const seen = k => calls[k].open && calls[k].has, agents = {};
+    for (const k of [2, 3, 4]) if (seen(k)) agents[Rules.AGENTS[k].id] = { good: calls[k].good, long: calls[k].long };
+    return { calls, kaito: seen(0) ? { good: calls[0].good, long: calls[0].long } : null, agents };
+  }
   let me = null, near = null, keys = null, account = null, provider = null, local = null, lastNonce = 0n, relayOff = false;
   const url = f => new URL(f, document.baseURI).href;
 
@@ -190,7 +198,7 @@ const Backend = (() => {
         catch (e2) { if (/NotEnoughBalance|LackBalanceForState|not have enough balance/i.test(`${e2 && e2.raw || ''} ${e2 && e2.message || e2}`)) throw new Error('GAS_LOW:again'); throw e2; }
       }
     },
-    /** Start or resume today: the event is committed before you can act. */
+    /** Start or resume today: the event (and the agents' sealed calls) are committed before you can act. */
     async beginDay() {
       if (mode !== 'local') return api('/api/day', { accountId: me.accountId });
       const p = local.engine.get_player(me.accountId);
@@ -203,16 +211,23 @@ const Backend = (() => {
         if (r.lying) moves.push({ npc: 'rita.local', good: Rules.EVENTS[r.ev].fx[0][0], long: false });
         local.plan.agents = Rules.agentMoves(Math.random, d.truth, d.rumors, d.kaito);
         for (const [id, m] of Object.entries(local.plan.agents)) moves.push({ npc: id + '.local', good: m.good, long: m.long });
-        local.engine.commit_day('operator', { player: me.accountId, day: p.day, commitment: Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join(''), npc_moves: moves });
+        local.plan.moves = moves;
+        local.engine.commit_day('operator', { player: me.accountId, day: p.day, commitment: Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join('') });
       }
       const lp = local.plan;
-      return { season: p.season, day: p.day, rumors: lp.rumors, weather: lp.weather || null, kaito: lp.kaito, agents: lp.agents, stormWarning: p.projects[1] ? lp.truth === 0 : null };
+      return { season: p.season, day: p.day, rumors: lp.rumors, weather: lp.weather || null, ...localCalls(p), stormWarning: p.projects[1] ? lp.truth === 0 : null };
+    },
+    /** Today's agent calls: sealed unless you peeked (paid on chain). */
+    async calls() {
+      if (mode !== 'local') return api('/api/calls', { accountId: me.accountId });
+      const p = local.engine.get_player(me.accountId);
+      return p.commitment && local.plan ? localCalls(p) : { calls: [], kaito: null, agents: {} };
     },
     /** Reveal the night's event and settle. */
     async settle(day) {
       if (mode !== 'local') return api('/api/settle', { accountId: me.accountId, day });
       const p = local.engine.get_player(me.accountId);
-      const log = local.engine.settle_day('operator', { player: me.accountId, day: p.day, event: local.plan.truth, rumors: Rules.encodeRumors(local.plan.rumors), salt: '' });
+      const log = local.engine.settle_day('operator', { player: me.accountId, day: p.day, event: local.plan.truth, rumors: Rules.encodeRumors(local.plan.rumors), salt: '', npc_moves: local.plan.moves || [] });
       return { log };
     },
   };

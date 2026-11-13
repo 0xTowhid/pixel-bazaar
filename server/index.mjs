@@ -164,13 +164,24 @@ function plan(account, season, day) {
   const { truth, rumors, kaito, weather } = Rules.planDay(rng, acc);
   const rumorText = Rules.encodeRumors(rumors);
   const salt = hmac(`${account}|${season}|${day}|salt`).toString('hex');
-  const commitment = sha(`${account}|${season}|${day}|${truth}|${rumorText}|${salt}`);
   const r = rumors.rita;
   const npc_moves = [{ npc: `kaito.${CONTRACT}`, good: kaito.good, long: kaito.long }];
   if (r.lying) npc_moves.push({ npc: `rita.${CONTRACT}`, good: Rules.EVENTS[r.ev].fx[0][0], long: false });
   const agents = Rules.agentMoves(rng, truth, rumors, kaito);
   for (const [id, m] of Object.entries(agents)) npc_moves.push({ npc: `${id}.${CONTRACT}`, good: m.good, long: m.long });
+  // the agents' calls are sealed inside the commitment too, revealed with the event at night
+  const commitment = sha(`${account}|${season}|${day}|${truth}|${rumorText}|${salt}|${Rules.encodeMoves(npc_moves)}`);
   return { truth, rumors, rumorText, salt, commitment, weather, npc_moves, kaito, agents };
+}
+// What the player may see of today's agent calls: who made one, and the call itself only if they paid to peek on chain.
+function callsFor(p, d) {
+  const calls = Rules.AGENTS.map((a, k) => {
+    const m = d.npc_moves.find(x => Rules.agentOf(x.npc) === k), open = !!(p.peeked & (1 << k));
+    return { agent: k, has: !!m, open, ...(m && open ? { good: m.good, long: m.long } : {}) };
+  });
+  const seen = k => calls[k].open && calls[k].has;
+  const agents = {}; for (const k of [2, 3, 4]) if (seen(k)) agents[Rules.AGENTS[k].id] = { good: calls[k].good, long: calls[k].long };
+  return { calls, kaito: seen(0) ? { good: calls[0].good, long: calls[0].long } : null, agents };
 }
 
 // ---------- http ----------
@@ -232,13 +243,13 @@ const routes = {
     const d = plan(body.accountId, p.season, p.day);
     let tx = null;
     if (!p.commitment) {
-      try { tx = await operatorCall('commit_day', { player: body.accountId, day: p.day, commitment: d.commitment, npc_moves: d.npc_moves }); }
+      try { tx = await operatorCall('commit_day', { player: body.accountId, day: p.day, commitment: d.commitment }); }
       catch (e) { p = await view('get_player', { account_id: body.accountId }); if (p.commitment !== d.commitment) throw e; }
     } else if (p.commitment !== d.commitment) {
       // this day can never be revealed (GAME_SECRET changed): cancel it on chain, refund the trades, commit it again
       console.error('commitment mismatch for', body.accountId, '- voiding the day');
       await operatorCall('void_day', { player: body.accountId });
-      tx = await operatorCall('commit_day', { player: body.accountId, day: p.day, commitment: d.commitment, npc_moves: d.npc_moves });
+      tx = await operatorCall('commit_day', { player: body.accountId, day: p.day, commitment: d.commitment });
       p = await view('get_player', { account_id: body.accountId });
     }
     // keep the player's account able to pay gas (checked every time the day is opened, not only on a new commit)
@@ -251,7 +262,14 @@ const routes = {
       const s = Rules.SOURCES[k], f = (p.friendship || [])[s.npc] || 0;
       rumors[k] = { ...r }; if (Rules.hearts(f) < 2) delete rumors[k].sure;
     }
-    return { season: p.season, day: p.day, asleep: !!p.asleep, rumors, weather: d.weather, kaito: d.kaito, agents: d.agents, stormWarning, commitment: d.commitment, tx: txHash(tx) };
+    return { season: p.season, day: p.day, asleep: !!p.asleep, rumors, weather: d.weather, ...callsFor(p, d), stormWarning, commitment: d.commitment, tx: txHash(tx) };
+  }),
+  // Today's agent calls: sealed, unless this player paid on chain to peek (the Peek move). Read again after a peek.
+  'POST /api/calls': body => checkId(body.accountId) && withLock(body.accountId, async () => {
+    const p = await view('get_player', { account_id: body.accountId });
+    if (!p) throw new Error('not a player');
+    if (p.finished || !p.commitment) return { calls: [], kaito: null, agents: {} };
+    return callsFor(p, plan(body.accountId, p.season, p.day));
   }),
   // Gasless moves: the player signs, the game pays. Players never need NEAR to play.
   'POST /api/relay': (body, req) => checkId(body.accountId) && withLock('relay|' + body.accountId, async () => {
@@ -276,7 +294,7 @@ const routes = {
     const d = plan(body.accountId, p.season, p.day);
     if (p.commitment !== d.commitment) { await operatorCall('void_day', { player: body.accountId }); return { voided: true }; }
     let res = null;
-    try { res = await operatorCall('settle_day', { player: body.accountId, day: p.day, event: d.truth, rumors: d.rumorText, salt: d.salt }); }
+    try { res = await operatorCall('settle_day', { player: body.accountId, day: p.day, event: d.truth, rumors: d.rumorText, salt: d.salt, npc_moves: d.npc_moves }); }
     catch (e) { const q = await view('get_player', { account_id: body.accountId }); if (q.asleep || q.day === p.day && !q.finished) throw e; }
     const after = await view('get_player', { account_id: body.accountId });
     return { log: after.history.find(h => h.day === p.day) || after.history[after.history.length - 1], salt: d.salt, tx: txHash(res) };
@@ -308,7 +326,7 @@ async function handle(req, res) {
   // static files: only the game itself
   let decoded; try { decoded = decodeURIComponent(url.pathname); } catch { res.writeHead(400); return res.end('bad request'); }
   let path = normalize(decoded).replace(/^([/\\])+/, '') || 'index.html';
-  if (!/^(index\.html|[a-z]+\.js|shared\/[a-z]+\.js|vendor\/[a-z-]+\.mjs|assets\/.+|nft\/(spirits|badges|fish)\/[A-Za-z0-9_]+\.png)$/.test(path.replace(/\\/g, '/'))) { res.writeHead(404); return res.end('not found'); }
+  if (!/^(index\.html|[a-z]+\.js|shared\/[a-z]+\.js|vendor\/[a-z-]+\.mjs|assets\/.+|nft\/(spirits|badges|fish|stalls)\/[A-Za-z0-9_]+\.png)$/.test(path.replace(/\\/g, '/'))) { res.writeHead(404); return res.end('not found'); }
   try { const data = await readFile(join(ROOT, path)); res.writeHead(200, { 'content-type': MIME[extname(path)] || 'application/octet-stream' }); res.end(data); }
   catch { res.writeHead(404); res.end('not found'); }
 }

@@ -67,7 +67,7 @@
     early_bird: 'Paid the debt by day 6', restorer: 'Finished a town project', best_friend: '5 hearts with a local',
     first_spirit: 'Caught your first spirit', spirit_tamer: 'Caught 10 kinds of spirit', shiny_hunter: 'Caught a shiny spirit',
     legend_tamer: 'Raised a legendary spirit', wallet_linked: 'Linked a NEAR wallet', lantern_seeker: 'Solved all three world puzzles', lantern_keeper: 'Brought the Lantern back',
-    stall_owner: 'Took a stall from a baron', bazaar_keeper: 'Lantern Keeper: holds all five stalls and finished the story', spirit_champion: 'Beat the Great Spirit in a duel', fishing_legend: 'Caught all five legendary fish', island_oracle: '10 people believed your notes', boss_slayer: 'Fought a world boss to the end',
+    stall_owner: 'Took a stall from a baron', bazaar_keeper: 'Lantern Keeper of the Bazaar', spirit_champion: 'Beat the Great Spirit in a duel', fishing_legend: 'Caught all five legendary fish', island_oracle: '10 people believed your notes', boss_slayer: 'Fought a world boss to the end',
   };
   // ---- spirits (same table as the contract) ----
   const ELEMENTS = [

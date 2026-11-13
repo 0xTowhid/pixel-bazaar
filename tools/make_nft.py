@@ -49,7 +49,7 @@ for sprite, name, el, rar in SPECIES:
 BADGES = dict(re.findall(r"(\w+): '([^']+)'", src[src.index('const BADGES = {'):src.index('};', src.index('const BADGES = {'))]))
 ICON = {'first_harvest': 'Mushroom', 'green_thumb': 'Bamboo', 'jade_hunter': 'Mole', 'angler': 'Octopus', 'x10_survivor': 'Flam2', 'faded_rita': 'Snake2', 'beat_kaito': 'GoldRacoon',
         'debt_free': 'Racoon', 'early_bird': 'Owl', 'restorer': 'KappaGreen', 'best_friend': 'Spirit', 'first_spirit': 'Spirit', 'spirit_tamer': 'LanternGreen', 'shiny_hunter': 'Butterfly',
-        'legend_tamer': 'GiantSpirit', 'wallet_linked': 'Eye', 'lantern_seeker': 'LanternRed', 'lantern_keeper': 'Dragon', 'spirit_champion': 'Spirit2', 'fishing_legend': 'Legend4', 'island_oracle': 'Eye2', 'boss_slayer': 'DragonYellow'}
+        'legend_tamer': 'GiantSpirit', 'wallet_linked': 'Eye', 'lantern_seeker': 'LanternRed', 'lantern_keeper': 'Dragon', 'spirit_champion': 'Spirit2', 'fishing_legend': 'Legend4', 'stall_owner': 'GoldRacoon', 'bazaar_keeper': 'Dragon', 'island_oracle': 'Eye2', 'boss_slayer': 'DragonYellow'}
 for key, title in BADGES.items():
     im = bg((255, 216, 107)); d = ImageDraw.Draw(im)
     d.ellipse((76, 36, 436, 396), fill=(255, 216, 107)); d.ellipse((96, 56, 416, 376), fill=(42, 35, 70))
@@ -77,3 +77,27 @@ for k, (name, tint) in enumerate(LEG):
     f3 = F(14); w = 'LANTERN ISLES · PIXEL BAZAAR'; d.text(((S - d.textlength(w, font=f3)) / 2, 466), w, font=f3, fill=(185, 168, 232))
     im.save(os.path.join(ROOT, 'nft/fish', '%d.png' % k), optimize=True)
 print(len(LEG), 'fish')
+
+# baron stalls (one per good: tea, honey, carrot, fish, jade)
+os.makedirs(os.path.join(ROOT, 'nft/stalls'), exist_ok=True)
+def good_icon(gid):
+    if gid in ('tea', 'fish', 'honey'): return Image.open(os.path.join(ROOT, 'assets/items', {'tea': 'TeaLeaf', 'fish': 'Fish', 'honey': 'Honey'}[gid] + '.png')).convert('RGBA')
+    if gid == 'carrot': return Image.open(os.path.join(ROOT, 'assets/crops/crops.png')).convert('RGBA').crop((64, 0, 80, 16))
+    return Image.open(os.path.join(ROOT, 'assets/crops/icons.png')).convert('RGBA').crop((0, 0, 16, 16))
+STALLS = [('tea', 'KAITO', (127, 191, 90)), ('honey', 'RITA', (232, 184, 74)), ('carrot', 'GRANNY PELL', (232, 136, 74)), ('fish', 'BOLT-9', (90, 168, 232)), ('jade', 'LUNA', (74, 192, 160))]
+for gid, baron, col in STALLS:
+    im = bg(col); d = ImageDraw.Draw(im)
+    x0, x1, y0 = 96, 416, 70
+    for i in range(8):  # striped awning
+        d.rectangle((x0 - 16 + i * 44, y0, x0 - 16 + (i + 1) * 44, y0 + 60), fill=col if i % 2 == 0 else (255, 243, 214))
+    d.rectangle((x0 - 16, y0 + 60, x1 + 16, y0 + 72), fill=(0, 0, 0))
+    d.rectangle((x0, y0 + 72, x0 + 14, 330), fill=(90, 58, 34)); d.rectangle((x1 - 14, y0 + 72, x1, 330), fill=(90, 58, 34))
+    d.rectangle((x0 - 10, 262, x1 + 10, 330), fill=(138, 90, 50)); d.rectangle((x0 - 10, 318, x1 + 10, 330), fill=(106, 66, 36))
+    ic = good_icon(gid).resize((72, 72), Image.NEAREST)
+    for k in range(3): im.paste(ic, (130 + k * 90, 182), ic)
+    d.rounded_rectangle((8, 8, S - 9, S - 9), radius=28, outline=(255, 216, 107), width=10)
+    t = gid.upper() + ' STALL'; f = F(36); d.text(((S - d.textlength(t, font=f)) / 2, 360), t, font=f, fill=(255, 243, 214))
+    sub = 'WON FROM ' + baron; f2 = F(20); d.text(((S - d.textlength(sub, font=f2)) / 2, 414), sub, font=f2, fill=col)
+    f3 = F(14); w = 'BARON STALL · PIXEL BAZAAR ON NEAR'; d.text(((S - d.textlength(w, font=f3)) / 2, 462), w, font=f3, fill=(185, 168, 232))
+    im.save(os.path.join(ROOT, 'nft/stalls', gid + '.png'), optimize=True)
+print(len(STALLS), 'stalls')
