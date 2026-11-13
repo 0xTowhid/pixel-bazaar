@@ -9,8 +9,8 @@ Built for NEAR HACKATHON 2026, **Games With Real Economies** track.
 | | |
 |---|---|
 | **Play it** | **https://pixel-bazaar.arculate.markets** or **https://213.165.39.157.sslip.io** (desktop or phone held sideways; no wallet needed to start) |
-| **Contract** | [`pixelbazaar6-tow69.testnet`](https://testnet.nearblocks.io/address/pixelbazaar6-tow69.testnet) on NEAR testnet |
-| **Agent accounts** | `kaito.`, `rita.`, `pell.`, `bolt.`, `luna.pixelbazaar6-tow69.testnet` (the five barons) |
+| **Contract** | [`pixelbazaar7-tow69.testnet`](https://testnet.nearblocks.io/address/pixelbazaar7-tow69.testnet) on NEAR testnet |
+| **Agent accounts** | `kaito.`, `rita.`, `pell.`, `bolt.`, `luna.pixelbazaar7-tow69.testnet` (the five barons) |
 | **NFT art** | [`nft/`](nft/) in this repo, served from GitHub raw links in each token's metadata |
 | **Code** | this repository (MIT) |
 
@@ -19,7 +19,7 @@ Built for NEAR HACKATHON 2026, **Games With Real Economies** track.
 ## For judges: a 5-minute run
 
 1. Open the game. A short intro plays (SKIP works), then **HOW TO PLAY** explains the story, a day, your first day step by step, and how the worlds unlock. The goal line at the top and a yellow arrow always point to your next step.
-2. Choose **NEW TRADER**, pick a name and a password. The game creates `yourname.pixelbazaar6-tow69.testnet` and shows a 12-word recovery code. Every ✓ line at the bottom of the screen links to the transaction on the explorer.
+2. Choose **NEW TRADER**, pick a name and a password. The game creates `yourname.pixelbazaar7-tow69.testnet` and shows a 12-word recovery code. Every ✓ line at the bottom of the screen links to the transaction on the explorer.
 3. Read the morning paper and press **START DAY**. The day is committed on chain before you see any rumors (`✓ commit_day`).
 4. Catch a spirit: walk up to a glowing wisp in the grass, press E (A on phones) and stop the bar in the green. The contract decides the catch, and the spirit is minted to you as an NFT. It follows you as your companion.
 5. Press **B** for your spirits (feed, evolve, the Spirit Book, the five legendary fish). Press **WALLET**: your game account is a real NEAR account with an address, a QR code and a balance. Send any spirit, badge or fish to any NEAR address, or send NEAR out after re-typing your password.

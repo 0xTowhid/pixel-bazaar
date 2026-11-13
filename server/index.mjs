@@ -97,7 +97,14 @@ if (MOCK) {
     if (bad) throw new Error(JSON.stringify(bad.Failure).replace(/.*panicked: ?/, '').replace(/["\\}]+$/g, '').slice(0, 200));
     return txHash(r);
   };
-  const raw = (method, args, deposit) => withTimeout(operator.callFunction({ contractId: CONTRACT, methodName: method, args, gas: teraToGas('100'), deposit: nearToYocto(deposit) }), 45000);
+  const raw = async (method, args, deposit) => {
+    if (method !== 'register_player') return withTimeout(operator.callFunction({ contractId: CONTRACT, methodName: method, args, gas: teraToGas('100'), deposit: nearToYocto(deposit) }), 45000);
+    // sign-ups: keep the whole outcome so a failed account creation says why in the log
+    const r = await withTimeout(operator.callFunctionRaw({ contractId: CONTRACT, methodName: method, args, gas: teraToGas('100'), deposit: nearToYocto(deposit) }), 45000);
+    const fails = [r?.status?.Failure, ...(r?.receipts_outcome || []).map(o => o?.outcome?.status?.Failure)].filter(Boolean);
+    if (fails.length) console.error(`register_player ${args.name}: tx ${r?.transaction?.hash} failed:`, JSON.stringify(fails).slice(0, 600));
+    return null;
+  };
   // One operator key signs everything, so calls go out one at a time (no nonce clashes) and retry on network trouble.
   let chain = Promise.resolve();
   const queued = fn => { const p = chain.then(fn, fn); chain = p.catch(() => {}); return p; };
