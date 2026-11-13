@@ -9,8 +9,8 @@ Built for NEAR HACKATHON 2026, **Games With Real Economies** track.
 | | |
 |---|---|
 | **Play it** | **https://pixel-bazaar.arculate.markets** or **https://213.165.39.157.sslip.io** (desktop or phone held sideways; no wallet needed to start) |
-| **Contract** | [`pixelbazaar4-tow69.testnet`](https://testnet.nearblocks.io/address/pixelbazaar4-tow69.testnet) on NEAR testnet |
-| **Agent accounts** | `kaito.`, `rita.`, `pell.`, `bolt.`, `luna.pixelbazaar4-tow69.testnet` |
+| **Contract** | [`pixelbazaar5-tow69.testnet`](https://testnet.nearblocks.io/address/pixelbazaar5-tow69.testnet) on NEAR testnet |
+| **Agent accounts** | `kaito.`, `rita.`, `pell.`, `bolt.`, `luna.pixelbazaar5-tow69.testnet` |
 | **NFT art** | [`nft/`](nft/) in this repo, served from GitHub raw links in each token's metadata |
 | **Code** | this repository (MIT) |
 
@@ -18,11 +18,11 @@ Built for NEAR HACKATHON 2026, **Games With Real Economies** track.
 
 ## For judges: a 5-minute run
 
-1. Open the game. A short intro plays (SKIP works), then **TAKE THE 1-MINUTE TOUR** shows every part of the screen.
-2. Choose **NEW TRADER**, pick a name and a password. The game creates `yourname.pixelbazaar4-tow69.testnet` and shows a 12-word recovery code. Every ✓ line at the bottom of the screen links to the transaction on the explorer.
+1. Open the game. A short intro plays (SKIP works), then **HOW TO PLAY** explains the story, a day, your first day step by step, and how the worlds unlock. The goal line at the top and a yellow arrow always point to your next step.
+2. Choose **NEW TRADER**, pick a name and a password. The game creates `yourname.pixelbazaar5-tow69.testnet` and shows a 12-word recovery code. Every ✓ line at the bottom of the screen links to the transaction on the explorer.
 3. Read the morning paper and press **START DAY**. The day is committed on chain before you see any rumors (`✓ commit_day`).
 4. Catch a spirit: walk up to a glowing wisp in the grass, press E (A on phones) and stop the bar in the green. The contract decides the catch, and the spirit is minted to you as an NFT. It follows you as your companion.
-5. Press **B** for your spirits (feed, evolve, the Spirit Book, the five legendary fish). Press **LINK A NEAR WALLET** to connect MyNearWallet, Meteor or HOT, then **TO WALLET** sends any spirit, badge or fish to it.
+5. Press **B** for your spirits (feed, evolve, the Spirit Book, the five legendary fish). Press **WALLET**: your game account is a real NEAR account with an address, a QR code and a balance. Send any spirit, badge or fish to any NEAR address, or send NEAR out after re-typing your password.
 6. Press **Q** for the story and today's three quests, talk to **Madame Vey** for three fate cards, and challenge **Mei** to a 3-vs-3 spirit duel.
 7. Press **I** for the island: the live feed of every player, ghost notes, curses and the world boss.
 8. After 18:00, go home and **SLEEP**. The contract checks the night's reveal against the morning commitment and settles everything (`✓ settle_day`).
@@ -34,9 +34,9 @@ On phones, tap **FULL SCREEN** at the top (on iPhone, use Share → Add to Home 
 | NEAR feature | Where | What it does |
 |---|---|---|
 | Named sub-accounts + function-call keys | `register_player` in `contract/src/lib.rs`, `backend.js` | Your name becomes `yourname.<contract>`. Your browser holds a key that can only call 7 game methods on this contract and cannot move NEAR. No wallet popups and no gas prompts while you play. |
-| Log in anywhere (password or 12-word code) | `backend.js`, `vendor/keys.mjs` | PBKDF2 (210k rounds) turns your name and password into a standard 12-word NEAR seed phrase (BIP39 + SLIP-10, `m/44'/397'/0'`). The server stores no secret of yours. |
+| Log in anywhere (password or 12-word code) | `backend.js`, `vendor/keys.mjs` | PBKDF2 (210k rounds) turns your name and password into a standard 12-word NEAR seed phrase (BIP39 + SLIP-10). Two keys come from it: a **play key** (`m/44'/397'/1'`, kept in the browser, can only call 7 game methods) and the **wallet key** (`m/44'/397'/0'`, the standard path, so the 12 words open the account in any NEAR wallet). The wallet key is never stored: the game rebuilds it from your password for a NEAR transfer and drops it. The server stores no secret of yours. |
 | **NEP-171 NFTs** (spirits, badges, legendary fish) | `nft_transfer`, `nft_token`, `nft_tokens_for_owner`, `nft_metadata` | 39 spirit species (+ shiny), 22 badges and 5 one-of-one legendary fish are real NFTs with metadata and art. A spirit keeps its token id as it levels up and evolves; its metadata shows the new form and level. Standard `nft_mint` and `nft_transfer` events (NEP-171 logs), so wallets and explorers show them. |
-| **Wallet link, two-sided** | `link_wallet` (signed by your wallet, 1 yocto), `Action::ConfirmWallet`, `Action::SendToWallet` | Your wallet asks to link, your game account confirms, and from then on the game can send your NFTs to your own wallet. Neither side can link alone. Wallet selector: MyNearWallet, Meteor, HOT. |
+| **Built-in wallet** | `Action::SendTo`, `register_player(public_key, full_key)`, `wallet.js` | Address with QR code, live balance, receive NEAR and NFTs, send any NFT to any account (a game action, no popups), and send NEAR signed with the wallet key. |
 | Commit-reveal days | `commit_day` / `settle_day`, `server/index.mjs` | Each morning the operator commits `sha256(event, rumors, salt)`. At night the contract rejects any reveal that does not match. |
 | On-chain rolls that cannot be rerolled | `roll()` | Spirit encounters, shiny odds, catches, duels, fate cards, quests, puzzle orders, legendary fish and boss damage are rolled from the day's commitment. Reverting a transaction and trying again gives the same result. |
 | Contract-run economy and RPG | `act` | Coins, prices, leveraged trades and liquidations; farm, energy, mining, fishing; spirit XP, feeding, evolution; puzzles, story chapters, quests, duels. Many moves are batched into one `act` transaction. |
@@ -49,8 +49,8 @@ On phones, tap **FULL SCREEN** at the top (on iPhone, use Share → Add to Home 
 | Do | See |
 |---|---|
 | **Spirits** (B) | 39 species in 7 elements, from Ember Kits to the Jade Dragon. Each world has its own. Catching is a timing bar; the contract decides. Your companion follows you, gains XP every night and from food, and evolves (some need a lantern shard). Elements open worlds: a water spirit lets you dive to the Sunken Shrine, a wind spirit glides you to the Clockwork Sky, a fire spirit lights the dark woods. |
-| **Worlds** | Town and farm, the Whispering Woods (north), the Moon Market (open at night), the Sunken Shrine, the Clockwork Sky. Each has its own music, mood and a puzzle whose order changes every day. |
-| **The Lantern Mystery** (Q) | Five story chapters with clues from each world, ending at the old spirit gate in a duel with the Great Spirit. The ending mints the Jade Dragon to you. |
+| **Worlds** | Town and farm, the Whispering Woods (north), the Moon Market (open at night), the Sunken Shrine, the Clockwork Sky. Each has its own music, mood, people with tips and clues, signposts, a chest that refills every day, and a puzzle whose order changes every day. Gates are signed in town and marked on the minimap. |
+| **The Lantern Mystery** (Q) | Chapter 1: catch a spirit and make your first sale. Then four more chapters with clues from each world, ending at the old spirit gate in a duel with the Great Spirit. The ending mints the Jade Dragon to you. |
 | **Daily hooks** | Madame Vey's three fate cards a day (a blessing, a curse and a secret, each with a real effect), three daily quests that pay automatically, and rumors in the morning paper. |
 | **Spirit duels** | Pick three spirits against Mei, Rita at the Moon Market night table, or the Great Spirit. Element wheel: fire › nature › water › fire, wind › earth › fire, spirit ⇄ dark. One duel a day per rival; the whole fight is decided on chain and shown hit by hit. |
 | **Fishing legends** | Five one-of-one fish that only bite when their riddle is true (with a fire companion, on a day of The River, after the sky...). |
@@ -103,12 +103,13 @@ npm install --prefix server && MOCK=1 node server/index.mjs
 ```
 cd contract && cargo test
 ```
-48 contract unit tests, among them:
+51 contract unit tests, among them:
 - trading, liquidation, leverage licenses, the operator cannot change the event
 - farming, weather, energy, gifts, town projects, the stall, seasons and badges
 - spirits: catching, shinies, feeding, evolution with shards, NFT transfers and metadata, the wallet link (both sides needed)
 - puzzles with a daily order, fate cards with real effects, quests paid once, story chapters ending in the Jade Dragon
-- duels decided by the day's rolls (a weak team loses, a strong one wins, once a day), the Great Spirit unlocks the ending
+- duels rolled from block randomness and saved for the replay (a weak team loses, a strong one wins, once a day), the Great Spirit unlocks the ending
+- the in-game wallet sending items to any account, sign-up with a wallet key, one chest a day per world, at most one curse per target per day
 - legendary fish only in season and only once
 - ghost notes and votes, curses and charms, the shared world boss and its rewards, rare natural boss windows
 - agent traders settling on their own ledgers
@@ -120,12 +121,13 @@ The JavaScript copy of the contract (`shared/engine.js`) runs the same rules; th
 
 ```
 index.html, game.js     the game: rendering, UI, game loop, trading, agents board, night and dawn, login
-story.js                intro, welcome card and the spotlight tour
-spirits.js              wild spirits, catching, companion, Spirit Book, legends tab, wallet link
-worlds.js, worldplay.js the four extra worlds, puzzles, world switching and moods
+story.js                intro, welcome card, HOW TO PLAY guide and the spotlight tour
+spirits.js              wild spirits, catching, companion, Spirit Book, legends tab
+worlds.js, worldplay.js the four extra worlds, their people, chests, puzzles, gate signs, lights and moods
 quests.js               fate cards, quest board, story chapters
 duel.js                 3 v 3 spirit duels
 island.js               the island: feed, ghost notes, curses and charms, world boss
+wallet.js               the built-in wallet: address + QR, balance, send NFTs, send NEAR
 life.js                 farm plots, mining, fishing, Mochi the cat, the `act` queue
 panels.js               morning paper, selling, seeds, gifts, town board, profile, share images
 world.js                the town map, built in code
@@ -143,7 +145,7 @@ nft/, tools/make_nft.py NFT images (built from the game art) and the script that
 - What the chain guarantees is that the operator cannot change the event after you act.
 - Settlement, liquidation, farming and items follow the contract's rules.
 - Winning the fishing and catching mini-games is reported by your browser; the catch itself is rolled on chain.
-- Duel and puzzle rolls come from the day's commitment, which your browser can see; a player could work out today's duel result before fighting. They still get one try per rival per day.
+- Puzzle orders come from the day's commitment, which your browser can see (the tablets even hint the first piece). Duels use block randomness instead, so their result cannot be known before fighting.
 - Everything runs on testnet with play coins. There is no real money.
 
 ## Hackathon notes

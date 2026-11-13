@@ -12,3 +12,4 @@ https://github.com/LiberatedPixelCup/Universal-LPC-Spritesheet-Character-Generat
 
 ## Crops and icons
 The crop growth stages, harvest icons, apple tree fruit, jade, ore, seed bag and heart icons were drawn for Pixel Bazaar in code (`tools/make_crops.py`) and are MIT like the rest of the code. The apple tree uses the Ninja Adventure tree as its base (CC0).
+- QR codes in the wallet: [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) by Kazuhiko Arase (MIT), bundled into `vendor/qr.mjs`.
