@@ -74,9 +74,12 @@ body:not(.ingame) #hudL,body:not(.ingame) #objBox,body:not(.ingame) #topR,body:n
 #cine{position:absolute;inset:0;display:none;z-index:70;cursor:pointer}#cine.on{display:block}
 #fxcv{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated}
 #cine .lb{position:absolute;left:0;right:0;height:9%;background:#000}#cine .lb.top{top:0}#cine .lb.bot{bottom:0}
-#cineTitle{position:absolute;top:11%;left:0;right:0;text-align:center;color:var(--gold);font-size:clamp(11px,1.5vw,20px)}
-#cineN{position:absolute;top:3%;left:2%;color:#b9a8e8;font-size:clamp(9px,1vw,13px)}
-#cineSkip{position:absolute;top:2%;right:2%;z-index:2}
+#cineTitle{position:absolute;top:0;left:14%;right:22%;height:9%;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--gold);font-size:clamp(8px,1.35vw,18px);line-height:1.2;z-index:1}
+#cineN{position:absolute;top:0;left:2%;height:9%;display:flex;align-items:center;color:#b9a8e8;font-size:clamp(9px,1vw,13px);z-index:1}
+#cineSkip{position:absolute;top:1.2%;right:2%;z-index:2}
+/* the intro owns the whole screen: no HUD, buttons, seed bar or thumb stick behind it */
+body.cineOn #hudL,body.cineOn #objBox,body.cineOn #topR,body.cineOn #menu,body.cineOn #zone,body.cineOn #hint,body.cineOn #toast,body.cineOn #hotbar,body.cineOn #chainlog,body.cineOn #pad{display:none!important}
+@media (max-height:520px){#cine .lb,#cineTitle,#cineN{height:13%}#cineSkip{top:1.5%;font-size:clamp(9px,2.6vh,13px);padding:.3em .6em}#cineBox{left:5%;right:5%;bottom:16%;padding:.7em 1em;gap:.8em;line-height:1.45}#cineBox canvas{width:4.2em;height:4.2em}}
 #cineBox{position:absolute;left:10%;right:10%;bottom:12%;padding:1.1em 1.3em;display:flex;gap:1em;align-items:center;font-size:clamp(11px,1.45vw,19px);line-height:1.55}
 #cineBox canvas{width:5.2em;height:5.2em;image-rendering:pixelated;border:3px solid var(--gold);border-radius:8px;background:#2a2346;flex:none}
 #cineBox.narr{text-align:center;justify-content:center;font-size:clamp(12px,1.7vw,22px)}

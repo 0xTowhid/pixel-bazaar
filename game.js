@@ -333,7 +333,7 @@ async function claim(kind, label) {
 async function sleep(passedOut) {
   if (S.over || S.sleeping) return;
   S.sleeping = true;
-  let ok = false;
+  let ok = false, shown = false;
   try {
     closeTrade(); $('journal').classList.remove('on'); S.fishing = null;
     while (Q.sending) await wait(100); await flush();
@@ -369,9 +369,11 @@ async function sleep(passedOut) {
     for (const k of ['sailor', 'farmer', 'hermit']) if (S.heard[k] && !S.notes.includes(k)) { S.notes.push(k); notes.push(noteFor(k)); }
     S.history.push({ day: log.day, ev: ev.id }); S.lastLog = log; saveMem();
     showNight(ev, prev, results, truths, notes, before, worth(), log.passed_out_loss / 100, S.player.finished, S.player.won);
+    shown = true;
   } finally {
     S.sleeping = false; quietBusy = false;
     if (!ok) { S.night = null; S.inside = false; }
+    else if (!shown) { console.error('night report failed to open'); S.night = null; stepOutside(); }
   }
 }
 function farmLine(ev) {
@@ -418,14 +420,23 @@ function showNight(ev, prev, results, truths, notes, before, after, lost, finish
     async () => {
       S.night = null;
       if (finished) { S.inside = false; endSeason(won); return; }
-      await beginDay(false);
-      showPaper(() => {
-        S.inside = false; player.x = World.P.homeDoor.x * TW; player.y = (World.P.homeDoor.y - .25) * TW;
-        walkTo(player.x, player.y + 26, 'down');
-        if (S.step === 3) advance();
-        if (DAILY_TIPS[S.day]) toast(DAILY_TIPS[S.day], 6);
-      });
+      S.waking = true;
+      try {
+        await beginDay(false);
+        showPaper(() => {
+          stepOutside();
+          if (S.step === 3) advance();
+          if (DAILY_TIPS[S.day]) toast(DAILY_TIPS[S.day], 6);
+        });
+      } catch (e) { console.error('wake up', e); stepOutside(); } // whatever went wrong with the paper, you still get your character back
     });
+}
+// Leave the house after a night: the character is hidden while "inside", so every way out of a night must end here.
+function stepOutside() {
+  S.waking = false;
+  if (!S.inside) return;
+  S.inside = false; player.x = World.P.homeDoor.x * TW; player.y = (World.P.homeDoor.y - .25) * TW;
+  walkTo(player.x, player.y + 26, 'down');
 }
 async function endSeason(won, early) {
   S.over = true;
@@ -464,7 +475,11 @@ const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 // what the chain said, in words a player understands
 function niceErr(m) {
   m = String(m || '').replace(/^Error:\s*/, '');
-  if (/not enough balance|NotEnoughBalance|LackBalanceForState/i.test(m)) return 'Your account is low on NEAR for gas. Open WALLET to add some, or wait for tomorrow\'s free top-up.';
+  if (/GAME_STORAGE_LOW/.test(m)) return 'The game itself is out of NEAR for storage, so it cannot save this. That is on our side, not yours. Please tell the game owner.';
+  if (/GAS_LOW:operator/.test(m)) return 'The game could not refill your gas right now (its own tank is low). That is on our side. You can also add NEAR in WALLET.';
+  if (/GAS_LOW:limit/.test(m)) return 'You used all of today\'s free gas refills. Add a little NEAR in WALLET, or come back later.';
+  if (/GAS_LOW|NotEnoughBalance|LackBalanceForState|not have enough balance/i.test(m)) return 'Your account is out of NEAR for gas and the refill did not arrive. Try again in a moment, or add NEAR in WALLET.';
+  if (/^not enough balance/i.test(m)) return 'You do not have enough of that.';
   if (/Exceeded the prepaid gas|GasExceeded/i.test(m)) return 'That was too much for one go. Try again with fewer things at once.';
   if (/timeout|timed out|fetch|network|Failed to fetch/i.test(m)) return 'NEAR did not answer in time. Try again.';
   if (/AccessKeyNotFound|does not exist while viewing/i.test(m)) return 'Your login key was not found. Log out and back in.';
@@ -472,7 +487,13 @@ function niceErr(m) {
 }
 function toast(t, sec = 2.5) { const el = $('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => el.style.display = 'none', sec * 1000); }
 function hideToast() { $('toast').style.display = 'none'; }
-function openCard(html, cb, soft) { hideToast(); $('card').innerHTML = html; $('card').classList.add('on'); $('card').dataset.soft = soft ? '1' : ''; cardCb = cb; $('cardBtn').onclick = closeCard; }
+const laterCards = [];
+const cardBusy = () => $('card').classList.contains('on') || (S && (S.night || S.sleeping || S.waking));
+function openCard(html, cb, soft) {
+  // an info card (chapter done, evolution, puzzle...) must not replace the night report or the morning paper: it waits its turn
+  if (soft && cardBusy()) { laterCards.push([html, cb, soft]); return; }
+  hideToast(); $('card').innerHTML = html; $('card').classList.add('on'); $('card').dataset.soft = soft ? '1' : ''; cardCb = cb; $('cardBtn').onclick = closeCard;
+}
 function closeCard() { $('card').classList.remove('on'); sfx('ok'); const cb = cardCb; cardCb = null; cb && cb(); }
 function portrait(sheet, canvas) {
   const p = canvas.getContext('2d'); p.imageSmoothingEnabled = false; p.clearRect(0, 0, canvas.width, canvas.height);
@@ -876,6 +897,9 @@ function update(dt) {
     if (S.t > DAY_SECONDS * (16 / 18) && !S.warned) { S.warned = true; toast("It's 22:00. Head home before midnight.", 3); sfx('alert'); }
     if (S.t >= DAY_SECONDS && !S.sleeping) { S.t = DAY_SECONDS; sleep(true); }
   }
+  // safety net: never stay hidden "inside the house" once the night is over and no card is waiting
+  if (S.inside && !S.sleeping && !S.night && !S.waking && !$('card').classList.contains('on')) stepOutside();
+  if (laterCards.length && !cardBusy() && !S.story && !dlg) openCard(...laterCards.shift());
   hud();
 }
 function draw() {
@@ -920,7 +944,7 @@ function draw() {
     }
   }
   drawPopups(camX, camY, 1 / 60);
-  drawGateSigns(camX, camY);
+  if (!S.cine) drawGateSigns(camX, camY);
   drawWorldMood(camX, camY);
   drawNight(camX, camY);
   drawFishing();
@@ -937,7 +961,8 @@ function draw() {
       ctx.beginPath(); ctx.moveTo(16, 0); ctx.lineTo(-10, -12); ctx.lineTo(-10, 12); ctx.fill(); ctx.restore();
     }
   }
-  // minimap
+  // minimap (not during the intro)
+  if (!S.cine) {
   const mw = 176, mh = 102, mx = VW - mw - 12, my = layoutTop.miniY || 56;
   ctx.globalAlpha = .92; ctx.drawImage(MINI, mx, my); ctx.globalAlpha = 1;
   ctx.strokeStyle = '#fff3d6'; ctx.lineWidth = 2; ctx.strokeRect(mx, my, mw, mh);
@@ -946,6 +971,7 @@ function draw() {
   drawMiniMarks(mx, my, sx, sy);
   if (tgt) { ctx.fillStyle = '#ffd86b'; ctx.fillRect(mx + tgt.x * sx - 2, my + tgt.y * sy - 2, 5, 5); }
   ctx.fillStyle = '#ff4d6d'; ctx.fillRect(mx + player.x * sx - 2, my + player.y * sy - 3, 5, 5);
+  }
   const t = !uiOpen() && !S.over && !S.night && nearest();
   $('hint').style.display = t ? 'block' : 'none'; if (t) $('hint').textContent = (matchMedia('(pointer:coarse)').matches ? 'A: ' : 'E: ') + t.label;
 }

@@ -30,6 +30,7 @@ const SECRET = env.GAME_SECRET || (MOCK ? 'mock-secret' : '');
 const PLAYER_FUNDING = env.PLAYER_FUNDING || '0.05'; // NEAR given to each new player account for gas
 const TOPUP = env.PLAYER_TOPUP || '0.03';               // sent when a player's account runs low on gas money
 const TOPUP_BELOW = +(env.PLAYER_TOPUP_BELOW || 0.03);  // NEAR
+const TOPUPS_A_DAY = +(env.PLAYER_TOPUPS_A_DAY || 6);   // free top-ups one account can get in 24 hours
 const MIN_RESERVE = +(env.OPERATOR_MIN_NEAR || 0.5);     // operator keeps this much; sign-ups pause below it
 const CONTRACT_MIN = +(env.CONTRACT_MIN_NEAR || 1);      // the contract pays for every player's storage; sign-ups pause below this
 const ALLOW_ORIGIN = env.ALLOW_ORIGIN || ''; // empty: same-origin only (no CORS header)
@@ -95,6 +96,37 @@ function withLock(key, fn) {
   const p = prev.then(fn, fn); const tail = p.catch(() => {}); locks.set(key, tail);
   tail.then(() => { if (locks.get(key) === tail) locks.delete(key); });
   return p;
+}
+
+// ---------- gas money ----------
+// A player's own account pays the gas for every move. When it runs low the operator refills it: at the start of each day,
+// and whenever the game asks because a move was refused for gas (so nobody is stuck until tomorrow).
+const topups = new Map(); // account -> times of recent top-ups
+async function topUp(accountId) {
+  if (MOCK) return { sent: false, reason: 'enough' };
+  const free = await balanceOf(accountId);
+  if (free >= TOPUP_BELOW) return { sent: false, reason: 'enough', balance: free };
+  const op = await balanceOf(OPERATOR);
+  if (op <= MIN_RESERVE) {
+    console.error(`TOP-UP SKIPPED for ${accountId}: operator ${OPERATOR} has ${op.toFixed(3)} NEAR free and keeps ${MIN_RESERVE}. Send the operator more NEAR.`);
+    return { sent: false, reason: 'operator', balance: free };
+  }
+  const now = Date.now(), list = (topups.get(accountId) || []).filter(t => now - t < 24 * 3600e3);
+  if (list.length >= TOPUPS_A_DAY) { topups.set(accountId, list); console.warn('top-up limit reached for', accountId); return { sent: false, reason: 'limit', balance: free }; }
+  list.push(now); topups.set(accountId, list);
+  await sendNear(accountId, TOPUP);
+  console.log(`top-up: ${TOPUP} NEAR to ${accountId} (had ${free.toFixed(4)} free)`);
+  return { sent: true, balance: free + +TOPUP };
+}
+// Say at start-up (and every hour) how much NEAR the game has left to run on.
+async function reportFunds() {
+  if (MOCK) return;
+  try {
+    const op = await balanceOf(OPERATOR), ct = await balanceOf(CONTRACT);
+    console.log(`funds: operator ${OPERATOR} ${op.toFixed(3)} NEAR free · contract ${CONTRACT} ${ct.toFixed(3)} NEAR free (above what its storage locks)`);
+    if (op <= MIN_RESERVE + 0.2) console.error(`LOW FUNDS: the operator needs more NEAR. Below ${MIN_RESERVE} it stops topping up players and sign-ups pause.`);
+    if (ct < CONTRACT_MIN) console.error(`LOW FUNDS: the contract needs more NEAR. It pays for every player's storage; when it runs out, moves that save new data fail for everyone.`);
+  } catch (e) { console.error('funds check failed', errText(e)); }
 }
 
 // ---------- the daily plan ----------
@@ -182,8 +214,8 @@ const routes = {
       tx = await operatorCall('commit_day', { player: body.accountId, day: p.day, commitment: d.commitment, npc_moves: d.npc_moves });
       p = await view('get_player', { account_id: body.accountId });
     }
-    // keep the player's account able to pay gas (at most once a day, since this runs with the commit)
-    if (tx && !MOCK) { try { if ((await balanceOf(body.accountId)) < TOPUP_BELOW && (await balanceOf(OPERATOR)) > MIN_RESERVE) await sendNear(body.accountId, TOPUP); } catch (e) { console.error('top-up', errText(e)); } }
+    // keep the player's account able to pay gas (checked every time the day is opened, not only on a new commit)
+    try { await topUp(body.accountId); } catch (e) { console.error('top-up', errText(e)); }
     // the restored lighthouse tells the truth about storms
     const stormWarning = p.projects && p.projects[1] ? d.truth === 0 : null;
     // how sure a local sounds is only told to friends (2+ hearts), as in the game
@@ -193,6 +225,11 @@ const routes = {
       rumors[k] = { ...r }; if (Rules.hearts(f) < 2) delete rumors[k].sure;
     }
     return { season: p.season, day: p.day, asleep: !!p.asleep, rumors, weather: d.weather, kaito: d.kaito, agents: d.agents, stormWarning, commitment: d.commitment, tx: txHash(tx) };
+  }),
+  // The game asks for this when a move was refused because the player's account could not pay the gas.
+  'POST /api/topup': body => checkId(body.accountId) && withLock('topup|' + body.accountId, async () => {
+    if (!(await view('get_player', { account_id: body.accountId }))) throw new Error('not a player');
+    return topUp(body.accountId);
   }),
   // Reveal the event after the player has gone to sleep.
   'POST /api/settle': body => checkId(body.accountId) && withLock(body.accountId, async () => {
@@ -244,4 +281,4 @@ async function handle(req, res) {
 http.createServer(async (req, res) => {
   try { await handle(req, res); }
   catch (e) { console.error('request failed', req.url, e && e.message); if (!res.headersSent) { res.writeHead(400); res.end('bad request'); } }
-}).listen(PORT, HOST, () => console.log(`Pixel Bazaar ${MOCK ? 'MOCK' : NETWORK} server on http://${HOST}:${PORT}  contract=${CONTRACT}`));
+}).listen(PORT, HOST, () => { console.log(`Pixel Bazaar ${MOCK ? 'MOCK' : NETWORK} server on http://${HOST}:${PORT}  contract=${CONTRACT}`); reportFunds(); setInterval(reportFunds, 3600e3).unref(); });
