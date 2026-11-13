@@ -82,11 +82,14 @@ function worldNearest() {
   if (d(w.P.exit.x, w.P.exit.y) < 50) return { kind: 'exit', label: w.P.exit.label };
   let best = null, bd = 56;
   for (const o of w.objects) {
+    if (o.kind === 'lantern' || (o.kind === 'lamp' && !o.text)) continue; // just lights
     const dd = d(o.x, o.y); if (dd >= bd) continue; bd = dd;
     if (['brazier', 'bell', 'gear'].includes(o.kind)) {
       const k = Worlds.PUZZLE_OF[WD.id], done = S.player.solved_day && S.player.solved_day[k] === S.day;
       best = done ? { kind: 'piece', none: true, label: 'SOLVED TODAY · COME BACK TOMORROW' } : { kind: 'piece', o, label: { brazier: 'LIGHT THE BRAZIER', bell: 'RING THE BELL', gear: 'WIND THE GEAR' }[o.kind] };
-    } else if (o.text || ['merchant', 'gate'].includes(o.kind)) best = { kind: 'read', o, label: o.kind === 'merchant' ? 'DUEL TABLE · TALK TO RITA' : o.kind === 'gate' && WD.id === 'woods' && S.player.chapter >= 5 ? 'THE SPIRIT GATE' : 'READ' };
+    } else if (o.kind === 'person' || o.kind === 'spiritnpc') best = { kind: 'person', o, label: 'TALK TO ' + o.name.toUpperCase() };
+    else if (o.kind === 'wchest') best = (S.player.forage_day || [])[o.world] === S.day ? { kind: 'wchest', none: true, label: 'EMPTY TODAY · IT REFILLS TOMORROW' } : { kind: 'wchest', o, label: 'OPEN THE CHEST' };
+    else if (o.text || ['merchant', 'gate'].includes(o.kind)) best = { kind: 'read', o, label: o.kind === 'merchant' ? 'DUEL TABLE · TALK TO RITA' : o.kind === 'gate' && WD.id === 'woods' && S.player.chapter >= 5 ? 'THE SPIRIT GATE' : 'READ' };
   }
   if (best) return best;
   return wildTarget();
@@ -193,9 +196,44 @@ function drawObject(o, x, y, t) {
   } else if (o.kind === 'merchant') {
     ctx.drawImage(IMG.rita, 0, DIR.down * 64, 64, 64, Math.round(x - 32), Math.round(y - 60), 64, 64); // Rita runs the night duel table
     ctx.fillStyle = '#4a2f5e'; ctx.fillRect(x - 26, y - 4, 52, 14); drawSpiritAt(16, x + 34, y, 'left', t, 1.6, '#b6ff9e');
+  } else if (o.kind === 'person') {
+    ctx.drawImage(IMG[o.sheet], 0, DIR.down * 64, 64, 64, Math.round(x - 32), Math.round(y - 60), 64, 64);
+    nameTag(o.name, x, y - 64);
+  } else if (o.kind === 'spiritnpc') {
+    drawSpiritAt(o.species, x, y, 'down', t, 2.6, '#9fe3ff'); nameTag(o.name, x, y - 64);
+  } else if (o.kind === 'wchest') {
+    const done = (S.player.forage_day || [])[o.world] === S.day;
+    ctx.drawImage(IMG.element, (done ? 9 : 8) * 16, 16, 16, 16, x - 16, y - 28, 32, 32);
+    if (!done) { ctx.fillStyle = `rgba(255,216,107,${.5 + Math.sin(t * 4) * .3})`; ctx.fillRect(x - 2, y - 40 + Math.sin(t * 3) * 3, 4, 4); }
+  } else if (o.kind === 'sign') {
+    ctx.fillStyle = '#5a3d24'; ctx.fillRect(x - 2, y - 26, 4, 26); ctx.fillStyle = '#9b7148'; ctx.fillRect(x - 14, y - 34, 28, 14);
+    ctx.fillStyle = '#6b4a2c'; ctx.fillRect(x - 10, y - 30, 20, 2); ctx.fillRect(x - 10, y - 25, 14, 2);
+  } else if (o.kind === 'lantern') {
+    ctx.fillStyle = '#3a2a1a'; ctx.fillRect(x - 2, y - 30, 4, 30); ctx.fillStyle = `rgba(255,${200 + Math.sin(t * 6 + x) * 25},120,1)`; ctx.fillRect(x - 5, y - 40, 10, 10);
   } else if (o.kind === 'lamp') {
     ctx.fillStyle = '#3a2a4a'; ctx.fillRect(x - 2, y - 36, 4, 36); ctx.fillStyle = `rgba(255,${190 + Math.sin(t * 5) * 30},120,1)`; ctx.fillRect(x - 6, y - 46, 12, 12);
   }
+}
+function nameTag(name, x, y) {
+  ctx.save(); ctx.font = '10px Joy, monospace'; ctx.textAlign = 'center'; const w = ctx.measureText(name.toUpperCase()).width + 8;
+  ctx.fillStyle = 'rgba(28,22,48,.8)'; ctx.fillRect(x - w / 2, y - 10, w, 13); ctx.fillStyle = '#9fe3ff'; ctx.fillText(name.toUpperCase(), x, y); ctx.restore();
+}
+// talk to the people of the worlds; open the daily chests
+function talkWorld(o) {
+  o._n = ((o._n === undefined ? (S.day - 1) : o._n + 1)) % o.lines.length;
+  const who = { name: o.name, sheet: o.sheet || null, color: '#9fe3ff' };
+  const more = o.lines.length > 1 ? [{ t: 'TELL ME MORE', fn: () => { closeDlg(); talkWorld(o); } }] : [];
+  const charm = o.charm ? [{ t: `BUY A CHARM (${Rules.ISLAND.CHARM_COST})`, fn: () => { closeDlg(); queue({ t: 'BuyCharm' }, 'charm', true); flush.after = () => toast(`You carry ${S.player.charms} charm${S.player.charms === 1 ? '' : 's'}. Each blocks one curse.`, 3.5); } }] : [];
+  say(who, '"' + o.lines[o._n] + '"', [...charm, ...more, { t: 'BYE', fn: closeDlg }]);
+}
+function openWorldChest(o) {
+  const coins = S.coins, shards = S.player.shards;
+  queue({ t: 'Forage', world: o.world }, 'world chest', true); sfx('ok');
+  flush.after = () => {
+    const dc = S.coins - coins, ds = S.player.shards - shards;
+    if (ds > 0) { sfx('success'); popup(o.x * TW, o.y * TW - 50, '+1 LANTERN SHARD!', '#ffd86b'); }
+    else if (dc > 0) { sfx('coin'); popup(o.x * TW, o.y * TW - 50, `+${fmt(dc)} coins`, '#ffd86b'); }
+  };
 }
 // tint, fog and darkness per world
 function drawWorldMood(camX, camY) {
@@ -203,10 +241,19 @@ function drawWorldMood(camX, camY) {
   const spec = WD.w.spec;
   if (spec.tint) { ctx.fillStyle = spec.tint; ctx.fillRect(0, 0, VW, VH); }
   if (spec.dark) {
-    const px = player.x - camX, py = player.y - camY - 20, r = hasFireLead() ? 330 : 150;
-    const g = ctx.createRadialGradient(px, py, r * .35, px, py, r);
-    g.addColorStop(0, 'rgba(4,10,8,0)'); g.addColorStop(1, 'rgba(4,10,8,.86)');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, VW, VH);
+    // a darkness layer with holes: you, your fire companion, lanterns, people, chests and wisps
+    const D = drawWorldMood.dk || (drawWorldMood.dk = document.createElement('canvas'));
+    if (D.width !== VW || D.height !== VH) { D.width = VW; D.height = VH; }
+    const d = D.getContext('2d'); d.globalCompositeOperation = 'source-over'; d.clearRect(0, 0, VW, VH);
+    d.fillStyle = 'rgba(4,10,8,.86)'; d.fillRect(0, 0, VW, VH); d.globalCompositeOperation = 'destination-out';
+    const hole = (x, y, r) => { const g = d.createRadialGradient(x, y, r * .3, x, y, r); g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)'); d.fillStyle = g; d.beginPath(); d.arc(x, y, r, 0, 7); d.fill(); };
+    hole(player.x - camX, player.y - camY - 20, hasFireLead() ? 330 : 160);
+    for (const o of WD.w.objects) {
+      const r = { lantern: 110, person: 90, wchest: 60, tablet: 70, gate: 90, brazier: PZ.lit.includes(o.i) ? 120 : 0, sign: 50 }[o.kind];
+      if (r) hole(o.x * TW - camX, o.y * TW - camY - 24, r);
+    }
+    for (const w of wilds) hole(w.x - camX, w.y - camY - 14, 40);
+    ctx.drawImage(D, 0, 0);
     // wisps still glow through the dark
     for (const w of wilds) { const x = w.x - camX, y = w.y - camY - 14; const gg = ctx.createRadialGradient(x, y, 1, x, y, 16); gg.addColorStop(0, 'rgba(220,250,255,.9)'); gg.addColorStop(1, 'rgba(160,230,255,0)'); ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(x, y, 16, 0, 7); ctx.fill(); }
   }

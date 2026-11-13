@@ -13,16 +13,16 @@ const Worlds = (() => {
     const rnd = () => { rs = (rs * 16807) % 2147483647; return rs / 2147483647; };
     const choice = a => a[Math.floor(rnd() * a.length)];
     const solid = Array.from({ length: H }, () => new Array(W).fill(false));
-    const props = [], water = new Set(), path = new Set(), walk = new Set(), voidc = new Set(), objects = [];
+    const props = [], water = new Set(), path = new Set(), walk = new Set(), voidc = new Set(), open = new Set(), objects = [];
     const prop = (img, sx, sy, w, h, x, y, solidRows = h, extra = {}) => {
       const p = Object.assign({ img, sx, sy, w, h, x, y }, extra); props.push(p);
       for (let yy = y + h - solidRows; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) if (yy >= 0 && yy < H && xx >= 0 && xx < W) solid[yy][xx] = true;
       return p;
     };
     const rect = (set, x0, y0, x1, y1) => { for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) set.add(key(x, y)); };
-    const clear = (x, y) => !path.has(key(x, y)) && !water.has(key(x, y)) && !voidc.has(key(x, y)) && !solid[y]?.[x] && x > 0 && y > 0 && x < W - 1 && y < H - 1;
+    const clear = (x, y) => !path.has(key(x, y)) && !open.has(key(x, y)) && !water.has(key(x, y)) && !voidc.has(key(x, y)) && !solid[y]?.[x] && x > 0 && y > 0 && x < W - 1 && y < H - 1;
     const free2 = (x, y) => [0, 1].every(a => [0, 1].every(b => clear(x + a, y + b)));
-    const api = { W, H, rnd, choice, prop, rect, water, path, walk, voidc, solid, objects, free2, clear, key };
+    const api = { W, H, rnd, choice, prop, rect, water, path, walk, voidc, open, solid, objects, free2, clear, key };
     const P = spec.layout(api);
 
     // collision: water, the void and the edges
@@ -79,6 +79,21 @@ const Worlds = (() => {
       br.forEach(([x, y], i) => a.objects.push({ kind: 'brazier', i, x, y, solid: true }));
       a.objects.push({ kind: 'tablet', x: 30.5, y: 20.4, solid: true, text: 'Light the four flames in the order the wind whispers today. A wrong flame puts them all out.' });
       a.objects.push({ kind: 'gate', x: 30.5, y: 3.6, text: 'An old spirit gate, sealed. The Great Spirit sleeps beyond it.' });
+      // people, signs, a hidden chest and lanterns along the path (they light the dark)
+      a.rect(a.open, 32, 36, 36, 40); a.rect(a.open, 37, 21, 40, 24); a.rect(a.open, 9, 14, 13, 17);
+      a.objects.push({ kind: 'person', name: 'Hiro the Woodcutter', sheet: 'farmer', x: 34.5, y: 38.4, solid: true, lines: [
+        "Careful, it is dark in here. A FIRE spirit as your companion lights the whole path.",
+        "The braziers are in the clearing up the path. Read the stone tablet first: it tells you where to start.",
+        "Owls and moths live in these woods. Catch one and you have a WIND spirit: the Clockwork Sky lets you in.",
+        "Every night something drags a light north, toward the old gate. I don't follow it. Neither should you. Yet." ] });
+      a.objects.push({ kind: 'person', name: 'Pip', sheet: 'v2', x: 38.5, y: 22.4, solid: true, lines: [
+        "I saw it! A big shape carrying the Lantern, going north! Nobody believes me.",
+        "There's a chest by the west pond. I open it every day. Don't tell Hiro.",
+        "If you light the four flames in the right order, the woods whisper a clue. That's what Granny says." ] });
+      a.objects.push({ kind: 'sign', x: 28.5, y: 40.6, text: 'NORTH: the clearing (braziers) · FAR NORTH: the old spirit gate · WEST: the pond' });
+      a.objects.push({ kind: 'sign', x: 37.5, y: 15.6, text: 'THE OLD GATE: straight north. Do not wake what sleeps there.' });
+      a.objects.push({ kind: 'wchest', world: 1, x: 11.5, y: 15.6, solid: true });
+      for (const [x, y] of [[31.5, 41], [31.5, 35], [22.5, 31], [27.5, 26], [37.5, 19], [37.5, 12], [33.5, 7]]) a.objects.push({ kind: 'lantern', x, y });
       // old torii and stones
       a.prop('house', 0, 5, 3, 2, 29, 6, 1); a.prop('house', 0, 19, 3, 3, 40, 18); a.prop('house', 4, 19, 2, 3, 18, 26);
       // dense trees: dead and living
@@ -104,6 +119,16 @@ const Worlds = (() => {
       a.objects.push({ kind: 'lamp', x: 9.5, y: 15.2, text: 'A moon lamp. Its flame burns blue at night, when spirits trade their secrets.' });
       a.objects.push({ kind: 'lamp', x: 28.5, y: 15.2, text: 'Scratched under the lamp: "Rita sells what she lies about. Watch her stall."' });
       a.objects.push({ kind: 'lamp', x: 19.5, y: 7.2, text: 'The tallest lamp. From here you can see the whole Moon Market, and the dark woods to the north.' });
+      a.objects.push({ kind: 'person', name: 'Noor the Charm Seller', sheet: 'hermit', x: 31.5, y: 13.2, solid: true, charm: true, lines: [
+        "Charms, dear! Each one blocks one curse another player throws at you. 25 coins.",
+        "Curses come from real people on the island. Sticky Boots, Crow Thief, Frog Voice... I sell protection.",
+        "You can carry three charms at a time." ] });
+      a.objects.push({ kind: 'person', name: 'Kaz the Night Owl', sheet: 'sailor', x: 7.5, y: 17.2, solid: true, lines: [
+        "Rita duels at the table over there. Three spirits each. Pick ones strong against hers: dark beats spirit, spirit beats dark.",
+        "The market only opens at night. In the day this is just a field of crickets.",
+        "Somebody buried a chest east of the pond. Opens again every day, they say." ] });
+      a.objects.push({ kind: 'sign', x: 19.5, y: 22.6, text: 'MOON MARKET · Rita\'s duel table to the north-west · Noor\'s charms to the east' });
+      a.objects.push({ kind: 'wchest', world: 4, x: 36.5, y: 24.6, solid: true });
       for (let x = 1; x < a.W - 2; x += 2) for (const y of [1, a.H - 3]) if (a.free2(x, y)) a.prop('nature', 14, 0, 2, 2, x, y, 1);
       return { spawn: { x: 19.5, y: 24.6 }, exit: { x: 19.5, y: 27.6, to: 'town', label: 'THROUGH THE MOON GATE, HOME' } };
     },
@@ -125,6 +150,16 @@ const Worlds = (() => {
       [[11.5, 25.2], [25.5, 18.2], [39.5, 25.2]].forEach(([x, y], i) => a.objects.push({ kind: 'bell', i, x, y, solid: true }));
       a.objects.push({ kind: 'tablet', x: 23.5, y: 21.4, solid: true, text: 'Ring the three bells in the order the tide sings today. A wrong bell silences them all.' });
       a.objects.push({ kind: 'gate', x: 25.5, y: 7.6, text: "The drowned keeper's door. Something knocks from the other side. (Chapter 3)" });
+      a.objects.push({ kind: 'spiritnpc', name: 'The Kappa Sage', species: 5, x: 14.5, y: 22.4, solid: true, lines: [
+        "Bloop. The bells remember the tide. The tablet tells you which one sings first.",
+        "A water spirit brought you here. Keep it close: it grows every night it follows you.",
+        "The thief passed through here, dripping lantern oil. North, always north." ] });
+      a.objects.push({ kind: 'person', name: 'Sora the Diver', sheet: 'v1', x: 23.5, y: 34.4, solid: true, lines: [
+        "You can breathe down here thanks to your water spirit. Don't ask me how.",
+        "Planks connect the islands. The middle one has the tablet.",
+        "There's a chest on the east island. Opens fresh every morning." ] });
+      a.objects.push({ kind: 'sign', x: 26.5, y: 31.4, text: 'NORTH: the tablet and the middle bell · WEST and EAST: the side bells' });
+      a.objects.push({ kind: 'wchest', world: 2, x: 41.5, y: 22.6, solid: true });
       return { spawn: { x: 25.5, y: 35.6 }, exit: { x: 25.5, y: 36.8, to: 'town', label: 'SWIM BACK UP' } };
     },
   };
@@ -142,6 +177,15 @@ const Worlds = (() => {
       for (const [x, y] of [[7, 16], [13, 20], [36, 16], [42, 20], [22, 3], [27, 3]]) a.prop('nature', 8, 0, 2, 2, x, y, 1);
       [[10.5, 19.2], [24.5, 15.2], [39.5, 19.2], [24.5, 5.2]].forEach(([x, y], i) => a.objects.push({ kind: 'gear', i, x, y, solid: true }));
       a.objects.push({ kind: 'tablet', x: 27.5, y: 30.4, solid: true, text: 'Wind the four gears in the order the clock ticks today. A wrong gear jams them all.' });
+      a.objects.push({ kind: 'person', name: 'Ivo the Clockmaker', sheet: 'bram', x: 21.5, y: 29.4, solid: true, lines: [
+        "Welcome to my sky! The gears keep the islands up. Mostly.",
+        "Read the tablet: it tells you which gear ticks first. A right gear stays wound, a wrong one jams them all.",
+        "From up here I saw the thief land in the woods, by the old gate. Bring the Great Spirit my regards." ] });
+      a.objects.push({ kind: 'person', name: 'Lin', sheet: 'v2', x: 41.5, y: 17.4, solid: true, lines: [
+        "Wind spirits love it here. So do I. Don't look down.",
+        "The west island has a chest. My kite found it." ] });
+      a.objects.push({ kind: 'sign', x: 25.5, y: 26.4, text: 'BRIDGES: north to the middle island, then west, east and north to the gears' });
+      a.objects.push({ kind: 'wchest', world: 3, x: 10.5, y: 16.6, solid: true });
       return { spawn: { x: 24.5, y: 31.6 }, exit: { x: 24.5, y: 32.8, to: 'town', label: 'FLOAT BACK DOWN' } };
     },
   };

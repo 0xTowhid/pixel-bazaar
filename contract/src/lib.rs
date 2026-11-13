@@ -218,6 +218,7 @@ pub struct Player {
     pub curse_day: u8, pub hex: Option<Hex>, pub last_hex: Option<Hex>, pub charms: u8,
     pub boss_seen: u32, pub boss_hits: u8, pub boss_claimed: u32,
     pub cursed_day: u8, pub cursed_season: u32, pub sold: u32, pub duel_seed: String, pub duel_last: u8,
+    pub forage_day: Vec<u8>,
 }
 #[near(serializers = [borsh, json])]
 #[derive(Clone)]
@@ -271,6 +272,8 @@ pub enum Action {
     // the island, shared with every player
     LeaveNote { world: u8, x: u16, y: u16, line: u8, arg: u8 }, VoteNote { id: u32, truth: bool },
     Curse { target: AccountId, kind: u8 }, BuyCharm, BossHit, BossClaim,
+    // one hidden chest a day in each world (1 woods, 2 shrine, 3 sky, 4 moon)
+    Forage { world: u8 },
 }
 
 #[near(serializers = [borsh, json])]
@@ -311,6 +314,7 @@ fn new_player(season: u32) -> Player {
         duel_day: vec![0; FOES.len()], duel_wins: 0, legends: 0,
         note_day: 0, votes_today: 0, voted: vec![], rep: 0, curse_day: 0, hex: None, last_hex: None, charms: 0, boss_seen: 0, boss_hits: 0, boss_claimed: 0,
         cursed_day: 0, cursed_season: 0, sold: 0, duel_seed: String::new(), duel_last: 0,
+        forage_day: vec![0; 5],
     }
 }
 /// Commitment string the operator hashes on day start and reveals at settlement.
@@ -698,6 +702,15 @@ impl Contract {
                     if blocked { t.charms -= 1; t.last_hex = Some(Hex { from: id.clone(), kind, blocked: true }); }
                     else { t.hex = Some(Hex { from: id.clone(), kind, blocked: false }); }
                     self.post(&id, if blocked { format!("cursed {target} with {}, but a charm blocked it", CURSES_P[kind as usize]) } else { format!("cursed {target} with {}", CURSES_P[kind as usize]) });
+                }
+                Action::Forage { world } => {
+                    let w = world as usize; require!((1..5).contains(&w), "no chest there");
+                    require!(p.forage_day[w] != p.day, "you already opened this chest today");
+                    p.forage_day[w] = p.day;
+                    let r = roll(&commit, &id, "forage", world as u32);
+                    if r < 10 { p.shards += 1; log!("a lantern shard in the chest"); }  // about 4%
+                    else if r < 60 { p.coins += 40 * 100; }
+                    else { p.coins += (15 + (r as u64 % 16)) * 100; }
                 }
                 Action::BuyCharm => {
                     require!(p.charms < 3, "you can carry three charms"); require!(p.coins >= CHARM_COST * 100, "a charm costs 25 coins");
@@ -1646,5 +1659,15 @@ mod tests {
         c.act(vec![Action::Duel { foe: 0, team: vec![t] }]);
         let p = c.get_player(pl()).unwrap();
         assert_eq!(p.duel_seed.len(), 16); assert_eq!(p.duel_last, 0x80, "won against Mei");
+    }
+    #[test]
+    fn each_world_has_one_chest_a_day() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        let (coins, shards) = { let p = c.get_player(pl()).unwrap(); (p.coins, p.shards) };
+        c.act(vec![Action::Forage { world: 1 }, Action::Forage { world: 2 }]);
+        let p = c.get_player(pl()).unwrap();
+        assert!(p.coins > coins || p.shards > shards);
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::Forage { world: 1 }]))).is_err(), "once a day");
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::Forage { world: 0 }]))).is_err(), "town has its own chest");
     }
 }

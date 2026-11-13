@@ -698,11 +698,13 @@ function interact() {
   else if (t.kind === 'exit') leaveWorld();
   else if (t.kind === 'piece') touchPiece(t.o);
   else if (t.kind === 'note') readNote(t.n);
+  else if (t.kind === 'person') talkWorld(t.o);
+  else if (t.kind === 'wchest') openWorldChest(t.o);
   else if (t.kind === 'read') {
     const o = t.o, who = { name: o.kind === 'merchant' ? 'Rita, at the night table' : 'Old stone', sheet: o.kind === 'merchant' ? 'rita' : null, color: '#b9a8e8' };
     if (o.kind === 'merchant') say(who, 'Darling! By day I sell rumors, by moonlight I duel. Three spirits each. Winner takes the pot.', [duelChoice(1), { t: 'LEAVE', fn: closeDlg }]);
     else if (o.kind === 'gate' && WD.id === 'woods' && S.player.chapter >= 5) say({ name: 'The old spirit gate', color: '#b9a8e8' }, S.player.boss_wins & 1 ? 'The Great Spirit rests. It bows when it sees you. (You can still spar with it once a day.)' : 'The seal is cracking. Something huge breathes behind it. The thief of the Lantern?', [duelChoice(2), { t: 'NOT YET', fn: closeDlg }]);
-    else say(who, o.text + (o.kind === 'tablet' ? puzzleHint() : ''));
+    else say(o.kind === 'sign' ? { name: 'Signpost', color: '#d9b88a' } : who, o.text + (o.kind === 'tablet' ? puzzleHint() : ''));
   }
   else if (t.kind === 'board') openTown();
   else if (t.kind === 'home') {

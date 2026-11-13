@@ -29,7 +29,7 @@
       lead: null, enc_today: 0, fed_today: 0, wild: null, wallet: null, book: 0, shards: 0, clues: 0, solved_day: [0, 0, 0],
       fate_day: 0, fate: [], daily: [0, 0, 0, 0, 0, 0, 0], quests_claimed: 0, chapter: 1, boss_wins: 0, duel_day: [0, 0, 0], duel_wins: 0, legends: 0,
       note_day: 0, votes_today: 0, voted: [], rep: 0, curse_day: 0, hex: null, last_hex: null, charms: 0, boss_seen: 0, boss_hits: 0, boss_claimed: 0,
-      cursed_day: 0, cursed_season: 0, sold: 0, duel_seed: '', duel_last: 0 };
+      cursed_day: 0, cursed_season: 0, sold: 0, duel_seed: '', duel_last: 0, forage_day: [0, 0, 0, 0, 0] };
   };
   const preimage = (player, season, day, event, rumors, salt) => `${player}|${season}|${day}|${event}|${rumors}|${salt}`;
   function settle(pos, price) { const e = Math.max(1, pos.entry); const mv = Math.trunc((price - e) * 1e6 / e); return Math.trunc(pos.stake * pos.lev * mv * (pos.long ? 1 : -1) / 1e6); }
@@ -324,6 +324,12 @@
             const blocked = t.charms > 0, name = R.ISLAND.CURSES[a.kind].name;
             if (blocked) { t.charms--; t.last_hex = { from: c, kind: a.kind, blocked: true }; } else t.hex = { from: c, kind: a.kind, blocked: false };
             this._post(c, blocked ? `cursed ${a.target} with ${name}, but a charm blocked it` : `cursed ${a.target} with ${name}`);
+            break;
+          }
+          case 'Forage': {
+            const w = a.world; req(w >= 1 && w < 5, 'no chest there'); req(p.forage_day[w] !== p.day, 'you already opened this chest today');
+            p.forage_day[w] = p.day; const r = roll('forage', w);
+            if (r < 10) p.shards++; else if (r < 60) p.coins += 4000; else p.coins += (15 + r % 16) * 100;
             break;
           }
           case 'BuyCharm': req(p.charms < 3, 'you can carry three charms'); req(p.coins >= R.ISLAND.CHARM_COST * 100, 'a charm costs 25 coins'); p.coins -= R.ISLAND.CHARM_COST * 100; p.charms++; break;
