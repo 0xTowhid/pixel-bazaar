@@ -495,7 +495,7 @@ function advance() { S.step = Math.min(S.step + 1, STEPS.length - 1); sfx('ok');
 
 // ---------- UI ----------
 let dlg = null, cardCb = null;
-const uiOpen = () => !!dlg || (S && (S.fishing || S.story || S.catching)) || ['trade', 'card', 'gbook', 'journal', 'profile', 'netErr', 'book', 'quests', 'fate', 'duel', 'island', 'wallet'].some(id => $(id)?.classList.contains('on'));
+const uiOpen = () => !!dlg || (S && (S.fishing || S.story || S.catching)) || ['trade', 'card', 'gbook', 'nightlog', 'journal', 'profile', 'netErr', 'book', 'quests', 'fate', 'duel', 'island', 'wallet'].some(id => $(id)?.classList.contains('on'));
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // what the chain said, in words a player understands
 function niceErr(m) {
@@ -695,9 +695,10 @@ function openJournal() { hideToast();
     <div class="jh">BADGES (NEP-245)</div><div class="badges">${Object.entries(Rules.BADGES).map(([k, n]) => `<span class="${S.items.has('badge_' + k) ? 'got' : ''}">${n}</span>`).join('')}</div>
     <div class="tr" style="margin-top:.6em"><span>Items</span><span>x${S.lev} license${S.bridge ? ' · bridge' : ''}${S.boat ? ' · boat pass' : ''}${S.items.has('stall') ? ' · stall' : ''}</span></div>
     ${txHistory.length ? '<div class="jh">ON NEAR</div><div class="txh">' + txHistory.map(h => '<div>' + h + '</div>').join('') + '</div>' : ''}
-    <div style="display:flex;gap:.5em;flex-wrap:wrap"><button class="btn gold" id="jGuide">HOW TO PLAY</button><button class="btn" id="jTour">SCREEN TOUR</button><button class="btn" id="jIntro">REPLAY INTRO</button><button class="btn big" id="jClose">CLOSE (J)</button></div>`;
+    <div style="display:flex;gap:.5em;flex-wrap:wrap"><button class="btn gold" id="jGuide">HOW TO PLAY</button><button class="btn gold" id="jNights">NIGHT LOG (L)</button><button class="btn" id="jTour">SCREEN TOUR</button><button class="btn" id="jIntro">REPLAY INTRO</button><button class="btn big" id="jClose">CLOSE (J)</button></div>`;
   $('journal').classList.add('on'); $('jClose').onclick = () => $('journal').classList.remove('on'); sfx('menu');
   $('jTour').onclick = () => { $('journal').classList.remove('on'); startTour(); };
+  $('jNights').onclick = () => { $('journal').classList.remove('on'); openNightLog(); };
   $('jGuide').onclick = async () => { $('journal').classList.remove('on'); if (await showGuide()) startTour(); };
   $('jIntro').onclick = async () => { $('journal').classList.remove('on'); await playIntro(); };
 }
@@ -807,12 +808,13 @@ addEventListener('keydown', e => {
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; keys[k] = true;
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
   if (k === 'e' || k === ' ' || k === 'Enter') interact();
-  if (k === 'Escape') { closeTrade(); $('journal').classList.remove('on'); $('profile').classList.remove('on'); $('book').classList.remove('on'); $('quests').classList.remove('on'); if (DUEL.on && !$('dStage')) closeDuel(); closeIsland(); closeWallet(); toggleMenu(false); if (dlg) closeDlg(); }
+  if (k === 'Escape') { if ($('nightlog').classList.contains('on')) { closeNightLog(); return; } closeTrade(); $('journal').classList.remove('on'); $('profile').classList.remove('on'); $('book').classList.remove('on'); $('quests').classList.remove('on'); if (DUEL.on && !$('dStage')) closeDuel(); closeIsland(); closeWallet(); toggleMenu(false); if (dlg) closeDlg(); }
   if (k === 'q' && S && S.player && !dlg && !$('card').classList.contains('on')) $('quests').classList.contains('on') ? $('quests').classList.remove('on') : openQuests();
   if (k === 'i' && S && S.player && !dlg && !$('card').classList.contains('on')) $('island').classList.contains('on') ? closeIsland() : openIsland();
   if (k === 'b' && S && S.player && !dlg && !$('card').classList.contains('on')) $('book').classList.contains('on') ? $('book').classList.remove('on') : openBook();
   if (k === 'j' && !dlg && !$('card').classList.contains('on')) $('journal').classList.contains('on') ? $('journal').classList.remove('on') : openJournal();
   if (k === 'p' && S && !dlg && !(e.target && e.target.tagName === 'INPUT') && !$('card').classList.contains('on')) $('profile').classList.contains('on') ? $('profile').classList.remove('on') : openProfile();
+  if (k === 'l' && S && S.player && !dlg) { if ($('nightlog').classList.contains('on')) closeNightLog(); else openNightLog(); }
   if (k === 'm') toggleMusic();
   if (e.key === 'Tab' && S && S.player) { e.preventDefault(); toggleMenu(); }
   if (k === 'f' && !(e.target && e.target.tagName === 'INPUT')) toggleFull();
@@ -902,7 +904,7 @@ addEventListener('resize', () => { fit(); layoutTop(); }); fit(); setTimeout(lay
 let MINI, last = performance.now(), wx = [];
 for (let i = 0; i < 160; i++) wx.push({ x: Math.random() * VW, y: Math.random() * VH, s: .6 + Math.random() * .8 });
 function update(dt) {
-  const pOn = ['trade', 'card', 'gbook', 'journal', 'profile', 'netErr', 'cine', 'tour', 'book', 'catch', 'quests', 'fate', 'duel', 'island', 'wallet'].some(id => $(id)?.classList.contains('on'));
+  const pOn = ['trade', 'card', 'gbook', 'nightlog', 'journal', 'profile', 'netErr', 'cine', 'tour', 'book', 'catch', 'quests', 'fate', 'duel', 'island', 'wallet'].some(id => $(id)?.classList.contains('on'));
   document.body.classList.toggle('dlgOn', !!dlg);
   if ((layoutTop.n = (layoutTop.n || 0) + 1) % 20 === 0) layoutTop();
   if (pOn !== document.body.classList.contains('panelOn')) { document.body.classList.toggle('panelOn', pOn); if (pOn) for (const k in keys) keys[k] = false; }

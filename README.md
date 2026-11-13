@@ -179,6 +179,7 @@ quests.js               fate cards, quest board, story chapters
 duel.js                 3 v 3 spirit duels
 island.js               the Bazaar Board: calls and peeks, the stall race, feed, curses and charms, world boss
 bazaar.js               the five baron stalls in town and the night crew tab
+nightlog.js             the Night Log: every night of the season, why prices moved, your trades, who was right
 market.js               the player market, the weekly island goal and the season's omen
 unlock.js               what opens on which day of the first season, and the first-time hints
 wallet.js               the built-in wallet: address + QR, balance, send NFTs, send NEAR

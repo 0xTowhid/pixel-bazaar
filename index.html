@@ -313,6 +313,18 @@ button.uRow{width:100%;font:inherit;color:inherit;background:#2a2346;border:2px 
 .gbLeaf.fwd{left:31em;transform-origin:left center;transform:perspective(160em) rotateY(0)}.gbLeaf.fwd.go{transform:perspective(160em) rotateY(-180deg)}
 .gbLeaf.bwd{left:0;transform-origin:right center;transform:perspective(160em) rotateY(0)}.gbLeaf.bwd.go{transform:perspective(160em) rotateY(180deg)}
 .gbFace{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden}.gbFace.back{transform:rotateY(180deg)}
+#nightlog{width:min(96%,70em);z-index:30;padding:.8em 1em}@media (max-height:450px){#nightlog .gname .sub{display:none}#nightlog .nlTab tr:nth-child(n+5):not(:last-child){display:none}}.nlWho{display:grid;grid-template-columns:1fr 1fr;column-gap:.6em}
+.nlCols{display:flex;gap:1em}.nlList{width:15em;display:flex;flex-direction:column;gap:.5em;max-height:32em;overflow:auto;flex:none}
+.nlIt{font:inherit;color:var(--ink);text-align:left;background:#2b2247;border:2px solid #4a3f78;border-radius:8px;padding:.6em .7em;cursor:pointer;font-size:.85em}.nlIt.on{border-color:var(--gold);background:#3a2f5e}
+.nlIt .sub2{display:flex;justify-content:space-between;font-family:Pix,sans-serif;color:var(--mut);margin-top:.3em;font-size:1.05em}
+.nlDet{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:.7em;min-width:0}
+.nlBox{background:#231c3d;border:2px solid #4a3f78;border-radius:8px;padding:.55em .75em;min-width:0}.nlH{color:var(--gold);font-size:.85em;margin-bottom:.5em}
+.nlWhy{grid-column:1/3;display:flex;gap:.9em;align-items:center}.nlWhy img{width:3.2em;height:3.2em;image-rendering:pixelated}
+.nlTxt{font-family:Pix,sans-serif;font-size:1.02em;line-height:1.42;margin-top:.2em}
+.nlTab{width:100%;border-collapse:collapse;font-family:Pix,sans-serif;font-size:1.02em}.nlTab td{padding:.12em 0}.nlTab td:nth-child(2),.nlTab td:nth-child(3){text-align:right;white-space:nowrap;padding-left:.5em}.nlTab img{width:1.1em;vertical-align:middle;image-rendering:pixelated}
+.nlTag{font-size:.6em;font-family:Joy,monospace;padding:.1em .4em;border-radius:4px;background:var(--gold);color:#1c1630}
+.nlBox .pos{padding:.4em .6em;margin-bottom:.35em;font-family:Pix,sans-serif}
+.pLink{color:#7a3b14;text-decoration:underline;cursor:pointer;white-space:nowrap}
 .uRow{display:flex;gap:.8em;align-items:center;margin:.6em 0;text-align:left}.uRow img{width:3em;height:3em;image-rendering:pixelated;border-radius:6px;background:#2a2346}
 .deskT{text-align:center;margin-bottom:.5em;color:var(--gold)}
 .srow{display:grid;grid-template-columns:2.2em 1fr 4em auto;gap:.6em;align-items:center;padding:.45em 0;border-top:2px dashed #3d3363;text-align:left}.srow img{width:2em;image-rendering:pixelated}
@@ -382,6 +394,7 @@ button.uRow{width:100%;font:inherit;color:inherit;background:#2a2346;border:2px 
     <button class="btn" id="cineSkip">SKIP ▸▸</button><div id="cineBox" class="box"></div></div>
   <div id="tour"><div id="tourSpot"></div><div id="tourBox" class="box"></div></div>
   <div id="card" class="ui box panel"></div>
+  <div id="nightlog" class="ui box panel"></div>
   <div id="gbook" class="ui"></div>
 </div>
 <div id="rotate">Turn your phone sideways to play.</div>
@@ -403,6 +416,7 @@ button.uRow{width:100%;font:inherit;color:inherit;background:#2a2346;border:2px 
 <script src="quests.js"></script>
 <script src="duel.js"></script>
 <script src="book.js"></script>
+<script src="nightlog.js"></script>
 <script src="unlock.js"></script>
 <script src="market.js"></script>
 <script src="island.js"></script>

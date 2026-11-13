@@ -19,14 +19,14 @@ function showPaper(after) {
   openCard(`<div class="paper">
     <div class="pt">THE BAZAAR BUGLE</div>
     <div class="pm">DAY ${S.day} · ${SEASON_DAYS - S.day + 1} DAYS TO PAY THE HARBOR MASTER · ALL THE GOSSIP FIT TO PRINT</div>
-    <div class="ph">${headline}</div><div class="pp">${story}</div>
+    <div class="ph">${headline}</div><div class="pp">${story}${l ? ' <a class="pLink" id="pNights">LAST NIGHT IN DETAIL ›</a>' : ''}</div>
     <div class="pcols"><div><div class="pk">WHALE WATCH</div><div class="pp">${kn}</div>
       ${S.stormWarning !== null ? `<div class="pk">LIGHTHOUSE</div><div class="pp">${S.stormWarning ? 'Storm clouds on the horizon. A storm hits tonight.' : 'Clear seas tonight. No storm.'}</div>` : ''}</div>
       <div><div class="pk">MARKET</div>${movers.map(m => `<div class="pr"><span><img src="${goodIcon(m.i)}">${m.g.name}</span><span>${fmt(m.p)} <span class="${m.c >= 0 ? 'pu' : 'pd'}">${m.c >= 0 ? '+' : ''}${Math.round(m.c * 100)}%</span></span></div>`).join('')}</div></div>
     ${letters ? `<div class="pk">LETTERS FROM FRIENDS</div>${letters}` : ''}
     <div class="pk">TOWN NEWS</div><div class="pp">${proj}</div>
     <div class="pk">THE SEER SAYS</div><div class="pp"><i>${seer}</i></div>
-    <button class="btn big dark" id="cardBtn">START DAY ${S.day}</button></div>`, after);
+    <button class="btn big dark" id="cardBtn">START DAY ${S.day}</button></div>`, after);  if ($('pNights')) $('pNights').onclick = () => openNightLog(l.day);
 }
 function projectPct(j) {
   const [pj, d] = [Rules.PROJECTS[j], S.player.donated[j]];
