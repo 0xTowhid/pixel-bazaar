@@ -42,7 +42,7 @@ async function checkProgress() {
           ${next ? `<div style="text-align:center;line-height:1.7;margin:.6em 0">Reward: +1 lantern shard and +${next.n === 5 ? 200 : 100} coins.</div>
           <div class="chNext"><div class="sub">CHAPTER ${next.n}</div><div class="gold" style="font-size:1.25em;margin:.3em 0">${next.title.toUpperCase()}</div><div style="line-height:1.6">${next.story}</div><div class="sub" style="margin-top:.6em">GOAL: ${next.goal}</div></div>`
           : `<div style="text-align:center;line-height:1.7;margin:.8em 0">The flame is back in the Great Lantern. The spirits calm down.<br>The <b class="gold">JADE DRAGON</b> joins you as an NFT, and you earn the Lantern Keeper badge.</div>`}
-          <div style="text-align:center;margin-top:1em"><button class="btn big gold" id="cardBtn">ONWARD</button></div>`);
+          <div style="text-align:center;margin-top:1em"><button class="btn big gold" id="cardBtn">ONWARD</button></div>`, null, true);
       };
     }
   } finally { progressBusy = false; }

@@ -118,7 +118,7 @@ const Backend = (() => {
       if (mode === 'mock') { await api('/mock/call', { accountId: me.accountId, method, args }); return null; }
       await loadNear();
       if (!account) account = new near.Account(me.accountId, provider, me.secretKey);
-      const r = await account.callFunctionRaw({ contractId: cfg.contractId, methodName: method, args, gas: near.teraToGas(method === 'act' ? '100' : '15'), deposit: 0n });
+      const r = await account.callFunctionRaw({ contractId: cfg.contractId, methodName: method, args, gas: near.teraToGas(method === 'act' ? '50' : '15'), deposit: 0n });
       const fail = r?.status?.Failure;
       if (fail) throw new Error(JSON.stringify(fail).replace(/.*panicked: ?/, '').replace(/["\\}]+$/g, '').slice(0, 160));
       return r?.transaction?.hash || null;

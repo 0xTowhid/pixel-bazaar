@@ -219,7 +219,7 @@ async function guarded(label, fn, tag) {
     chainLog(tag || label, false); sfx('alert');
     const m = String(e.message || e).replace(/^.*panicked:\s*/is, '').replace(/^Error:\s*/, '');
     if (/has not started/.test(m)) { toast('Today was not on NEAR yet. Fixing that, try again in a moment.', 3.5); recoverDay(); }
-    else toast(m, 3.5);
+    else toast(niceErr(m), 4);
     return null;
   } finally { if (--busyN === 0) $('busy').style.display = 'none'; }
 }
@@ -234,7 +234,7 @@ async function mustDo(label, fn, tag) {
     } catch (e) {
       if (i < 2) { await wait(1200 * (i + 1)); continue; }
       if (tag !== false) chainLog(tag || label, false);
-      await netRetry(String(e.message || e).replace(/^.*panicked:\s*/is, '')); i = -1;
+      await netRetry(niceErr(String(e.message || e).replace(/^.*panicked:\s*/is, ''))); i = -1;
     } finally { if (--busyN === 0) $('busy').style.display = 'none'; }
   }
 }
@@ -462,9 +462,18 @@ function advance() { S.step = Math.min(S.step + 1, STEPS.length - 1); sfx('ok');
 let dlg = null, cardCb = null;
 const uiOpen = () => !!dlg || (S && (S.fishing || S.story || S.catching)) || ['trade', 'card', 'journal', 'profile', 'netErr', 'book', 'quests', 'fate', 'duel', 'island'].some(id => $(id)?.classList.contains('on'));
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// what the chain said, in words a player understands
+function niceErr(m) {
+  m = String(m || '').replace(/^Error:\s*/, '');
+  if (/not enough balance|NotEnoughBalance|LackBalanceForState/i.test(m)) return 'Your account is low on NEAR for gas. Open WALLET to add some, or wait for tomorrow\'s free top-up.';
+  if (/Exceeded the prepaid gas|GasExceeded/i.test(m)) return 'That was too much for one go. Try again with fewer things at once.';
+  if (/timeout|timed out|fetch|network|Failed to fetch/i.test(m)) return 'NEAR did not answer in time. Try again.';
+  if (/AccessKeyNotFound|does not exist while viewing/i.test(m)) return 'Your login key was not found. Log out and back in.';
+  return m.slice(0, 160);
+}
 function toast(t, sec = 2.5) { const el = $('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => el.style.display = 'none', sec * 1000); }
 function hideToast() { $('toast').style.display = 'none'; }
-function openCard(html, cb) { hideToast(); $('card').innerHTML = html; $('card').classList.add('on'); cardCb = cb; $('cardBtn').onclick = closeCard; }
+function openCard(html, cb, soft) { hideToast(); $('card').innerHTML = html; $('card').classList.add('on'); $('card').dataset.soft = soft ? '1' : ''; cardCb = cb; $('cardBtn').onclick = closeCard; }
 function closeCard() { $('card').classList.remove('on'); sfx('ok'); const cb = cardCb; cardCb = null; cb && cb(); }
 function portrait(sheet, canvas) {
   const p = canvas.getContext('2d'); p.imageSmoothingEnabled = false; p.clearRect(0, 0, canvas.width, canvas.height);
@@ -486,6 +495,24 @@ function renderChoices() {
 }
 function chooseDlg() { const c = dlg.choices[dlg.sel]; sfx('ok'); c.fn(); }
 function closeDlg() { dlg = null; $('dialog').classList.remove('on'); }
+// Click or tap outside an open panel to close it. Not for things you must answer (login, night results, the catch bar, a duel in progress).
+const CLOSERS = {
+  trade: () => closeTrade(), journal: () => $('journal').classList.remove('on'), profile: () => $('profile').classList.remove('on'),
+  book: () => $('book').classList.remove('on'), quests: () => $('quests').classList.remove('on'), fate: () => $('fate').classList.remove('on'),
+  island: () => closeIsland(), duel: () => { if (!$('dStage')) closeDuel(); }, wallet: () => typeof closeWallet === 'function' && closeWallet(),
+};
+document.addEventListener('pointerdown', e => {
+  if (!S || busyN) return;
+  const t = e.target;
+  if (t.closest && (t.closest('.nws-modal-wrapper,.modal-wrapper,#netErr,#tour,#cine,#busy') )) return;
+  for (const [id, close] of Object.entries(CLOSERS)) {
+    const el = $(id);
+    if (el && el.classList.contains('on') && !el.contains(t)) { close(); e.preventDefault(); e.stopPropagation(); sfx('menu'); return; }
+  }
+  if (dlg && !$('dialog').contains(t) && !t.closest('#pad,.padBtn')) { closeDlg(); e.preventDefault(); e.stopPropagation(); return; }
+  const c = $('card');
+  if (c.classList.contains('on') && c.dataset.soft === '1' && !c.contains(t)) { closeCard(); e.preventDefault(); e.stopPropagation(); }
+}, true);
 
 function rumorText(k) {
   const r = S.rumors[k], s = SOURCES[k];
@@ -638,7 +665,9 @@ function nearest() {
   const P = World.P, d2 = p => Math.hypot(player.x - p.x * TW, player.y - p.y * TW);
   let best = null, bd = 58;
   for (const n of Object.values(NPCS)) { const d = Math.hypot(n.x - player.x, n.y - player.y); if (d < bd) { bd = d; best = { kind: 'npc', n, label: 'TALK TO ' + n.name.toUpperCase() }; } }
-  for (const t of [farmTarget(), rockTarget(), fishTarget(), wildTarget()]) if (t) { best = t; break; }
+  // people first; then the farm, rocks and fishing spots; floating spirits only when nothing else is in reach
+  if (!best) for (const t of [farmTarget(), rockTarget(), fishTarget()]) if (t) { best = t; break; }
+  if (!best) best = wildTarget();
   if (!best) best = catTarget(); // Mochi follows you around, so people come first
   if (d2(P.board) < 44) best = { kind: 'board', label: 'TOWN BOARD: PROJECTS AND RECORDS' };
   if (d2(P.homeDoor) < 44) best = { kind: 'home', label: 'SLEEP (END DAY)' };

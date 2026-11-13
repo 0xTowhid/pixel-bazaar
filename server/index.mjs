@@ -29,7 +29,7 @@ const OPERATOR_KEY = env.OPERATOR_KEY || '';
 const SECRET = env.GAME_SECRET || (MOCK ? 'mock-secret' : '');
 const PLAYER_FUNDING = env.PLAYER_FUNDING || '0.05'; // NEAR given to each new player account for gas
 const TOPUP = env.PLAYER_TOPUP || '0.03';               // sent when a player's account runs low on gas money
-const TOPUP_BELOW = +(env.PLAYER_TOPUP_BELOW || 0.01);  // NEAR
+const TOPUP_BELOW = +(env.PLAYER_TOPUP_BELOW || 0.03);  // NEAR
 const MIN_RESERVE = +(env.OPERATOR_MIN_NEAR || 0.5);     // operator keeps this much; sign-ups pause below it
 const CONTRACT_MIN = +(env.CONTRACT_MIN_NEAR || 1);      // the contract pays for every player's storage; sign-ups pause below this
 const ALLOW_ORIGIN = env.ALLOW_ORIGIN || ''; // empty: same-origin only (no CORS header)
@@ -236,7 +236,7 @@ async function handle(req, res) {
   // static files: only the game itself
   let decoded; try { decoded = decodeURIComponent(url.pathname); } catch { res.writeHead(400); return res.end('bad request'); }
   let path = normalize(decoded).replace(/^([/\\])+/, '') || 'index.html';
-  if (!/^(index\.html|[a-z]+\.js|shared\/[a-z]+\.js|vendor\/[a-z-]+\.mjs|assets\/.+)$/.test(path.replace(/\\/g, '/'))) { res.writeHead(404); return res.end('not found'); }
+  if (!/^(index\.html|[a-z]+\.js|shared\/[a-z]+\.js|vendor\/[a-z-]+\.mjs|assets\/.+|nft\/(spirits|badges|fish)\/[A-Za-z0-9_]+\.png)$/.test(path.replace(/\\/g, '/'))) { res.writeHead(404); return res.end('not found'); }
   try { const data = await readFile(join(ROOT, path)); res.writeHead(200, { 'content-type': MIME[extname(path)] || 'application/octet-stream' }); res.end(data); }
   catch { res.writeHead(404); res.end('not found'); }
 }

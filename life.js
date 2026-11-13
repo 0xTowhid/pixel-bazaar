@@ -17,7 +17,7 @@ function queue(action, label, now) {
 async function flush() {
   clearTimeout(Q.timer);
   if (Q.sending || !Q.list.length) return;
-  const batch = Q.list.splice(0, 60), labels = Q.labels.splice(0, batch.length);
+  const batch = Q.list.splice(0, 25), labels = Q.labels.splice(0, batch.length);
   const counts = {}; labels.forEach(l => counts[l] = (counts[l] || 0) + 1);
   const what = 'act · ' + Object.entries(counts).map(([l, n]) => n > 1 ? `${l} x${n}` : l).join(', ');
   Q.sending = true;
@@ -29,7 +29,7 @@ async function flush() {
     chainLog(what, false); sfx('alert');
     const m = String(e.message || e).replace(/^.*panicked:\s*/is, '');
     if (/has not started/.test(m)) { toast('Today was not on NEAR yet. Fixing that, try again in a moment.', 3.5); recoverDay(); }
-    else toast(m, 3.5);
+    else toast(niceErr(m), 4);
   }
   Q.sending = false;
   await sync();

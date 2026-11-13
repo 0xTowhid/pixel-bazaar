@@ -213,7 +213,7 @@ function evolve(token) {
         <div class="evoRow"><img src="${spiritFace(s.species)}" alt=""><span class="gold">▸</span><img class="evoNew" src="${spiritFace(sp.evo)}" alt=""></div>
         <div style="text-align:center;font-size:1.2em" class="gold">${next.name.toUpperCase()}</div>
         <div class="sub" style="text-align:center;margin:.6em 0 1em">Same NFT (#${token}), new form. If you send it to your wallet, it shows there as ${next.name}.</div>
-        <div style="text-align:center"><button class="btn big gold" id="cardBtn">AMAZING</button></div>`, () => openBook());
+        <div style="text-align:center"><button class="btn big gold" id="cardBtn">AMAZING</button></div>`, () => openBook(), true);
     } else openBook();
   };
 }
@@ -279,7 +279,7 @@ function showLegend(k) {
   openCard(`<div class="ntitle" style="color:${L.tint}">LEGENDARY CATCH!</div>
     <div style="text-align:center;margin:.6em 0"><img src="nft/fish/${k}.png" alt="" style="width:14em;max-width:70vw;border-radius:12px;box-shadow:0 0 30px ${L.tint}88" class="evoNew"></div>
     <div style="text-align:center;line-height:1.7">You pulled up the <b class="gold">${L.name.toUpperCase()}</b>. Nobody else has yours: it is a one-of-one NFT on NEAR.<br>${popcount(S.player.legends)} of 5 legends caught. Press B to see the others' riddles.</div>
-    <div style="text-align:center;margin-top:1em"><button class="btn big gold" id="cardBtn">WHAT A FISH!</button></div>`);
+    <div style="text-align:center;margin-top:1em"><button class="btn big gold" id="cardBtn">WHAT A FISH!</button></div>`, null, true);
 }
 function sendToWallet(token) {
   const s = S.spirits.find(x => x.token_id === token);

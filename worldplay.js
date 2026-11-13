@@ -53,7 +53,7 @@ function worldNearest() {
     if (['brazier', 'bell', 'gear'].includes(o.kind)) {
       const k = Worlds.PUZZLE_OF[WD.id], done = S.player.solved_day && S.player.solved_day[k] === S.day;
       best = done ? { kind: 'piece', none: true, label: 'SOLVED TODAY · COME BACK TOMORROW' } : { kind: 'piece', o, label: { brazier: 'LIGHT THE BRAZIER', bell: 'RING THE BELL', gear: 'WIND THE GEAR' }[o.kind] };
-    } else best = { kind: 'read', o, label: o.kind === 'merchant' ? 'DUEL TABLE · TALK TO RITA' : o.kind === 'gate' && WD.id === 'woods' && S.player.chapter >= 5 ? 'THE SPIRIT GATE' : 'READ' };
+    } else if (o.text || ['merchant', 'gate'].includes(o.kind)) best = { kind: 'read', o, label: o.kind === 'merchant' ? 'DUEL TABLE · TALK TO RITA' : o.kind === 'gate' && WD.id === 'woods' && S.player.chapter >= 5 ? 'THE SPIRIT GATE' : 'READ' };
   }
   if (best) return best;
   return wildTarget();
@@ -91,7 +91,7 @@ function touchPiece(o) {
           const clues = ['the woods', 'the shrine', 'the sky'][k];
           openCard(`<div class="ntitle">THE PUZZLE IS SOLVED!</div>
             <div style="text-align:center;line-height:1.8">+1 LANTERN SHARD (you have ${S.player.shards})<br>A clue about the stolen flame, found in ${clues}.<br><span class="sub">Shards let your spirits reach their last form. The order changes tomorrow.</span></div>
-            <div style="text-align:center;margin-top:1em"><button class="btn big gold" id="cardBtn">WONDERFUL</button></div>`);
+            <div style="text-align:center;margin-top:1em"><button class="btn big gold" id="cardBtn">WONDERFUL</button></div>`, null, true);
         }
       };
     }

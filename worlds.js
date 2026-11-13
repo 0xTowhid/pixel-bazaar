@@ -101,7 +101,9 @@ const Worlds = (() => {
       for (let i = 0; i < 6; i++) a.prop('house', 22 + (i % 4), 20, 1, 2, 5 + i * 5, 4, 1);
       a.prop('house', 0, 5, 3, 2, 18, 26, 0); // the moon gate back home
       a.objects.push({ kind: 'merchant', x: 15.5, y: 12.8, solid: true, text: 'Rita runs the duel table at night.' });
-      a.objects.push({ kind: 'lamp', x: 9.5, y: 15.2 }); a.objects.push({ kind: 'lamp', x: 28.5, y: 15.2 }); a.objects.push({ kind: 'lamp', x: 19.5, y: 7.2 });
+      a.objects.push({ kind: 'lamp', x: 9.5, y: 15.2, text: 'A moon lamp. Its flame burns blue at night, when spirits trade their secrets.' });
+      a.objects.push({ kind: 'lamp', x: 28.5, y: 15.2, text: 'Scratched under the lamp: "Rita sells what she lies about. Watch her stall."' });
+      a.objects.push({ kind: 'lamp', x: 19.5, y: 7.2, text: 'The tallest lamp. From here you can see the whole Moon Market, and the dark woods to the north.' });
       for (let x = 1; x < a.W - 2; x += 2) for (const y of [1, a.H - 3]) if (a.free2(x, y)) a.prop('nature', 14, 0, 2, 2, x, y, 1);
       return { spawn: { x: 19.5, y: 24.6 }, exit: { x: 19.5, y: 27.6, to: 'town', label: 'THROUGH THE MOON GATE, HOME' } };
     },

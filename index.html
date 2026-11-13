@@ -26,11 +26,11 @@ button{font:inherit;color:inherit}
 #hudL img{width:1.3em;image-rendering:pixelated}
 #clock{color:var(--gold)}
 .debtbar{width:9em;height:.7em;border:2px solid var(--ink);border-radius:3px;overflow:hidden}
-#debtFill{height:100%;background:var(--gold);width:0}
+#debtFill{height:100%;background:var(--gold);width:0}#enFill{height:100%;width:0;transition:width .3s}
 #objBox{left:50%;top:2%;transform:translateX(-50%);padding:.45em 1em;color:var(--gold);pointer-events:none;text-align:center;line-height:1.4}
 #objBox:before{content:"► "}
 #zone{right:1.4%;top:31%;color:var(--mut);font-size:clamp(7px,1.1vw,12px);pointer-events:none}
-#hint{left:50%;bottom:4%;transform:translateX(-50%);padding:.45em .9em;display:none;pointer-events:none;color:var(--gold)}
+#hint{left:50%;bottom:calc(1.2% + 5.4em);z-index:6;transform:translateX(-50%);padding:.45em .9em;display:none;pointer-events:none;color:var(--gold)}
 #toast{left:50%;top:19%;transform:translateX(-50%);padding:.55em 1em;display:none;pointer-events:none;max-width:80%;text-align:center;line-height:1.5}
 #dialog{left:2.5%;right:2.5%;bottom:3%;display:none;padding:1em;gap:1em}
 #dialog.on{display:flex}
@@ -216,7 +216,7 @@ body.dlgOn #hotbar,body.dlgOn #chainlog{display:none}
 .slot{position:relative;width:3.2em;height:3.2em;background:var(--pan);border:2px solid var(--ink);border-radius:5px;padding:.2em;cursor:pointer}
 .slot img{width:100%;height:100%;image-rendering:pixelated}.slot b{position:absolute;right:.2em;bottom:0;font-weight:normal;font-size:.8em;color:var(--ink);text-shadow:1px 1px 0 #000}
 .slot i{position:absolute;left:.25em;top:0;font-style:normal;font-size:.65em;color:var(--mut)}.slot.sel{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold)}.slot.empty img{opacity:.35}
-.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:.4em;margin:.9em 0 .6em}.tab{background:var(--pan2);border:2px solid var(--mut);border-radius:6px;padding:.6em .2em;color:var(--mut);cursor:pointer}.tab.on{background:var(--gold);color:var(--pan);border-color:var(--gold)}
+.tabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(6.5em,1fr));gap:.4em;margin:.9em 0 .6em}.tab{background:var(--pan2);border:2px solid var(--mut);border-radius:6px;padding:.6em .2em;color:var(--mut);cursor:pointer}.tab.on{background:var(--gold);color:var(--pan);border-color:var(--gold)}
 .fl{display:block;margin:.7em 0 .3em;color:var(--mut);font-size:.85em}
 #card input,#card textarea{font:inherit;font-size:1.1em;width:100%;background:var(--pan2);color:var(--ink);border:2px solid var(--ink);border-radius:5px;padding:.5em .6em}
 .phrase{display:grid;grid-template-columns:repeat(3,1fr);gap:.4em;margin:1em 0}.phrase span{background:var(--pan2);border-radius:5px;padding:.5em;font-size:1.05em}.phrase i{color:var(--mut);font-style:normal;margin-right:.5em;font-size:.75em}
