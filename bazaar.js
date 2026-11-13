@@ -100,6 +100,12 @@ function bindCalls(el) {
 }
 
 // ---- talking to one stall: a small dialog, not the whole board ----
+// a baron standing by their stall can sell to you and take your trades too, so you never have to find the stall itself
+function stallChoices(npc) {
+  const k = Rules.AGENTS.findIndex(a => a.id === npc); if (k < 0) return [];
+  const g = stallGood(k).name.toUpperCase();
+  return [{ t: `SELL ${g}`, fn: () => { closeDlg(); openSell(k); } }, { t: `TRADE ${g}`, fn: () => { closeDlg(); openTrade(k); } }];
+}
 function stallTalk(k) {
   const a = Rules.AGENTS[k], g = stallGood(k), p = S.player, h = heldStall(k);
   const mine = (p.stall_score || [])[k] / 100 || 0, bar = Rules.baronBar(p, k) / 100;

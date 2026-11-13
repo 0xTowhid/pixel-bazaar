@@ -563,7 +563,7 @@ function rumorText(k) {
 }
 function hear(k) {
   const first = !S.heard[k]; S.heard[k] = true;
-  say(NPCS[k], '"' + rumorText(k) + '"', [{ t: 'THANKS', fn: closeDlg }, { t: 'GIVE A GIFT', fn: () => giftMenu(k) }, ...(k === 'mei' && (S.spirits || []).length && unlocked('duels') ? [duelChoice(0)] : [])]);
+  say(NPCS[k], '"' + rumorText(k) + '"', [{ t: 'THANKS', fn: closeDlg }, ...stallChoices(k), { t: 'GIVE A GIFT', fn: () => giftMenu(k) }, ...(k === 'mei' && (S.spirits || []).length && unlocked('duels') ? [duelChoice(0)] : [])]);
   if (k === 'mei' && S.step === 0) advance();
 }
 function talkTo(n) {
@@ -580,7 +580,7 @@ function talkTo(n) {
   }
   if (n.src) { hear(n.src); return; }
   if (n === NPCS.tomo) { say(n, 'Welcome! Seeds, and everything the barons don\'t sell: crops, apples, sushi. Tea, honey, carrots, fish and jade? Their stalls are just below.', [{ t: 'TRADE', fn: () => { closeDlg(); openTrade(); } }, { t: 'SELL', fn: () => { closeDlg(); openSell(); } }, { t: 'SEEDS', fn: () => { closeDlg(); openSeeds(); } }, { t: 'GIFT', fn: () => giftMenu('tomo') }, { t: 'LEAVE', fn: closeDlg }]); return; }
-  if (n === NPCS.kaito) { const k = S.kaito; say(n, k ? `You paid, so here it is: ${k.long ? 'long' : 'short'} ${GOODS[k.good].name.toLowerCase()}, five times over. Follow me if you dare.` : heldStall(0) ? 'Enjoy MY tea stall while it lasts. I want it back by season\'s end.' : `My call is sealed on NEAR until tonight. ${Rules.AGENTS[0].peek} coins at the Bazaar Board and I'll show you. I'm right more often than not.`, [{ t: 'BAZAAR BOARD', fn: () => { closeDlg(); openIsland('calls'); } }, { t: 'LEAVE', fn: closeDlg }]); return; }
+  if (n === NPCS.kaito) { const k = S.kaito; say(n, k ? `You paid, so here it is: ${k.long ? 'long' : 'short'} ${GOODS[k.good].name.toLowerCase()}, five times over. Follow me if you dare.` : heldStall(0) ? 'Enjoy MY tea stall while it lasts. I want it back by season\'s end.' : `My call is sealed on NEAR until tonight. ${Rules.AGENTS[0].peek} coins at the Bazaar Board and I'll show you. I'm right more often than not.`, [...stallChoices('kaito'), { t: 'BAZAAR BOARD', fn: () => { closeDlg(); openIsland('calls'); } }, { t: 'LEAVE', fn: closeDlg }]); return; }
   if (n === NPCS.master) {
     if (S.coins >= DEBT) { say(n, `${fmt(S.coins)} coins? Well, well. Pay the ${fmt(DEBT)} and the stall is yours for good.`, [{ t: 'PAY ' + fmt(DEBT), fn: async () => { closeDlg(); const r = await guarded('Paying the Harbor Master', () => Backend.call('pay_debt'), 'pay_debt', true); if (r === null && Backend.mode === 'chain') return; await sync(); endSeason(true, true); } }, { t: 'NOT YET', fn: closeDlg }]); return; }
     say(n, `You owe me ${fmt(DEBT)} by the end of day ${SEASON_DAYS}. You have ${fmt(S.coins)}. Tick tock.`);
