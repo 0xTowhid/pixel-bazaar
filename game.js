@@ -4,7 +4,7 @@
 
 const { TS, TW } = World;
 let VW = 960; const VH = 540; // logical canvas size; width follows the screen shape
-const SEASON_DAYS = 10, DAY_SECONDS = 240, START_COINS = 300, DEBT = 3000;
+const SEASON_DAYS = 10, DAY_SECONDS = 480, START_COINS = 300, DEBT = 3000;
 const STAKE_STEP = 50;
 
 const { GOODS, EVENTS, SOURCES } = Rules;
@@ -113,7 +113,7 @@ function makeCast() {
     master: makeChar('master', P.master, { name: 'Harbor Master', color: '#ffd86b', wander: 0 }),
     fisher: makeChar('v2', P.fisher, { name: 'Fisherman', color: '#ffffff', wander: 0, dir: 'up' }),
     v1: makeChar('v1', P.v1, { name: 'Villager', wander: 5 }),
-    kaito: makeChar('kaito', P.kaito, { name: 'Kaito the Whale', color: '#ffd86b', wander: 1.5 }),
+    kaito: makeChar('kaito', P.kaito, { name: 'Kaito the Whale', color: '#ffd86b', wander: .6 }),
   };
   makeCat();
   for (const n of Object.values(NPCS)) if (n.src) { n.name = SOURCES[n.src].name; n.color = SOURCES[n.src].color; }
@@ -178,6 +178,7 @@ async function sync() {
   if (S.chest) { World.P.chestProp.sx = 9; }
   S.player = p;
   S.spirits = await Backend.spirits().catch(() => S.spirits || []);
+  S.stalls = await Backend.view('get_stalls', { account_id: Backend.accountId }).catch(() => S.stalls || []);
   setTimeout(checkProgress, 50); setTimeout(checkHex, 80);
   renderHotbar();
   return p;
@@ -185,10 +186,9 @@ async function sync() {
 async function beginDay(first) {
   const d = await mustDo('Committing today to NEAR', () => Backend.beginDay(), 'commit_day');
   if (d.finished) { await sync(); endSeason(S.player.won); return; }
-  S.t = 0; S.warned = false; S.heard = {}; S.weather = d.weather; S.kaito = d.kaito; S.agents = d.agents || {}; S.stormWarning = d.stormWarning;
+  S.t = 0; S.warned = false; S.warned20 = false; S.heard = {}; S.weather = d.weather; applyCalls(d); S.stormWarning = d.stormWarning;
   S.rumors = {};
   for (const [k, r] of Object.entries(d.rumors)) S.rumors[k] = r.quiet ? { quiet: true, sure: r.sure } : { ev: EVENTS[r.ev], evIdx: r.ev, lying: !!r.lying, sure: r.sure };
-  NPCS.kaito.selling = d.kaito ? `${d.kaito.long ? 'LONG' : 'SHORT'} ${GOODS[d.kaito.good].name.toUpperCase()} x5` : null;
   const r = NPCS.rita, spot = S.rumors.rita.lying ? World.P.ritaMarket : World.P.ritaHome;
   r.x = r.home.x = spot.x * TW; r.y = r.home.y = spot.y * TW;
   r.selling = S.rumors.rita.lying ? GOOD(S.rumors.rita.ev.good).name : null;
@@ -356,7 +356,7 @@ async function sleep(passedOut) {
     S.night.dawn = performance.now(); quietBusy = false;
     await wait(1800);
     ok = true;
-    const log = r.log, ev = EVENTS[log.event];
+    const log = r.log, ev = EVENTS[log.event]; S.lastLog = log;
     await sync();
     for (const g of GOODS) S.closes[g.id].push(S.price[g.id]);
     const results = log.results.map(x => ({ good: GOODS[x.good].id, dir: x.long ? 1 : -1, lev: x.lev, stake: x.stake / 100, pnl: x.pnl / 100, liq: x.liquidated }));
@@ -406,7 +406,7 @@ function showNight(ev, prev, results, truths, notes, before, after, lost, finish
     <div class="ngrid">
       <div class="nbox"><div class="nh"><img src="${goodIcon(g.id)}"> ${g.name.toUpperCase()} ${fmt(prev[g.id])} → ${fmt(S.price[g.id])} <span class="${chg >= 0 ? 'up' : 'dn'}">${chg >= 0 ? '+' : ''}${chg}%</span></div><div class="chart">${bars}</div>
         ${Backend.mode !== 'local' ? '<div class="sub" style="margin-top:.5em">Event was committed this morning and checked on reveal.</div>' : ''}</div>
-      <div class="nbox">${lost ? `<div class="dn" style="margin-bottom:.5em">You passed out in the street. Pickpockets took ${fmt(lost)}.</div>` : ''}
+      <div class="nbox">${lost ? `<div class="dn" style="margin-bottom:.5em">You passed out in the street. Pickpockets took ${fmt(lost)}.</div>` : S.night && S.night.out ? `<div class="dn" style="margin-bottom:.5em">You passed out at midnight. Next time go home and sleep before 24:00.</div>` : ''}
         ${pos}
         <div class="who">${who}</div>
         ${notes.map(n => `<div class="note">Journal: ${n}</div>`).join('')}
@@ -419,15 +419,15 @@ function showNight(ev, prev, results, truths, notes, before, after, lost, finish
     <button class="btn big gold" id="cardBtn">${finished ? 'FACE THE HARBOR MASTER' : 'WAKE UP · DAY ' + S.day}</button></div>`,
     async () => {
       S.night = null;
-      if (finished) { S.inside = false; endSeason(won); return; }
+      if (finished) { S.inside = false; showHaul(S.lastLog, () => endSeason(won)); return; }
       S.waking = true;
       try {
         await beginDay(false);
-        showPaper(() => {
+        showHaul(S.lastLog, () => showPaper(() => {
           stepOutside();
           if (S.step === 3) advance();
           if (DAILY_TIPS[S.day]) toast(DAILY_TIPS[S.day], 6);
-        });
+        }));
       } catch (e) { console.error('wake up', e); stepOutside(); } // whatever went wrong with the paper, you still get your character back
     });
 }
@@ -450,6 +450,7 @@ async function endSeason(won, early) {
   openCard(`<div class="ntitle">${won ? 'DEBT PAID · THE STALL IS YOURS' : 'THE HARBOR MASTER TOOK YOUR STALL'}</div>
     <div class="sub" style="margin:.6em 0">${won ? `You cleared 3,000 coins ${early ? 'early, on day ' + S.day : 'by the last day'}. Coins left over: ${fmt(Math.max(0, S.coins))}.` : `You reached ${fmt(score)} of 3,000 coins.`}
     ${Backend.mode !== 'local' ? `<br>Season result recorded for ${link ? `<a href="${link}" target="_blank" rel="noopener">${acct}</a>` : acct}.` : ''}</div>
+    ${stallResultsHTML()}
     ${board.length ? '<div class="gname" style="font-size:1em;margin-top:.4em">LEADERBOARD</div>' + board.map((e, i) => `<div class="tr"><span>${i + 1}. ${e.account}</span><span class="${e.won ? 'up' : 'dn'}">${fmt(e.score / 100)}${e.won ? ' · paid day ' + e.day : ''}</span></div>`).join('') : ''}
     <div class="sub" style="margin-top:.8em">${share}</div>
     <button class="btn big" id="imgBtn">SAVE SHARE IMAGE</button> <button class="btn big" id="copyBtn">COPY TEXT</button> <button class="btn big gold" id="cardBtn">NEW SEASON</button>`, () => newSeason());
@@ -559,7 +560,7 @@ function talkTo(n) {
   }
   if (n.src) { hear(n.src); return; }
   if (n === NPCS.tomo) { say(n, 'Welcome! Bet on tomorrow, sell your harvest, or stock up on seeds.', [{ t: 'TRADE', fn: () => { closeDlg(); openTrade(); } }, { t: 'SELL', fn: () => { closeDlg(); openSell(); } }, { t: 'SEEDS', fn: () => { closeDlg(); openSeeds(); } }, { t: 'GIFT', fn: () => giftMenu('tomo') }, { t: 'LEAVE', fn: closeDlg }]); return; }
-  if (n === NPCS.kaito) { const k = S.kaito; say(n, k ? `I went ${k.long ? 'long' : 'short'} ${GOODS[k.good].name.toLowerCase()} at dawn, five times over. Follow me if you dare. I'm right more often than not.` : 'Busy, busy.'); return; }
+  if (n === NPCS.kaito) { const k = S.kaito; say(n, k ? `You paid, so here it is: ${k.long ? 'long' : 'short'} ${GOODS[k.good].name.toLowerCase()}, five times over. Follow me if you dare.` : heldStall(0) ? 'Enjoy MY tea stall while it lasts. I want it back by season\'s end.' : `My call is sealed on NEAR until tonight. ${Rules.AGENTS[0].peek} coins at the Bazaar Board and I'll show you. I'm right more often than not.`, [{ t: 'BAZAAR BOARD', fn: () => { closeDlg(); openIsland('calls'); } }, { t: 'LEAVE', fn: closeDlg }]); return; }
   if (n === NPCS.master) {
     if (S.coins >= DEBT) { say(n, `${fmt(S.coins)} coins? Well, well. Pay the 3,000 and the stall is yours for good.`, [{ t: 'PAY 3,000', fn: async () => { closeDlg(); const r = await guarded('Paying the Harbor Master', () => Backend.call('pay_debt'), 'pay_debt'); if (r === null && Backend.mode === 'chain') return; await sync(); endSeason(true, true); } }, { t: 'NOT YET', fn: closeDlg }]); return; }
     say(n, `You owe me 3,000 by the end of day ${SEASON_DAYS}. You have ${fmt(S.coins)}. Tick tock.`);
@@ -577,11 +578,11 @@ function talkTo(n) {
 async function openAgents() {
   let led = []; try { led = await Backend.npcs(); } catch (e) {}
   const bal = id => { const r = led.find(([a]) => a.split('.')[0] === id); return r ? r[1] / 100 : null; };
-  const today = id => id === 'kaito' ? S.kaito : id === 'rita' ? (S.rumors.rita && S.rumors.rita.lying ? { good: S.rumors.rita.ev.fx[0][0], long: false, secret: true } : null) : (S.agents || {})[id];
+  const today = id => { const k = Rules.AGENTS.findIndex(a => a.id === id), c = (S.calls || [])[k]; return !c || !c.has ? null : c.open ? c : { secret: true }; };
   const rows = Rules.AGENTS.map(a => {
     const m = today(a.id), b = bal(a.id), pnl = b === null ? null : b - 1000;
     return `<div class="agRow"><canvas data-face="${a.sheet}" width="48" height="48"></canvas><div class="agTxt"><b>${a.name.toUpperCase()}</b><div class="sub">${a.style}</div>
-      <div class="sub">${m ? (m.secret ? "TODAY: she won't say. (Hint: whatever she's selling.)" : `TODAY: <span class="${m.long ? 'up' : 'dn'}">${m.long ? '▲ LONG' : '▼ SHORT'} ${GOODS[m.good].name.toUpperCase()}</span> · ${a.stake} coins x5`) : 'TODAY: sitting out'}</div></div>
+      <div class="sub">${m ? (m.secret ? 'TODAY: sealed on NEAR. Peek at the Bazaar Board.' : `TODAY: <span class="${m.long ? 'up' : 'dn'}">${m.long ? '▲ LONG' : '▼ SHORT'} ${GOODS[m.good].name.toUpperCase()}</span> · ${a.stake} coins x5`) : 'TODAY: sitting out'}</div></div>
       <div class="agBal ${pnl === null ? '' : pnl >= 0 ? 'up' : 'dn'}">${b === null ? '—' : fmt(b)}<div class="sub">${pnl === null ? '' : (pnl >= 0 ? '+' : '') + fmt(pnl)}</div></div></div>`;
   }).join('');
   $('trade').classList.add('wideAg');
@@ -672,6 +673,7 @@ function hud() {
   const mins = 6 * 60 + Math.floor(S.t / DAY_SECONDS * 18 * 60);
   $('clock').textContent = String(Math.floor(mins / 60)).padStart(2, '0') + ':' + String(mins % 60).padStart(2, '0');
   $('clock').style.color = mins >= 22 * 60 ? 'var(--bad)' : 'var(--gold)';
+  $('clock').style.visibility = mins >= 23 * 60 && !S.night && Math.floor(performance.now() / 500) % 2 ? 'hidden' : 'visible'; // last hour: the clock blinks
   $('debtFill').style.width = Math.min(100, worth() / DEBT * 100) + '%';
   if (S.player) { $('enFill').style.width = (S.player.energy / Rules.ENERGY.max * 100) + '%'; $('enFill').style.background = S.player.energy < 20 ? 'var(--bad)' : '#78e678'; }
   { const g = currentGoal(); if (g) $('obj').textContent = g.text; }
@@ -691,7 +693,8 @@ function nearest() {
   if (!best) for (const t of [farmTarget(), rockTarget(), fishTarget()]) if (t) { best = t; break; }
   if (!best) best = wildTarget();
   if (!best) best = catTarget(); // Mochi follows you around, so people come first
-  if (d2(P.board) < 44) best = { kind: 'board', label: 'TOWN BOARD: PROJECTS AND RECORDS' };
+  if (!best || best.kind !== 'npc') { const st = stallTarget(); if (st) best = st; }
+  if (d2(P.board) < 44) best = { kind: 'board', label: 'BAZAAR BOARD: CALLS, BARONS, TOWN' };
   if (d2(P.homeDoor) < 44) best = { kind: 'home', label: 'SLEEP (END DAY)' };
   if (!S.bridge && d2(P.bridge) < 56) best = { kind: 'bridge', label: 'REPAIR BRIDGE (' + BRIDGE_COST + ')' };
   if (d2(P.boatDock) < 50) best = { kind: 'boat', label: S.boat ? 'SAIL TO THE ISLAND' : 'RENT A BOAT (' + BOAT_COST + ')' };
@@ -728,7 +731,8 @@ function interact() {
     else if (o.kind === 'gate' && WD.id === 'woods' && S.player.chapter >= 5) say({ name: 'The old spirit gate', color: '#b9a8e8' }, S.player.boss_wins & 1 ? 'The Great Spirit rests. It bows when it sees you. (You can still spar with it once a day.)' : 'The seal is cracking. Something huge breathes behind it. The thief of the Lantern?', [duelChoice(2), { t: 'NOT YET', fn: closeDlg }]);
     else say(o.kind === 'sign' ? { name: 'Signpost', color: '#d9b88a' } : who, o.text + (o.kind === 'tablet' ? puzzleHint() : ''));
   }
-  else if (t.kind === 'board') openTown();
+  else if (t.kind === 'board') openIsland('calls');
+  else if (t.kind === 'stall') openIsland('barons');
   else if (t.kind === 'home') {
     const hour = 6 + S.t / DAY_SECONDS * 18;
     if (hour < 18) {
@@ -894,7 +898,8 @@ function update(dt) {
   updateCat(dt); updateSpirits(dt);
   if (!busy) {
     S.t += dt;
-    if (S.t > DAY_SECONDS * (16 / 18) && !S.warned) { S.warned = true; toast("It's 22:00. Head home before midnight.", 3); sfx('alert'); }
+    if (S.t > DAY_SECONDS * (14 / 18) && !S.warned20) { S.warned20 = true; toast("It's 20:00. Start heading home soon: at midnight you pass out wherever you are.", 5); sfx('menu'); }
+    if (S.t > DAY_SECONDS * (16 / 18) && !S.warned) { S.warned = true; toast("22:00 · 2 hours until you pass out. Go home and press E on your door to sleep.", 6); sfx('alert'); }
     if (S.t >= DAY_SECONDS && !S.sleeping) { S.t = DAY_SECONDS; sleep(true); }
   }
   // safety net: never stay hidden "inside the house" once the night is over and no card is waiting
@@ -914,7 +919,7 @@ function draw() {
   for (const p of MAP.props) { const x = p.x * TW, y = p.y * TW; if (vis(x, y, p.w * TW, p.h * TW)) list.push({ base: p.flat ? -1 : (p.y + p.h) * TW, p }); }
   for (const c of (WD.id === 'town' ? Object.values(NPCS) : []).concat(S.inside ? [] : player)) if (vis(c.x - 32, c.y - 60, 64, 64)) list.push({ base: c.y, c });
   if (cat) list.push({ base: cat.y, cat: true });
-  list.push(...spiritDrawables(camX, camY), ...worldDrawables(camX, camY), ...noteDrawables(camX, camY));
+  list.push(...spiritDrawables(camX, camY), ...worldDrawables(camX, camY), ...noteDrawables(camX, camY), ...stallDrawables(camX, camY));
   list.sort((a, b) => a.base - b.base);
   for (const o of list) {
     if (o.cat) { drawCat(camX, camY); continue; }

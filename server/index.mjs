@@ -36,6 +36,11 @@ const CONTRACT_MIN = +(env.CONTRACT_MIN_NEAR || 1);      // the contract pays fo
 const ALLOW_ORIGIN = env.ALLOW_ORIGIN || ''; // empty: same-origin only (no CORS header)
 const HOST = env.HOST || '127.0.0.1';         // behind Caddy; set HOST=0.0.0.0 only if you really want the raw port public
 const SIGNUPS_PER_HOUR = +(env.SIGNUPS_PER_HOUR || 60); // across everyone
+// Gasless play: players sign their moves, the operator submits them and pays the gas (NEP-366 meta transactions).
+const RELAY = env.RELAY !== '0';
+const RELAYS_PER_HOUR = +(env.RELAYS_PER_HOUR || 400);       // per player (moves are batched, so this is plenty)
+const RELAYS_PER_HOUR_ALL = +(env.RELAYS_PER_HOUR_ALL || 6000); // across everyone, so nobody can drain the operator
+const PLAYER_METHOD_SET = new Set(['start_season', 'open_position', 'buy_item', 'claim', 'sleep', 'pay_debt', 'act']); // same list as the contract's player key
 if (!MOCK && (!CONTRACT || !OPERATOR || !OPERATOR_KEY || !SECRET)) {
   console.error('Missing env. Set CONTRACT_ID, OPERATOR_ID, OPERATOR_KEY and GAME_SECRET (or run with MOCK=1).');
   process.exit(1);
@@ -44,7 +49,7 @@ const sha = s => createHash('sha256').update(s).digest('hex');
 const hmac = s => createHmac('sha256', SECRET).update(s).digest();
 
 // ---------- contract access ----------
-let view, operatorCall, hasKey, balanceOf, sendNear;
+let view, operatorCall, hasKey, balanceOf, sendNear, relay;
 const mockKeys = new Map();
 let mock;
 if (MOCK) {
@@ -52,13 +57,14 @@ if (MOCK) {
   for (const a of Rules.AGENTS) mock.create_npc(OPERATOR, a.id);
   view = async (method, args) => { const fn = mock[method]; if (!fn) throw new Error('no view ' + method); return method === 'get_player' ? fn.call(mock, args.account_id) : method === 'mt_balance_of' ? fn.call(mock, args.account_id, args.token_id) : fn.call(mock); };
   hasKey = async (account, pk) => mockKeys.get(account) === pk;
-  balanceOf = async () => 100; sendNear = async () => null;
+  balanceOf = async () => 100; sendNear = async () => null; relay = async () => { throw new Error('relay is not used in mock mode'); };
   operatorCall = async (method, args) => {
     if (method === 'register_player') { const id = mock.register_player(OPERATOR, args.name); mockKeys.set(id, args.public_key); return id; }
     return mock[method](OPERATOR, args);
   };
 } else {
-  const { Account, JsonRpcProvider, teraToGas, nearToYocto } = await import('near-api-js');
+  const { Account, JsonRpcProvider, teraToGas, nearToYocto, SCHEMA, PublicKey, encodeDelegateAction } = await import('near-api-js');
+  const { deserialize } = await import('borsh');
   const provider = new JsonRpcProvider({ url: NODE_URL });
   const operator = new Account(OPERATOR, provider, OPERATOR_KEY);
   view = (method, args = {}) => provider.callFunction({ contractId: CONTRACT, method, args });
@@ -70,6 +76,27 @@ if (MOCK) {
     return Number(free / 10n ** 18n) / 1e6;
   };
   sendNear = (receiverId, near) => queued(() => operator.transfer({ receiverId, amount: nearToYocto(near) }));
+  // A move the player signed (a NEP-366 signed delegate, base64). Checked here, then sent with the operator paying the gas.
+  const MAX_GAS = teraToGas('50'), knownKeys = new Set();
+  relay = async (accountId, b64) => {
+    let d;
+    try { d = deserialize(SCHEMA.SignedDelegate, Buffer.from(String(b64 || ''), 'base64')); } catch { throw new Error('bad move'); }
+    const a = d && d.delegateAction, act = a && a.actions && a.actions.length === 1 && a.actions[0].functionCall;
+    if (!a || a.senderId !== accountId) throw new Error('bad move: wrong sender');
+    if (a.receiverId !== CONTRACT) throw new Error('bad move: only this game can be called');
+    if (!act || !PLAYER_METHOD_SET.has(act.methodName)) throw new Error('bad move: not a game move');
+    if (BigInt(act.deposit) !== 0n || BigInt(act.gas) > MAX_GAS || BigInt(act.gas) <= 0n) throw new Error('bad move: gas or deposit');
+    const pk = PublicKey.from({ ed25519Key: { data: Uint8Array.from(a.publicKey.ed25519Key.data) } });
+    const hash = createHash('sha256').update(encodeDelegateAction(a)).digest();
+    if (!pk.verify(hash, Uint8Array.from(d.signature.ed25519Signature.data))) throw new Error('bad move: signature');
+    const keyId = accountId + '|' + pk.toString();
+    if (!knownKeys.has(keyId)) { if (!(await hasKey(accountId, pk.toString()))) throw new Error('Your login key was not found. Log out and back in.'); knownKeys.add(keyId); }
+    const r = await queued(() => withTimeout(operator.relayMetaTransaction(d), 45000));
+    // a failed move shows up in the receipts, not always at the top
+    const bad = [r && r.status, ...((r && r.receipts_outcome) || []).map(o => o.outcome && o.outcome.status)].find(st => st && st.Failure);
+    if (bad) throw new Error(JSON.stringify(bad.Failure).replace(/.*panicked: ?/, '').replace(/["\\}]+$/g, '').slice(0, 200));
+    return txHash(r);
+  };
   const raw = (method, args, deposit) => withTimeout(operator.callFunction({ contractId: CONTRACT, methodName: method, args, gas: teraToGas('100'), deposit: nearToYocto(deposit) }), 45000);
   // One operator key signs everything, so calls go out one at a time (no nonce clashes) and retry on network trouble.
   let chain = Promise.resolve();
@@ -137,13 +164,24 @@ function plan(account, season, day) {
   const { truth, rumors, kaito, weather } = Rules.planDay(rng, acc);
   const rumorText = Rules.encodeRumors(rumors);
   const salt = hmac(`${account}|${season}|${day}|salt`).toString('hex');
-  const commitment = sha(`${account}|${season}|${day}|${truth}|${rumorText}|${salt}`);
   const r = rumors.rita;
   const npc_moves = [{ npc: `kaito.${CONTRACT}`, good: kaito.good, long: kaito.long }];
   if (r.lying) npc_moves.push({ npc: `rita.${CONTRACT}`, good: Rules.EVENTS[r.ev].fx[0][0], long: false });
   const agents = Rules.agentMoves(rng, truth, rumors, kaito);
   for (const [id, m] of Object.entries(agents)) npc_moves.push({ npc: `${id}.${CONTRACT}`, good: m.good, long: m.long });
+  // the agents' calls are sealed inside the commitment too, revealed with the event at night
+  const commitment = sha(`${account}|${season}|${day}|${truth}|${rumorText}|${salt}|${Rules.encodeMoves(npc_moves)}`);
   return { truth, rumors, rumorText, salt, commitment, weather, npc_moves, kaito, agents };
+}
+// What the player may see of today's agent calls: who made one, and the call itself only if they paid to peek on chain.
+function callsFor(p, d) {
+  const calls = Rules.AGENTS.map((a, k) => {
+    const m = d.npc_moves.find(x => Rules.agentOf(x.npc) === k), open = !!(p.peeked & (1 << k));
+    return { agent: k, has: !!m, open, ...(m && open ? { good: m.good, long: m.long } : {}) };
+  });
+  const seen = k => calls[k].open && calls[k].has;
+  const agents = {}; for (const k of [2, 3, 4]) if (seen(k)) agents[Rules.AGENTS[k].id] = { good: calls[k].good, long: calls[k].long };
+  return { calls, kaito: seen(0) ? { good: calls[0].good, long: calls[0].long } : null, agents };
 }
 
 // ---------- http ----------
@@ -205,13 +243,13 @@ const routes = {
     const d = plan(body.accountId, p.season, p.day);
     let tx = null;
     if (!p.commitment) {
-      try { tx = await operatorCall('commit_day', { player: body.accountId, day: p.day, commitment: d.commitment, npc_moves: d.npc_moves }); }
+      try { tx = await operatorCall('commit_day', { player: body.accountId, day: p.day, commitment: d.commitment }); }
       catch (e) { p = await view('get_player', { account_id: body.accountId }); if (p.commitment !== d.commitment) throw e; }
     } else if (p.commitment !== d.commitment) {
       // this day can never be revealed (GAME_SECRET changed): cancel it on chain, refund the trades, commit it again
       console.error('commitment mismatch for', body.accountId, '- voiding the day');
       await operatorCall('void_day', { player: body.accountId });
-      tx = await operatorCall('commit_day', { player: body.accountId, day: p.day, commitment: d.commitment, npc_moves: d.npc_moves });
+      tx = await operatorCall('commit_day', { player: body.accountId, day: p.day, commitment: d.commitment });
       p = await view('get_player', { account_id: body.accountId });
     }
     // keep the player's account able to pay gas (checked every time the day is opened, not only on a new commit)
@@ -224,7 +262,21 @@ const routes = {
       const s = Rules.SOURCES[k], f = (p.friendship || [])[s.npc] || 0;
       rumors[k] = { ...r }; if (Rules.hearts(f) < 2) delete rumors[k].sure;
     }
-    return { season: p.season, day: p.day, asleep: !!p.asleep, rumors, weather: d.weather, kaito: d.kaito, agents: d.agents, stormWarning, commitment: d.commitment, tx: txHash(tx) };
+    return { season: p.season, day: p.day, asleep: !!p.asleep, rumors, weather: d.weather, ...callsFor(p, d), stormWarning, commitment: d.commitment, tx: txHash(tx) };
+  }),
+  // Today's agent calls: sealed, unless this player paid on chain to peek (the Peek move). Read again after a peek.
+  'POST /api/calls': body => checkId(body.accountId) && withLock(body.accountId, async () => {
+    const p = await view('get_player', { account_id: body.accountId });
+    if (!p) throw new Error('not a player');
+    if (p.finished || !p.commitment) return { calls: [], kaito: null, agents: {} };
+    return callsFor(p, plan(body.accountId, p.season, p.day));
+  }),
+  // Gasless moves: the player signs, the game pays. Players never need NEAR to play.
+  'POST /api/relay': (body, req) => checkId(body.accountId) && withLock('relay|' + body.accountId, async () => {
+    if (MOCK || !RELAY) throw new Error('RELAY_OFF');
+    if (over('relay|' + body.accountId, RELAYS_PER_HOUR, 3600e3) || over('relay|all', RELAYS_PER_HOUR_ALL, 3600e3)) throw new Error('RELAY_LIMIT');
+    if ((await balanceOf(OPERATOR)) <= MIN_RESERVE) { console.error(`RELAY PAUSED: operator ${OPERATOR} is at its ${MIN_RESERVE} NEAR reserve. Send it more NEAR.`); throw new Error('RELAY_OFF'); }
+    return { tx: await relay(body.accountId, body.delegate) };
   }),
   // The game asks for this when a move was refused because the player's account could not pay the gas.
   'POST /api/topup': body => checkId(body.accountId) && withLock('topup|' + body.accountId, async () => {
@@ -242,7 +294,7 @@ const routes = {
     const d = plan(body.accountId, p.season, p.day);
     if (p.commitment !== d.commitment) { await operatorCall('void_day', { player: body.accountId }); return { voided: true }; }
     let res = null;
-    try { res = await operatorCall('settle_day', { player: body.accountId, day: p.day, event: d.truth, rumors: d.rumorText, salt: d.salt }); }
+    try { res = await operatorCall('settle_day', { player: body.accountId, day: p.day, event: d.truth, rumors: d.rumorText, salt: d.salt, npc_moves: d.npc_moves }); }
     catch (e) { const q = await view('get_player', { account_id: body.accountId }); if (q.asleep || q.day === p.day && !q.finished) throw e; }
     const after = await view('get_player', { account_id: body.accountId });
     return { log: after.history.find(h => h.day === p.day) || after.history[after.history.length - 1], salt: d.salt, tx: txHash(res) };
@@ -274,7 +326,7 @@ async function handle(req, res) {
   // static files: only the game itself
   let decoded; try { decoded = decodeURIComponent(url.pathname); } catch { res.writeHead(400); return res.end('bad request'); }
   let path = normalize(decoded).replace(/^([/\\])+/, '') || 'index.html';
-  if (!/^(index\.html|[a-z]+\.js|shared\/[a-z]+\.js|vendor\/[a-z-]+\.mjs|assets\/.+|nft\/(spirits|badges|fish)\/[A-Za-z0-9_]+\.png)$/.test(path.replace(/\\/g, '/'))) { res.writeHead(404); return res.end('not found'); }
+  if (!/^(index\.html|[a-z]+\.js|shared\/[a-z]+\.js|vendor\/[a-z-]+\.mjs|assets\/.+|nft\/(spirits|badges|fish|stalls)\/[A-Za-z0-9_]+\.png)$/.test(path.replace(/\\/g, '/'))) { res.writeHead(404); return res.end('not found'); }
   try { const data = await readFile(join(ROOT, path)); res.writeHead(200, { 'content-type': MIME[extname(path)] || 'application/octet-stream' }); res.end(data); }
   catch { res.writeHead(404); res.end('not found'); }
 }

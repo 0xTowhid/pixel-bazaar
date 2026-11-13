@@ -52,11 +52,11 @@ const World = (() => {
   const P = {
     start: { x: 40.5, y: 28.6 }, homeDoor: { x: 40, y: 27.5 },
     tomo: { x: 46.5, y: 39.7 }, board: { x: 54.5, y: 35.2 },
-    mei: { x: 51.5, y: 33.6 }, bram: { x: 64.5, y: 49.6 }, ritaHome: { x: 67.5, y: 28.6 }, ritaMarket: { x: 50.5, y: 40.6 },
+    mei: { x: 51.5, y: 33.6 }, bram: { x: 64.5, y: 49.6 }, ritaHome: { x: 67.5, y: 28.6 }, ritaMarket: { x: 45.5, y: 41.2 },
     sailor: { x: 94.5, y: 31.6 }, master: { x: 81.5, y: 24.6 }, farmer: { x: 15.5, y: 26.6 },
     hermit: { x: 79.5, y: 16.6 }, seer: { x: 45.5, y: 9.2 }, fisher: { x: 53.5, y: 52.6 },
     bridge: { x: 34.5, y: 31 }, boatDock: { x: 96.5, y: 39.6 }, boatIsland: { x: 101.5, y: 34.6 }, chest: { x: 103.5, y: 32.8 },
-    v1: { x: 58.5, y: 31.6 }, v2: { x: 44.5, y: 45.6 }, kaito: { x: 52.5, y: 41.4 }, cat: { x: 41.5, y: 28.4 },
+    v1: { x: 58.5, y: 31.6 }, v2: { x: 44.5, y: 45.6 }, kaito: { x: 42.5, y: 41.2 }, cat: { x: 41.5, y: 28.4 },
     // farm plots: 12 behind your house, 6 on the Hill Farms past the bridge
     plots: [...[18, 19].flatMap(y => [42, 43, 44, 45, 46, 47].map(x => ({ x, y }))), ...[18, 19, 20, 21, 22, 23].map(x => ({ x, y: 27 }))],
     rocks: [[41, 11], [52, 12], [80, 5], [79, 9], [83, 12], [73, 15], [81, 14], [86, 10]].map(([x, y]) => ({ x, y })),

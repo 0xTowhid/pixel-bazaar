@@ -159,10 +159,11 @@ async function openBook(tab) {
     return `<div class="sCard ${s.shiny ? 'shiny' : ''}" style="border-color:${e.color}">
       <div class="sTop"><b>${s.shiny ? '✦ ' : ''}${s.name.toUpperCase()}</b><span style="background:${e.color}">${e.name}</span></div>
       <img src="${spiritFace(s.species)}" alt="">
-      <div class="sub">${Rules.RARITY[s.rarity]} · LV ${s.level} · ${s.xp % 20}/20 XP</div>
+      <div class="sub">${Rules.RARITY[s.rarity]} · LV ${s.level}${s.level < 40 ? ` · ${20 - s.xp % 20} XP TO LV ${s.level + 1}` : ' · MAX'}</div>
+      <div class="xpBar"><i style="width:${s.level < 40 ? (s.xp % 20) / 20 * 100 : 100}%"></i></div>
       <div class="sStats"><span>HP <i class="up">${s.hp}</i></span><span>ATK <i class="dn">${s.atk}</i></span><span>SPD <i class="cy">${s.spd}</i></span></div>
       <div class="sub sPow">${e.power}</div>
-      ${next ? `<div class="sub">EVOLVES INTO ${next.name.toUpperCase()} AT LV ${sp.at}${sp.shard ? ' + LANTERN SHARD' : ''}</div>` : '<div class="sub">FINAL FORM</div>'}
+      ${next ? `<div class="sub">${canEvo ? `<b class="gold">READY TO EVOLVE INTO ${next.name.toUpperCase()}!</b>` : `EVOLVES INTO ${next.name.toUpperCase()} AT LV ${sp.at}${sp.shard ? ' + LANTERN SHARD' : ''} · ${s.level >= sp.at ? 'needs a shard' : `${Math.max(0, (sp.at - 1) * 20 - s.xp)} XP to go`}`}</div>` : '<div class="sub">FINAL FORM</div>'}
       <div class="sBtns">
         ${lead === s.token_id ? '<span class="up">✓ COMPANION</span>' : `<button class="btn" data-lead="${s.token_id}">COMPANION</button>`}
         <button class="btn" data-feed="${s.token_id}">FEED</button>
@@ -177,19 +178,40 @@ async function openBook(tab) {
   }).join('');
   const count = Rules.SPECIES.filter((_, i) => (caughtBits >> BigInt(i)) & 1n).length;
   el.innerHTML = `<div class="gname">SPIRITS</div>
-    <div class="tabs"><button class="tab ${bookTab === 'mine' ? 'on' : ''}" data-tab="mine">MY SPIRITS · ${sps.length}</button><button class="tab ${bookTab === 'book' ? 'on' : ''}" data-tab="book">SPIRIT BOOK · ${count} / ${Rules.SPECIES.length}</button><button class="tab ${bookTab === 'fish' ? 'on' : ''}" data-tab="fish">LEGENDS · ${popcount(S.player.legends || 0)} / 5</button></div>
-    ${bookTab === 'mine' ? (sps.length ? `<div class="sub" style="margin:.4em 0">Your companion follows you and grows every night. Lantern shards: ${S.player.shards || 0}. Feed: up to ${Rules.FEEDS_A_DAY} a day (crops +6 XP, fish/honey/sushi +12, jade +25).</div><div class="sGrid">${sps.map(card).join('')}</div>`
+    <div class="tabs"><button class="tab ${bookTab === 'mine' ? 'on' : ''}" data-tab="mine">MY SPIRITS · ${sps.length}</button><button class="tab ${bookTab === 'book' ? 'on' : ''}" data-tab="book">SPIRIT BOOK · ${count} / ${Rules.SPECIES.length}</button><button class="tab ${bookTab === 'crew' ? 'on' : ''}" data-tab="crew">NIGHT CREW · ${(S.player.crew || []).length} / ${Rules.CREW.MAX}</button><button class="tab ${bookTab === 'fish' ? 'on' : ''}" data-tab="fish">LEGENDS · ${popcount(S.player.legends || 0)} / 5</button></div>
+    ${bookTab === 'mine' ? (sps.length ? `<div class="sub" style="margin:.4em 0">Your companion follows you and grows every night. Lantern shards: ${S.player.shards || 0}. Feed: up to ${Rules.FEEDS_A_DAY} a day (crops +6 XP, fish/honey/sushi +12, jade +25).</div>${companionTips(sps, lead)}<div class="sGrid">${sps.map(card).join('')}</div>`
       : '<div class="sub" style="margin:1em 0;line-height:1.7">No spirits yet. Look for glowing wisps around the farm, the town, and the Whispering Woods (north). Walk up and press E / A.</div>')
+      : bookTab === 'crew' ? (sps.length ? crewHTML(sps) : '<div class="sub" style="margin:1em 0">Catch a spirit first: your crew is made of your spirits.</div>')
       : bookTab === 'fish' ? await legendsHTML() : `<div class="bGrid">${book}</div>`}
     <div style="margin-top:1em;display:flex;gap:.5em;flex-wrap:wrap"><button class="btn" id="bWallet">WALLET</button><button class="btn big" id="bClose">CLOSE (B)</button></div>`;
   el.classList.add('on'); sfx('menu');
-  el.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => openBook(b.dataset.tab));
+  el.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { delete ISL.crewPick; openBook(b.dataset.tab); });
+  if (bookTab === 'crew') bindCrew(el);
   el.querySelectorAll('[data-lead]').forEach(b => b.onclick = () => { queue({ t: 'SetLead', token: b.dataset.lead }, 'companion', true); flush.after = () => openBook(); });
   el.querySelectorAll('[data-evo]').forEach(b => b.onclick = () => evolve(b.dataset.evo));
   el.querySelectorAll('[data-feed]').forEach(b => b.onclick = () => feedMenu(b.dataset.feed));
   el.querySelectorAll('[data-send],[data-sendf]').forEach(b => b.onclick = () => sendFromBook(b.dataset.send || b.dataset.sendf));
   $('bClose').onclick = () => el.classList.remove('on');
   $('bWallet').onclick = () => { el.classList.remove('on'); openWallet(); };
+}
+// which companion helps with what, and which worlds your spirits already open
+const COMPANION_USE = [
+  [0, 'Whispering Woods', 'lights the dark woods'], [1, 'Fishing', 'more fish bites'], [3, 'Mining', 'more jade'],
+  [4, 'Catching nature spirits', 'easier catches'], [5, 'Ghost notes', 'sees ghost notes'], [6, 'Curses', 'stronger curses'], [2, 'Catching wind spirits', 'easier catches'],
+];
+function companionTips(sps, lead) {
+  const byEl = el => sps.filter(s => Rules.SPECIES[s.species].el === el).sort((a, b) => b.level - a.level)[0];
+  const uses = COMPANION_USE.filter(([el]) => byEl(el)).map(([el, what, how]) => {
+    const s = byEl(el), e = Rules.ELEMENTS[el];
+    return `${what}: <b style="color:${e.color}">${s.name}</b> <span class="sub">(${how})</span>${lead === s.token_id ? ' <span class="up">✓</span>' : ` <button class="btn" data-lead="${s.token_id}">SET</button>`}`;
+  });
+  const missing = COMPANION_USE.filter(([el]) => !byEl(el));
+  if (missing.length) uses.push(`<span class="sub">Not yet: ${missing.map(([el, what]) => `<span style="color:${Rules.ELEMENTS[el].color}">${Rules.ELEMENTS[el].name}</span> for ${what.toLowerCase()}`).join(' · ')}</span>`);
+  const has = el => sps.some(s => Rules.SPECIES[s.species].el === el);
+  const worlds = [['Whispering Woods', true, 'always open'], ['Moon Market', true, 'opens at 18:00'],
+    ['Sunken Shrine', has(1), has(1) ? 'open: you own a water spirit' : 'needs a WATER spirit'], ['Clockwork Sky', has(2), has(2) ? 'open: you own a wind spirit' : 'needs a WIND spirit (owls and moths in the woods)']];
+  return `<div class="cTips"><div><div class="gold">BEST COMPANION FOR...</div>${uses.join('<br>')}</div>
+    <div><div class="gold">WORLDS YOUR SPIRITS OPEN</div>${worlds.map(([n, ok, why]) => `<span class="${ok ? 'up' : 'dn'}">${ok ? '✓' : '🔒'}</span> ${n} <span class="sub">${why}</span>`).join('<br>')}</div></div>`;
 }
 function feedMenu(token) {
   const s = S.spirits.find(x => x.token_id === token);
@@ -198,8 +220,31 @@ function feedMenu(token) {
   $('book').innerHTML = `<div class="gname">FEED ${s.name.toUpperCase()}</div><div class="sub">${Rules.FEEDS_A_DAY - (S.player.fed_today || 0)} meals left today</div>
     <div class="feedGrid">${foods.map(f => `<button class="btn" data-g="${f.i}"><img src="${goodIcon(f.i)}" alt=""> ${GOODS[f.i].name} ×${f.n}<br><span class="sub">+${f.i === 11 ? 25 : [1, 2, 3].includes(f.i) ? 12 : 6} XP</span></button>`).join('')}</div>
     <button class="btn big" id="fBack">BACK</button>`;
-  $('book').querySelectorAll('[data-g]').forEach(b => b.onclick = () => { queue({ t: 'Feed', token, good: +b.dataset.g }, 'feed spirit', true); sfx('coin'); flush.after = () => openBook(); });
+  $('book').querySelectorAll('[data-g]').forEach(b => b.onclick = () => {
+    const before = { xp: s.xp, level: s.level, hp: s.hp, atk: s.atk, spd: s.spd };
+    queue({ t: 'Feed', token, good: +b.dataset.g }, 'feed spirit', true); sfx('coin');
+    flush.after = () => { const now = (S.spirits || []).find(x => x.token_id === token); if (now) feedReport(now, before); openBook(); };
+  });
   $('fBack').onclick = () => openBook();
+}
+// say what a meal did: XP gained, how far to the next level, and a level-up with the new stats
+function feedReport(s, b) {
+  const got = s.xp - b.xp; if (got <= 0) return; // refused: the error toast already said why
+  const sp = Rules.SPECIES[s.species], next = sp.evo >= 0 ? Rules.SPECIES[sp.evo] : null;
+  const evo = next && s.level >= sp.at ? ` It can EVOLVE into ${next.name} now${sp.shard && !S.player.shards ? ' (needs a lantern shard)' : ''}!` : '';
+  if (s.level > b.level) {
+    sfx('success'); popup(player.x, player.y - 80, 'LEVEL UP!', '#ffd86b');
+    const row = (n, a, c, cls) => `<span>${n} <i class="${cls}">${a}${c > a ? ` → ${c}` : ''}</i></span>`;
+    openCard(`<div class="ntitle">LEVEL UP!</div>
+      <div class="evoRow"><img src="${spiritFace(s.species)}" alt=""></div>
+      <div style="text-align:center;font-size:1.15em" class="gold">${s.name.toUpperCase()} · LV ${b.level} → ${s.level}</div>
+      <div class="sStats" style="justify-content:center;gap:1.4em;margin:.7em 0">${row('HP', b.hp, s.hp, 'up')}${row('ATK', b.atk, s.atk, 'dn')}${row('SPD', b.spd, s.spd, 'cy')}</div>
+      <div class="sub" style="text-align:center">${evo ? evo.trim() : next ? `Evolves into ${next.name} at LV ${sp.at}.` : 'Final form.'}</div>
+      <div style="text-align:center;margin-top:1em"><button class="btn big gold" id="cardBtn">NICE</button></div>`, () => openBook(), true);
+  } else {
+    popup(player.x, player.y - 80, `+${got} XP`, '#8ee68a');
+    toast(`+${got} XP for ${s.name} · ${20 - s.xp % 20} XP to LV ${s.level + 1}. Stats grow when it levels up.${evo}`, 4.5);
+  }
 }
 function evolve(token) {
   const s = S.spirits.find(x => x.token_id === token), sp = Rules.SPECIES[s.species], next = Rules.SPECIES[sp.evo];

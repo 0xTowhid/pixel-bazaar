@@ -7,6 +7,9 @@
 //! - Coins, prices, leverage positions, liquidations, farm plots, seeds, energy, friendships, town projects.
 //! - Goods in your barn, items (licenses, bridge, boat, stall) and achievement badges are NEP-245 tokens.
 //! - Agent trader accounts (`rita.`, `kaito.`, `pell.`, `bolt.`, `luna.<contract>`) with their own trades and ledgers.
+//!   Their daily calls are sealed inside the day's commitment and revealed at night; a player can pay to peek.
+//! - Night crews: up to three fed spirits work while you sleep; the haul is rolled from the commitment and the secret salt.
+//! - Baron stalls: each agent holds a stall (an NFT). Out-trade a baron on their good over a season to take it.
 //! Numbers match shared/rules.js and shared/engine.js.
 
 use near_sdk::json_types::U128;
@@ -166,11 +169,50 @@ pub const BOSS_CHANCE: u8 = 17; // out of 256 per window
 pub const BOSS_HP: i64 = 3000;
 pub const BOSS_HITS: u8 = 3;
 pub const BOSS_FORMS: [u8; 3] = [11, 2, 8]; // Great Spirit, Inferno, Tengu
+// ---------------- night crews, alpha calls, baron stalls ----------------
+pub const CREW_MAX: usize = 3;
+pub const CREW_XP: u32 = 8;
+/// Crops a nature crew brings in: carrot, strawberry, tomato, corn, eggplant.
+pub const FARM_GOODS: [usize; 5] = [4, 5, 7, 8, 9];
+/// The AI traders, in the same order as shared/rules.js: (account prefix, stall good, stall target in coins, peek cost in coins).
+pub const AGENTS: [(&str, usize, i64, u64); 5] = [("kaito", 0, 300, 30), ("rita", 2, 220, 20), ("pell", 4, 150, 10), ("bolt", 1, 200, 10), ("luna", 11, 400, 25)];
+pub const STALL_RENT: u64 = 25;        // coins a night per stall you hold (+5 per stall level)
+pub const CALL_REWARD: u64 = 15;       // coins for a right call
+pub const CALLS_KEPT: usize = 120;
+pub const GRUDGE_CHANCE: u8 = 77;      // out of 256: a baron you faded and beat curses you that night
+/// The moves of the agents as they go into the commitment: "kaito.x:0:L,pell.x:4:S".
+pub fn encode_moves(moves: &[NpcMove]) -> String {
+    moves.iter().map(|m| format!("{}:{}:{}", m.npc, m.good, if m.long { "L" } else { "S" })).collect::<Vec<_>>().join(",")
+}
+/// Which agent (index into AGENTS) an account belongs to.
+pub fn agent_of(npc: &AccountId) -> Option<usize> { let name = npc.as_str().split('.').next()?; AGENTS.iter().position(|a| a.0 == name) }
+/// What a crew spirit does at night depends on its element. (goods, coins, shard, charm, note)
+/// note: 0 normal, 1 halved by the night's event, 2 doubled by it.
+pub fn crew_work(el: u8, lv: u32, rar: u32, shiny: bool, event: u8, r: u8, r2: u8, charms: u8) -> (Vec<(usize, u32)>, u64, bool, bool, u8) {
+    let m: u32 = match (el, event) {
+        (WATER, EV_STORM) => 50, (WATER, 1) => 200,
+        (NATURE, EV_BLIGHT) | (NATURE, EV_COLD) => 50, (NATURE, 7) | (NATURE, 9) => 200,
+        (WIND, 6) => 200, _ => 100,
+    };
+    let note = if m < 100 { 1 } else if m > 100 { 2 } else { 0 };
+    let sh = |q: u32| if shiny { (q * 3 + 1) / 2 } else { q };
+    let adj = |q: u32| sh(q * m / 100);
+    let (r, r2) = (r as u32, r2 as u32);
+    match el {
+        EARTH => { let mut g = vec![(12, adj(1 + (lv + r % 3) / 4))]; if r2 < (48 + 16 * rar + 3 * lv).min(220) { g.push((11, sh(1))); } (g, 0, false, false, note) }
+        WATER => (vec![(1, adj(1 + (lv + r % 4) / 3))], 0, false, false, note),
+        NATURE => (vec![(FARM_GOODS[(r2 % 5) as usize], adj(1 + (lv + r % 3) / 4))], 0, false, false, note),
+        FIRE => if charms < 3 { (vec![], 0, false, true, note) } else { (vec![], sh(10) as u64, false, false, note) },
+        WIND => (vec![], adj(15 + 3 * lv + r % 10) as u64, false, false, note),
+        SPIRIT => if r < 12 + 6 * rar + lv { (vec![], 0, true, false, note) } else { (vec![], sh(10 + r % 10) as u64, false, false, note) },
+        _ => (vec![], sh(10 + 2 * lv + r % 20) as u64, false, false, note), // DARK: prowls the docks at night
+    }
+}
 pub const NFT_BASE: &str = "https://raw.githubusercontent.com/0xTowhid/pixel-bazaar/main/nft";
 
 #[derive(BorshStorageKey)]
 #[near]
-enum Key { Players, Balances, Supply, Npcs, Tokens, Owners, ByOwner, Links, Notes, Feed, Boss }
+enum Key { Players, Balances, Supply, Npcs, Tokens, Owners, ByOwner, Links, Notes, Feed, Boss, Calls }
 
 #[near(serializers = [borsh, json])]
 #[derive(Clone)]
@@ -193,7 +235,24 @@ pub struct Plot { pub crop: Option<u8>, pub grown: u8, pub watered_day: u8 }
 pub struct DayLog {
     pub day: u8, pub event: u8, pub prices: Vec<u64>, pub results: Vec<Settled>, pub coins_after: u64, pub passed_out_loss: u64,
     pub rumors: String, pub killed: u8, pub grew: u8, pub stall_sold: u64, pub badges: Vec<String>,
+    /// what each crew spirit brought, the agents' revealed calls, whether your own call was right, stall rent
+    pub crew: Vec<Haul>, pub npc: Vec<NpcResult>, pub call: Option<bool>, pub rent: u64, pub grudge: Option<Hex>,
 }
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct GoodQty { pub good: u8, pub qty: u32 }
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct Haul { pub token: String, pub species: u8, pub job: u8, pub goods: Vec<GoodQty>, pub coins: u64, pub shard: bool, pub charm: bool, pub note: u8 }
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct NpcResult { pub agent: u8, pub good: u8, pub long: bool, pub pnl: i64 }
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct Call { pub good: u8, pub long: bool }
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct CallPost { pub who: AccountId, pub season: u32, pub day: u8, pub good: u8, pub long: bool, pub at: u64, pub right: Option<bool> }
 
 #[near(serializers = [borsh, json])]
 #[derive(Clone)]
@@ -219,6 +278,10 @@ pub struct Player {
     pub boss_seen: u32, pub boss_hits: u8, pub boss_claimed: u32,
     pub cursed_day: u8, pub cursed_season: u32, pub sold: u32, pub duel_seed: String, pub duel_last: u8,
     pub forage_day: Vec<u8>,
+    // night crew, alpha calls and the barons (crew, records and baron levels are kept between seasons)
+    pub crew: Vec<String>, pub fed: Vec<String>, pub peeked: u8, pub npc_right: Vec<u16>, pub npc_total: Vec<u16>,
+    pub call: Option<Call>, pub call_right: u16, pub call_total: u16,
+    pub stall_score: Vec<i64>, pub baron_score: Vec<i64>, pub baron_lv: Vec<u8>, pub stall_last: Vec<i8>,
 }
 #[near(serializers = [borsh, json])]
 #[derive(Clone)]
@@ -237,7 +300,7 @@ pub struct Boss { pub id: u32, pub species: u8, pub hp: i64, pub max: i64, pub e
 #[near(serializers = [borsh, json])]
 #[derive(Clone)]
 #[serde(tag = "type")]
-pub enum Tok { Spirit { species: u8, shiny: bool, xp: u32 }, Badge { name: String }, Fish { kind: u8 } }
+pub enum Tok { Spirit { species: u8, shiny: bool, xp: u32 }, Badge { name: String }, Fish { kind: u8 }, Stall { good: u8, level: u8 } }
 
 #[near(serializers = [borsh, json])]
 #[derive(Clone)]
@@ -274,6 +337,8 @@ pub enum Action {
     Curse { target: AccountId, kind: u8 }, BuyCharm, BossHit, BossClaim,
     // one hidden chest a day in each world (1 woods, 2 shrine, 3 sky, 4 moon)
     Forage { world: u8 },
+    // up to three spirits work while you sleep; pay to see an agent's sealed call; make your own call
+    SetCrew { tokens: Vec<String> }, Peek { agent: u8 }, PostCall { good: u8, long: bool },
 }
 
 #[near(serializers = [borsh, json])]
@@ -296,6 +361,7 @@ pub struct Contract {
     next_token: u64,
     // kept in their own storage slots, so a normal move does not load them
     notes: Lazy<Vec<Note>>, next_note: u32, feed: Lazy<Vec<FeedItem>>, boss: Lazy<Option<Boss>>, boss_window: u64,
+    calls: Lazy<Vec<CallPost>>,
 }
 
 fn new_player(season: u32) -> Player {
@@ -315,11 +381,15 @@ fn new_player(season: u32) -> Player {
         note_day: 0, votes_today: 0, voted: vec![], rep: 0, curse_day: 0, hex: None, last_hex: None, charms: 0, boss_seen: 0, boss_hits: 0, boss_claimed: 0,
         cursed_day: 0, cursed_season: 0, sold: 0, duel_seed: String::new(), duel_last: 0,
         forage_day: vec![0; 5],
+        crew: vec![], fed: vec![], peeked: 0, npc_right: vec![0; AGENTS.len()], npc_total: vec![0; AGENTS.len()],
+        call: None, call_right: 0, call_total: 0,
+        stall_score: vec![0; AGENTS.len()], baron_score: vec![0; AGENTS.len()], baron_lv: vec![0; AGENTS.len()], stall_last: vec![0; AGENTS.len()],
     }
 }
-/// Commitment string the operator hashes on day start and reveals at settlement.
-pub fn commit_preimage(player: &AccountId, season: u32, day: u8, event: u8, rumors: &str, salt: &str) -> String {
-    format!("{player}|{season}|{day}|{event}|{rumors}|{salt}")
+/// Commitment string the operator hashes on day start and reveals at settlement. `moves` is encode_moves() of the
+/// agents' calls for the day, so they stay sealed until night (a player can pay to peek, the server then shows one).
+pub fn commit_preimage(player: &AccountId, season: u32, day: u8, event: u8, rumors: &str, salt: &str, moves: &str) -> String {
+    format!("{player}|{season}|{day}|{event}|{rumors}|{salt}|{moves}")
 }
 /// Profit or loss of a position at a new price (cents, before liquidation clamp).
 pub fn settle(p: &Position, price: u64) -> i64 {
@@ -339,7 +409,8 @@ impl Contract {
     pub fn new(operator: AccountId) -> Self {
         Self { operator, players: LookupMap::new(Key::Players), balances: LookupMap::new(Key::Balances), supply: LookupMap::new(Key::Supply), npcs: IterableMap::new(Key::Npcs), leaderboard: vec![],
             tokens: LookupMap::new(Key::Tokens), owners: LookupMap::new(Key::Owners), by_owner: LookupMap::new(Key::ByOwner), links: LookupMap::new(Key::Links), next_token: 0,
-            notes: Lazy::new(Key::Notes, vec![]), next_note: 0, feed: Lazy::new(Key::Feed, vec![]), boss: Lazy::new(Key::Boss, None), boss_window: u64::MAX }
+            notes: Lazy::new(Key::Notes, vec![]), next_note: 0, feed: Lazy::new(Key::Feed, vec![]), boss: Lazy::new(Key::Boss, None), boss_window: u64::MAX,
+            calls: Lazy::new(Key::Calls, vec![]) }
     }
     fn assert_operator(&self) { require!(env::predecessor_account_id() == self.operator, "operator only"); }
 
@@ -382,6 +453,8 @@ impl Contract {
         p.harvested = old.harvested; p.jade_found = old.jade_found; p.fish_caught = old.fish_caught;
         p.seasons_won = old.seasons_won; p.best_score = old.best_score;
         p.lead = old.lead; p.wallet = old.wallet; p.book = old.book; p.shards = old.shards; p.clues = old.clues; p.chapter = old.chapter; p.boss_wins = old.boss_wins; p.duel_wins = old.duel_wins; p.legends = old.legends; p.rep = old.rep; p.voted = old.voted; p.charms = old.charms; p.boss_seen = old.boss_seen; p.boss_hits = old.boss_hits; p.boss_claimed = old.boss_claimed;
+        p.crew = old.crew; p.npc_right = old.npc_right; p.npc_total = old.npc_total; p.call_right = old.call_right; p.call_total = old.call_total;
+        p.baron_lv = old.baron_lv; p.stall_last = old.stall_last;
         self.players.insert(id, p);
     }
 
@@ -514,11 +587,15 @@ impl Contract {
                     let g = good as usize; require!(g < NG && g != 3 && qty > 0, "cannot sell that");
                     let have = self.bal(GOODS[g], &id); require!(have >= qty as u128, "not enough in your barn");
                     self.burn(GOODS[g], &id, qty as u128); p.sold += qty;
-                    let bonus = if g == 0 && p.projects[2] { 115 } else { 100 };
+                    let stall = AGENTS.iter().position(|a| a.1 == g);
+                    let held = stall.map(|k| self.stall_token(&id, k as u8).is_some()).unwrap_or(false);
+                    let bonus = if g == 0 && p.projects[2] { 115 } else { 100 } + if held { 10 } else { 0 }; // your own stall pays 10% more
+                    let mut got = 0u64;
                     for _ in 0..qty {
-                        p.coins += p.prices[g] / 10 * bonus / 100; // milli-coins -> cents
+                        let v = p.prices[g] / 10 * bonus / 100; p.coins += v; got += v; // milli-coins -> cents
                         p.prices[g] = (p.prices[g] * 98 / 100).max(1);
                     }
+                    if let Some(k) = stall { p.stall_score[k] += got as i64 / 5; } // sales count 20% toward the baron race
                 }
                 Action::Gift { npc, good } => {
                     let n = npc as usize; require!(n < NPCS, "no such person");
@@ -591,6 +668,7 @@ impl Contract {
                     require!(p.fed_today < FEEDS_A_DAY, "it is full for today");
                     require!((good as usize) < NG && self.bal(GOODS[good as usize], &id) >= 1, "you don't have that");
                     self.burn(GOODS[good as usize], &id, 1); p.fed_today += 1; p.daily[6] = p.daily[6].saturating_add(1);
+                    if !p.fed.contains(&token) { p.fed.push(token.clone()); } // fed spirits work the night shift
                     let xp = match good { 11 => 25, 1 | 2 | 3 => 12, _ => 6 };
                     self.add_xp(&token, xp);
                 }
@@ -638,7 +716,8 @@ impl Contract {
                     require!(done, "this chapter is not finished yet");
                     p.chapter += 1;
                     match p.chapter { 2 | 3 | 4 => { p.shards += 1; p.coins += 100 * 100; } 5 => { p.shards += 2; p.coins += 200 * 100; } _ => {} }
-                    if p.chapter > STORY_CHAPTERS { badges.push("lantern_keeper"); self.mint_spirit(&id, 37, false); p.book |= 1u64 << 37; } // the Jade Dragon
+                    if p.chapter > STORY_CHAPTERS { badges.push("lantern_keeper"); self.mint_spirit(&id, 37, false); p.book |= 1u64 << 37; // the Jade Dragon
+                        if (0..AGENTS.len()).all(|k| self.stall_token(&id, k as u8).is_some()) { badges.push("bazaar_keeper"); } }
                 }
                 Action::Duel { foe, team } => {
                     let f = foe as usize; require!(f < FOES.len(), "no such rival");
@@ -661,6 +740,7 @@ impl Contract {
                     let won = duel(&mine, &FOES[f].1, &mut || { n += 1; roll(&seed, &id, &what, n - 1) });
                     p.duel_seed = seed; p.duel_last = f as u8 | if won { 0x80 } else { 0 };
                     for t in team.iter() { self.add_xp(t, if won { 20 } else { 6 }); }
+                    if won { for t in p.crew.clone() { if !team.contains(&t) && self.owners.get(&t) == Some(&id) { self.add_xp(&t, 10); } } } // the crew trains with you
                     if won {
                         p.coins += FOES[f].2 as u64 * 100; p.duel_wins += 1;
                         if f == 2 { p.boss_wins |= 1; p.shards += 1; badges.push("spirit_champion"); }
@@ -761,6 +841,25 @@ impl Contract {
                     if p.lead.as_deref() == Some(token.as_str()) { p.lead = None; }
                     self.move_token(&token, &id, &to, Some("sent to the linked wallet"));
                 }
+                Action::SetCrew { tokens } => {
+                    require!(tokens.len() <= CREW_MAX, "a crew is three spirits at most");
+                    for (i, t) in tokens.iter().enumerate() { require!(!tokens[..i].contains(t), "each spirit works one shift"); self.assert_owns_spirit(&id, t); }
+                    p.crew = tokens;
+                }
+                Action::Peek { agent } => {
+                    let a = agent as usize; require!(a < AGENTS.len(), "no such trader");
+                    require!(p.peeked & (1 << a) == 0, "you already know that call");
+                    let cost = AGENTS[a].3 * 100; require!(p.coins >= cost, "not enough coins to peek");
+                    p.coins -= cost; p.peeked |= 1 << a;
+                    if let Ok(acc) = format!("{}.{}", AGENTS[a].0, env::current_account_id()).parse::<AccountId>() { if let Some(l) = self.npcs.get_mut(&acc) { *l += cost as i64; } } // they keep the fee
+                }
+                Action::PostCall { good, long } => {
+                    require!((good as usize) < NG && good != 3 && good != 12, "you cannot call that");
+                    require!(p.call.is_none(), "one call a day");
+                    p.call = Some(Call { good, long });
+                    self.calls.push(CallPost { who: id.clone(), season: p.season, day: p.day, good, long, at: env::block_timestamp_ms(), right: None });
+                    if self.calls.len() > CALLS_KEPT { (*self.calls).remove(0); }
+                }
                 Action::SendTo { token, to } => { // the in-game wallet: send a spirit, badge or fish to any NEAR account
                     require!(to != id, "that is you");
                     require!(self.owners.get(&token) == Some(&id), "not yours");
@@ -790,31 +889,37 @@ impl Contract {
         self.badge("debt_free", &id); self.post(&id, format!("paid off the 3,000 coin debt on day {day}"));
         if day <= 6 { self.badge("early_bird", &id); }
         if beat { self.badge("beat_kaito", &id); }
-        self.rank(Entry { account: id, season, score: coins + DEBT, day, won: true });
+        self.rank(Entry { account: id.clone(), season, score: coins + DEBT, day, won: true });
+        let mut p = self.players.get(&id).cloned().unwrap();
+        for b in self.resolve_stalls(&id, &mut p) { self.badge(b, &id); }
+        self.players.insert(id, p);
     }
 
     // ---------------- operator: commit and reveal ----------------
-    pub fn commit_day(&mut self, player: AccountId, day: u8, commitment: String, npc_moves: Vec<NpcMove>) {
+    /// The day's event, rumors and the agents' calls go in sealed (only the hash); they are revealed at settlement.
+    pub fn commit_day(&mut self, player: AccountId, day: u8, commitment: String) {
         self.assert_operator();
         require!(commitment.len() == 64, "commitment must be a sha256 hex");
-        require!(npc_moves.len() <= 8, "too many agent moves");
         let p = self.player_mut(&player);
         require!(!p.finished && p.day == day, "wrong day");
         require!(p.commitment.is_none(), "already committed");
         if p.mined_day != day { p.mined = 0; }
         p.catches_today = 0;
-        p.commitment = Some(commitment); p.npc_moves = npc_moves;
+        p.commitment = Some(commitment); p.npc_moves = vec![];
     }
 
-    pub fn settle_day(&mut self, player: AccountId, day: u8, event: u8, rumors: String, salt: String) -> DayLog {
+    pub fn settle_day(&mut self, player: AccountId, day: u8, event: u8, rumors: String, salt: String, npc_moves: Vec<NpcMove>) -> DayLog {
         self.assert_operator();
         let seed = env::random_seed();
         let mut p = self.players.get(&player).cloned().unwrap_or_else(|| env::panic_str("not a player"));
         require!(p.day == day && p.asleep && !p.finished, "nothing to settle");
+        require!(npc_moves.len() <= 8, "too many agent moves");
         let c = p.commitment.clone().unwrap_or_else(|| env::panic_str("no commitment"));
-        let hash = hex::encode(env::sha256(commit_preimage(&player, p.season, day, event, &rumors, &salt).as_bytes()));
+        let hash = hex::encode(env::sha256(commit_preimage(&player, p.season, day, event, &rumors, &salt, &encode_moves(&npc_moves)).as_bytes()));
         require!(hash == c, "reveal does not match the commitment");
         require!((event as usize) < EVENTS.len(), "bad event");
+        p.npc_moves = npc_moves;
+        let secret = format!("{c}|{salt}"); // crew and grudge rolls: nobody could know them during the day
 
         // prices: drift back toward normal, a little noise, then the event
         let mut prices = p.prices.clone();
@@ -837,6 +942,7 @@ impl Contract {
             let pnl = if liquidated { -(pos.stake as i64) } else { pnl };
             p.coins = (p.coins as i64 + pos.stake as i64 + pnl).max(0) as u64;
             if pos.lev == 10 && pnl > 0 { badges.push("x10_survivor"); }
+            if let Some(k) = AGENTS.iter().position(|a| a.1 == pos.good as usize) { p.stall_score[k] += pnl; } // trading their good: the baron race
             if let Some(r) = &rita { if r.good == pos.good && !pos.long && pnl > 0 { badges.push("faded_rita"); } }
             results.push(Settled { good: pos.good, long: pos.long, lev: pos.lev, stake: pos.stake, pnl, liquidated });
         }
@@ -859,19 +965,46 @@ impl Contract {
             }
         }
         let loss = 0;
-        // NPC trades settle against the same prices
+        // NPC trades settle against the same prices: their records, the baron race, and grudges
+        let mut npc = vec![]; let mut grudge: Option<Hex> = None;
         for m in p.npc_moves.clone() {
             let stake = if m.npc.as_str().starts_with("kaito.") { 200 * 100 } else { 100 * 100 };
-            if let Some(led) = self.npcs.get_mut(&m.npc) {
-                let pos = Position { good: m.good, long: m.long, lev: 5, stake, entry: pre[m.good as usize] };
-                let pnl = settle(&pos, prices[m.good as usize]).max(-(pos.stake as i64));
-                *led += pnl;
-                if m.npc.as_str().starts_with("kaito.") { p.kaito_pnl += pnl; } // Kaito's result on YOUR days only
+            let pos = Position { good: m.good, long: m.long, lev: 5, stake, entry: pre[m.good as usize] };
+            let pnl = settle(&pos, prices[m.good as usize]).max(-(pos.stake as i64));
+            if let Some(led) = self.npcs.get_mut(&m.npc) { *led += pnl; }
+            if m.npc.as_str().starts_with("kaito.") { p.kaito_pnl += pnl; } // Kaito's result on YOUR days only
+            let Some(a) = agent_of(&m.npc) else { continue };
+            p.npc_total[a] = p.npc_total[a].saturating_add(1); if pnl > 0 { p.npc_right[a] = p.npc_right[a].saturating_add(1); }
+            if m.good as usize == AGENTS[a].1 { p.baron_score[a] += pnl; }
+            npc.push(NpcResult { agent: a as u8, good: m.good, long: m.long, pnl });
+            // you bet against them on the same good and won: they may curse you (a charm blocks it)
+            let faded = results.iter().any(|r| r.good == m.good && r.long != m.long && r.pnl > 0);
+            if faded && grudge.is_none() && roll(&secret, &player, "grudge", a as u32) < GRUDGE_CHANCE {
+                let kind = roll(&secret, &player, "grudge-kind", a as u32) % 2;
+                let blocked = p.charms > 0; if blocked { p.charms -= 1; }
+                let h = Hex { from: m.npc.clone(), kind, blocked };
+                if blocked { p.last_hex = Some(h.clone()); } else { p.hex = Some(h.clone()); }
+                grudge = Some(h);
             }
         }
+        // your own call
+        let call = p.call.take().map(|cl| {
+            let (now, was) = (prices[cl.good as usize], pre[cl.good as usize]);
+            let right = if cl.long { now > was } else { now < was };
+            p.call_total = p.call_total.saturating_add(1);
+            if right { p.call_right = p.call_right.saturating_add(1); p.coins += CALL_REWARD * 100; p.rep += 1; }
+            if let Some(cp) = self.calls.iter_mut().rev().find(|x| x.who == player && x.season == p.season && x.day == day) { cp.right = Some(right); }
+            right
+        });
+        // the night crew comes home
+        let crew = self.crew_night(&player, &mut p, &secret, event);
+        // rent from the stalls you hold
+        let mut rent = 0u64;
+        for k in 0..AGENTS.len() { if let Some(t) = self.stall_token(&player, k as u8) { if let Some(Tok::Stall { level, .. }) = self.tokens.get(&t) { rent += (STALL_RENT + 5 * *level as u64) * 100; } } }
+        p.coins += rent;
         p.prices = prices.clone(); p.commitment = None; p.npc_moves = vec![]; p.asleep = false; p.passed_out = false;
         p.energy = ENERGY_MAX; p.catches_today = 0; p.votes_today = 0; p.enc_today = 0; p.fed_today = 0; p.wild = None;
-        p.daily = vec![0; 7]; p.quests_claimed = 0;
+        p.daily = vec![0; 7]; p.quests_claimed = 0; p.fed = vec![]; p.peeked = 0;
         if let Some(t) = p.lead.clone() { if self.owners.get(&t) == Some(&player) { self.add_xp(&t, 10); } } // your companion grows with you
         if day >= SEASON_DAYS {
             p.finished = true; p.won = p.coins >= DEBT;
@@ -881,10 +1014,12 @@ impl Contract {
             p.best_score = p.best_score.max(score);
             if score as i64 - p.start_coins as i64 > p.kaito_pnl { badges.push("beat_kaito"); }
             self.rank(Entry { account: player.clone(), season: p.season, score, day, won: p.won });
+            badges.extend(self.resolve_stalls(&player, &mut p));
         } else { p.day += 1; }
         let mut minted = vec![];
         for b in badges { if self.badge(b, &player) { minted.push(b.to_string()); } }
-        let log = DayLog { day, event, prices: prices.to_vec(), results, coins_after: p.coins, passed_out_loss: loss, rumors, killed, grew, stall_sold, badges: minted };
+        let log = DayLog { day, event, prices: prices.to_vec(), results, coins_after: p.coins, passed_out_loss: loss, rumors, killed, grew, stall_sold, badges: minted,
+            crew, npc, call, rent, grudge };
         p.history.push(log.clone());
         if p.history.len() > SEASON_DAYS as usize { p.history.remove(0); }
         self.players.insert(player, p);
@@ -898,7 +1033,7 @@ impl Contract {
         let p = self.player_mut(&player);
         require!(!p.finished && p.commitment.is_some(), "nothing to cancel");
         let refund: u64 = p.positions.drain(..).map(|x| x.stake).sum();
-        p.coins += refund; p.commitment = None; p.npc_moves = vec![]; p.asleep = false; p.passed_out = false;
+        p.coins += refund; p.commitment = None; p.npc_moves = vec![]; p.asleep = false; p.passed_out = false; p.call = None;
         log!("day {} of {} cancelled by the operator", p.day, player);
     }
 
@@ -912,6 +1047,67 @@ impl Contract {
         self.leaderboard.push(e);
         self.leaderboard.sort_by(|a, b| b.won.cmp(&a.won).then(b.score.cmp(&a.score)).then(a.day.cmp(&b.day)));
         self.leaderboard.truncate(20);
+    }
+    /// Each fed crew spirit works by its element; goods go to the barn up to its 40 slots.
+    fn crew_night(&mut self, id: &AccountId, p: &mut Player, secret: &str, event: u8) -> Vec<Haul> {
+        let mut out = vec![];
+        for (i, t) in p.crew.clone().into_iter().enumerate() {
+            let Some(Tok::Spirit { species, shiny, xp }) = self.tokens.get(&t).cloned().filter(|_| self.owners.get(&t) == Some(id)) else {
+                out.push(Haul { token: t, species: 0, job: 0, goods: vec![], coins: 0, shard: false, charm: false, note: 5 }); continue; // gone
+            };
+            let sp = SPECIES[species as usize];
+            if !p.fed.contains(&t) { out.push(Haul { token: t, species, job: sp.2, goods: vec![], coins: 0, shard: false, charm: false, note: 3 }); continue; } // hungry
+            let (r, r2) = (roll(secret, id, "crew", i as u32 * 2), roll(secret, id, "crew", i as u32 * 2 + 1));
+            let (goods, coins, shard, charm, mut note) = crew_work(sp.2, spirit_level(xp) as u32, sp.3 as u32, shiny, event, r, r2, p.charms);
+            let mut got = vec![];
+            for (g, q) in goods {
+                let total: u128 = (0..NG).map(|x| self.bal(GOODS[x], id)).sum();
+                let room = (BARN_CAP.saturating_sub(total)) as u32; let n = q.min(room);
+                if n < q { note = 4; }
+                if n > 0 { self.mint(GOODS[g], id, n as u128); got.push(GoodQty { good: g as u8, qty: n }); }
+                if g == 11 && n > 0 { p.jade_found += n; }
+            }
+            p.coins += coins * 100; if shard { p.shards += 1; } if charm { p.charms += 1; }
+            self.add_xp(&t, CREW_XP);
+            out.push(Haul { token: t, species, job: sp.2, goods: got, coins, shard, charm, note });
+        }
+        p.crew.retain(|t| self.owners.get(t) == Some(id));
+        out
+    }
+    /// The stall NFT you hold for agent `k`'s good, if any.
+    fn stall_token(&self, id: &AccountId, k: u8) -> Option<String> {
+        self.by_owner.get(id)?.iter().find(|t| matches!(self.tokens.get(*t), Some(Tok::Stall { good, .. }) if *good == k)).cloned()
+    }
+    /// What a baron needs to beat you this season: their base target, harder each time you took or kept the stall, plus their own trading.
+    pub fn baron_bar(p: &Player, k: usize) -> i64 { AGENTS[k].2 * 100 * (100 + 50 * p.baron_lv[k] as i64) / 100 + p.baron_score[k] }
+    /// Season over: take stalls from the barons you out-traded (only if you paid the debt), defend the ones you hold.
+    fn resolve_stalls(&mut self, id: &AccountId, p: &mut Player) -> Vec<&'static str> {
+        let mut badges = vec![];
+        for k in 0..AGENTS.len() {
+            let bar = Self::baron_bar(p, k); let mine = p.stall_score[k];
+            let baron: AccountId = format!("{}.{}", AGENTS[k].0, env::current_account_id()).parse().unwrap();
+            let good = GOODS[AGENTS[k].1];
+            p.stall_last[k] = 0;
+            if let Some(t) = self.stall_token(id, k as u8) {
+                if mine >= bar {
+                    if let Some(Tok::Stall { level, .. }) = self.tokens.get_mut(&t) { *level = level.saturating_add(1); }
+                    p.baron_lv[k] = p.baron_lv[k].saturating_add(1); p.stall_last[k] = 2;
+                } else {
+                    self.move_token(&t, id, &baron, Some("taken back by the baron"));
+                    p.stall_last[k] = -1;
+                    self.post(id, format!("lost the {good} stall back to {}", AGENTS[k].0));
+                }
+            } else if p.won && mine > bar {
+                let tid = self.new_token_id("t");
+                self.tokens.insert(tid.clone(), Tok::Stall { good: k as u8, level: 1 });
+                self.give_token(&tid, id);
+                p.baron_lv[k] = p.baron_lv[k].saturating_add(1); p.stall_last[k] = 1;
+                badges.push("stall_owner");
+                self.post(id, format!("took the {good} stall from {}", AGENTS[k].0));
+            }
+        }
+        if p.chapter > STORY_CHAPTERS && (0..AGENTS.len()).all(|k| self.stall_token(id, k as u8).is_some()) { badges.push("bazaar_keeper"); }
+        badges
     }
     fn max_lev(&self, id: &AccountId) -> u8 {
         if self.bal("license_x10", id) > 0 { 10 } else if self.bal("license_x5", id) > 0 { 5 } else { 2 }
@@ -1009,6 +1205,12 @@ impl Contract {
         (barn, owned)
     }
     pub fn get_leaderboard(&self) -> Vec<Entry> { self.leaderboard.clone() }
+    /// Everyone's calls lately, newest last (right is filled in when that player's night is revealed).
+    pub fn get_calls(&self) -> Vec<CallPost> { (*self.calls).clone() }
+    /// Your stalls: (agent index, token id, level).
+    pub fn get_stalls(&self, account_id: AccountId) -> Vec<(u8, String, u8)> {
+        (0..AGENTS.len() as u8).filter_map(|k| self.stall_token(&account_id, k).map(|t| { let lv = match self.tokens.get(&t) { Some(Tok::Stall { level, .. }) => *level, _ => 1 }; (k, t, lv) })).collect()
+    }
     pub fn get_npcs(&self) -> Vec<(AccountId, i64)> { self.npcs.iter().map(|(a, c)| (a.clone(), *c)).collect() }
     pub fn get_operator(&self) -> AccountId { self.operator.clone() }
 }
@@ -1106,7 +1308,7 @@ impl Contract {
         let mut out = vec![];
         for n in from + 1..=self.next_token {
             if out.len() as u64 >= lim { break; }
-            for pre in ["s", "b", "f"] { if let Some(t) = self.nft_token(format!("{pre}{n}")) { out.push(t); } }
+            for pre in ["s", "b", "f", "t"] { if let Some(t) = self.nft_token(format!("{pre}{n}")) { out.push(t); } }
         }
         out
     }
@@ -1130,6 +1332,9 @@ impl Contract {
                 media: format!("{NFT_BASE}/badges/{name}.png"), copies: 1, extra: format!(r#"{{"badge":"{name}"}}"#) },
             Some(Tok::Fish { kind }) => TokenMetadata { title: format!("Legendary fish: {}", LEGENDS[*kind as usize].0), description: "A legendary catch from the Lantern Isles. Only one per player, ever.".into(),
                 media: format!("{NFT_BASE}/fish/{kind}.png"), copies: 1, extra: format!(r#"{{"fish":"{}"}}"#, LEGENDS[*kind as usize].0) },
+            Some(Tok::Stall { good, level }) => { let (who, g) = (AGENTS[*good as usize].0, GOODS[AGENTS[*good as usize].1]);
+                TokenMetadata { title: format!("{}{} Stall (Lv {level})", g[..1].to_uppercase(), &g[1..]), description: format!("A market stall in the Pixel Bazaar, won from the baron {who}. Its holder earns rent every night and sells {g} for 10% more."),
+                    media: format!("{NFT_BASE}/stalls/{g}.png"), copies: 1, extra: format!(r#"{{"stall":"{g}","baron":"{who}","level":{level}}}"#) } }
             None => env::panic_str("no such token"),
         }
     }
@@ -1143,8 +1348,9 @@ impl Contract {
     }
 }
 
-pub const BADGES: [&str; 22] = ["first_harvest", "green_thumb", "jade_hunter", "angler", "x10_survivor", "faded_rita", "beat_kaito", "debt_free", "early_bird", "restorer", "best_friend",
-    "first_spirit", "spirit_tamer", "shiny_hunter", "legend_tamer", "wallet_linked", "lantern_seeker", "lantern_keeper", "spirit_champion", "fishing_legend", "island_oracle", "boss_slayer"];
+pub const BADGES: [&str; 24] = ["first_harvest", "green_thumb", "jade_hunter", "angler", "x10_survivor", "faded_rita", "beat_kaito", "debt_free", "early_bird", "restorer", "best_friend",
+    "first_spirit", "spirit_tamer", "shiny_hunter", "legend_tamer", "wallet_linked", "lantern_seeker", "lantern_keeper", "spirit_champion", "fishing_legend", "island_oracle", "boss_slayer",
+    "stall_owner", "bazaar_keeper"];
 fn use_energy(p: &mut Player, n: u16) { require!(p.energy >= n, "you are too tired"); p.energy -= n; }
 
 #[cfg(test)]
@@ -1157,12 +1363,14 @@ mod tests {
     fn op() -> AccountId { accounts(0) }
     fn pl() -> AccountId { accounts(1) }
     fn setup() -> Contract { ctx(op()); let mut c = Contract::new(op()); c.players.insert(pl(), new_player(1)); ctx(pl()); c }
-    fn commit(c: &mut Contract, day: u8, event: u8, salt: &str) {
+    fn commit(c: &mut Contract, day: u8, event: u8, salt: &str) { commit_moves(c, day, event, salt, &[]) }
+    fn commit_moves(c: &mut Contract, day: u8, event: u8, salt: &str, moves: &[NpcMove]) {
         let season = c.get_player(pl()).unwrap().season;
-        let h = hex::encode(env::sha256(commit_preimage(&pl(), season, day, event, "r", salt).as_bytes()));
-        ctx(op()); c.commit_day(pl(), day, h, vec![]); ctx(pl());
+        let h = hex::encode(env::sha256(commit_preimage(&pl(), season, day, event, "r", salt, &encode_moves(moves)).as_bytes()));
+        ctx(op()); c.commit_day(pl(), day, h); ctx(pl());
     }
-    fn night(c: &mut Contract, day: u8, event: u8) -> DayLog { c.sleep(false); ctx(op()); let l = c.settle_day(pl(), day, event, "r".into(), "s".into()); ctx(pl()); l }
+    fn night(c: &mut Contract, day: u8, event: u8) -> DayLog { night_moves(c, day, event, vec![]) }
+    fn night_moves(c: &mut Contract, day: u8, event: u8, moves: Vec<NpcMove>) -> DayLog { c.sleep(false); ctx(op()); let l = c.settle_day(pl(), day, event, "r".into(), "s".into(), moves); ctx(pl()); l }
 
     #[test]
     fn long_wins_on_storm() {
@@ -1184,7 +1392,7 @@ mod tests {
     #[should_panic(expected = "reveal does not match")]
     fn operator_cannot_change_the_event() {
         let mut c = setup(); commit(&mut c, 1, 0, "s"); c.open_position(1, false, 2, 100 * 100); c.sleep(false);
-        ctx(op()); c.settle_day(pl(), 1, 1, "r".into(), "s".into());
+        ctx(op()); c.settle_day(pl(), 1, 1, "r".into(), "s".into(), vec![]);
     }
     #[test]
     #[should_panic(expected = "license")]
@@ -1339,10 +1547,9 @@ mod tests {
     fn audit_kaito_is_per_player_and_leaderboard_has_one_row_each() {
         let mut c = setup();
         c.npcs.insert("kaito.bazaar.testnet".parse().unwrap(), 0);
-        let season = c.get_player(pl()).unwrap().season;
-        let h = hex::encode(env::sha256(commit_preimage(&pl(), season, 1, 0, "r", "s").as_bytes()));
-        ctx(op()); c.commit_day(pl(), 1, h, vec![NpcMove { npc: "kaito.bazaar.testnet".parse().unwrap(), good: 1, long: true }]); ctx(pl());
-        night(&mut c, 1, 0);
+        let mv = vec![NpcMove { npc: "kaito.bazaar.testnet".parse().unwrap(), good: 1, long: true }];
+        commit_moves(&mut c, 1, 0, "s", &mv);
+        night_moves(&mut c, 1, 0, mv);
         let p = c.get_player(pl()).unwrap(); assert!(p.kaito_pnl > 0);
         c.rank(Entry { account: pl(), season: 1, score: 10, day: 10, won: false });
         c.rank(Entry { account: pl(), season: 2, score: 50, day: 10, won: false });
@@ -1364,7 +1571,7 @@ mod tests {
     fn audit_gift_checks_the_good() { let mut c = setup(); commit(&mut c, 1, 2, "s"); c.act(vec![Action::Gift { npc: 0, good: 99 }]); }
 
     #[test]
-    fn audit_passing_out_costs_nothing_hidden() { let mut c = setup(); commit(&mut c, 1, 2, "s"); c.sleep(true); ctx(op()); let l = c.settle_day(pl(), 1, 2, "r".into(), "s".into()); assert_eq!(l.passed_out_loss, 0); }
+    fn audit_passing_out_costs_nothing_hidden() { let mut c = setup(); commit(&mut c, 1, 2, "s"); c.sleep(true); ctx(op()); let l = c.settle_day(pl(), 1, 2, "r".into(), "s".into(), vec![]); assert_eq!(l.passed_out_loss, 0); }
 
     // ---------- spirits and NFTs ----------
     fn catch_one(c: &mut Contract, zone: u8) -> Option<String> {
@@ -1563,8 +1770,8 @@ mod tests {
     fn p2() -> AccountId { accounts(2) }
     fn join2(c: &mut Contract) {
         c.players.insert(p2(), new_player(1));
-        let h = hex::encode(env::sha256(commit_preimage(&p2(), 1, 1, 2, "r", "t").as_bytes()));
-        ctx(op()); c.commit_day(p2(), 1, h, vec![]);
+        let h = hex::encode(env::sha256(commit_preimage(&p2(), 1, 1, 2, "r", "t", "").as_bytes()));
+        ctx(op()); c.commit_day(p2(), 1, h);
     }
     #[test]
     fn ghost_notes_and_votes_build_reputation() {
@@ -1625,17 +1832,16 @@ mod tests {
         let mut c = setup();
         let ag = |n: &str| -> AccountId { format!("{n}.bazaar.testnet").parse().unwrap() };
         for n in ["kaito", "pell", "bolt", "luna"] { c.npcs.insert(ag(n), 1000 * 100); }
-        let season = c.get_player(pl()).unwrap().season;
-        let h = hex::encode(env::sha256(commit_preimage(&pl(), season, 1, 0, "r", "s").as_bytes()));
         // event 0 lifts good 1: Kaito and Luna are long it, Granny Pell fades Kaito, Bolt bets on another good
-        ctx(op()); c.commit_day(pl(), 1, h, vec![
+        let mv = vec![
             NpcMove { npc: ag("kaito"), good: 1, long: true }, NpcMove { npc: ag("pell"), good: 1, long: false },
-            NpcMove { npc: ag("luna"), good: 1, long: true }, NpcMove { npc: ag("bolt"), good: 5, long: true }]); ctx(pl());
-        night(&mut c, 1, 0);
+            NpcMove { npc: ag("luna"), good: 1, long: true }, NpcMove { npc: ag("bolt"), good: 5, long: true }];
+        commit_moves(&mut c, 1, 0, "s", &mv);
+        night_moves(&mut c, 1, 0, mv);
         let led: std::collections::HashMap<String, i64> = c.get_npcs().into_iter().map(|(a, v)| (a.to_string(), v)).collect();
         assert!(led["luna.bazaar.testnet"] > 1000 * 100 && led["pell.bazaar.testnet"] < 1000 * 100, "{led:?}");
         assert!(led["kaito.bazaar.testnet"] - 1000 * 100 == 2 * (led["luna.bazaar.testnet"] - 1000 * 100), "Kaito bets twice as big");
-        ctx(op()); assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| { let mut c2 = setup(); ctx(op()); c2.commit_day(pl(), 1, "a".repeat(64), (0..9).map(|_| NpcMove { npc: ag("bolt"), good: 1, long: true }).collect()) })).is_err());
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| { let mut c2 = setup(); commit(&mut c2, 1, 0, "s"); night_moves(&mut c2, 1, 0, (0..9).map(|_| NpcMove { npc: ag("bolt"), good: 1, long: true }).collect()); })).is_err(), "at most 8 agent moves");
     }
     #[test]
     fn the_in_game_wallet_sends_items_to_any_account() {
@@ -1670,4 +1876,162 @@ mod tests {
         assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::Forage { world: 1 }]))).is_err(), "once a day");
         assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::Forage { world: 0 }]))).is_err(), "town has its own chest");
     }
+    // ---------------- night crews, sealed calls, peeks, player calls, grudges, baron stalls ----------------
+    fn feed(c: &mut Contract, t: &str) { c.mint("carrot", &pl(), 1); c.act(vec![Action::Feed { token: t.into(), good: 4 }]); }
+    #[test]
+    fn a_fed_crew_works_the_night_and_a_hungry_one_does_not() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        let (d, w, n) = (c.mint_spirit(&pl(), 14, false), c.mint_spirit(&pl(), 20, false), c.mint_spirit(&pl(), 18, false)); // Digger, Bubble Slime, Shroomy
+        c.act(vec![Action::SetCrew { tokens: vec![d.clone(), w.clone(), n.clone()] }]);
+        feed(&mut c, &d); feed(&mut c, &w);
+        let log = night(&mut c, 1, 2);
+        assert_eq!(log.crew.len(), 3);
+        let ore: u32 = log.crew[0].goods.iter().filter(|g| g.good == 12).map(|g| g.qty).sum();
+        assert!(ore >= 1, "the digger brings ore"); assert_eq!(log.crew[0].job, EARTH);
+        assert!(log.crew[1].goods.iter().any(|g| g.good == 1 && g.qty >= 1), "the slime brings fish");
+        assert_eq!(log.crew[2].note, 3, "shroomy was not fed: hungry"); assert!(log.crew[2].goods.is_empty());
+        assert_eq!(c.mt_balance_of(pl(), "ore".into()).0 as u32, ore);
+        let sp = c.get_spirits(pl()); let xp = |t: &str| sp.iter().find(|s| s.token_id == t).unwrap().xp;
+        assert_eq!(xp(&d), CREW_XP + 6, "fed (+6) and worked (+8)"); assert_eq!(xp(&n), 0);
+        let p = c.get_player(pl()).unwrap(); assert!(p.fed.is_empty() && p.crew.len() == 3, "meals reset, the crew stays");
+    }
+    #[test]
+    fn a_storm_halves_the_fishing_crew_and_a_record_catch_doubles_it() {
+        assert_eq!(crew_work(WATER, 1, 0, false, EV_STORM, 0, 0, 0).0[0].1, 0);
+        assert_eq!(crew_work(WATER, 10, 0, false, 2, 0, 0, 0).0[0].1, 4);
+        assert_eq!(crew_work(WATER, 10, 0, false, EV_STORM, 0, 0, 0).0[0].1, 2);
+        assert_eq!(crew_work(WATER, 10, 0, false, 1, 0, 0, 0).0[0].1, 8);
+        assert_eq!(crew_work(WATER, 10, 0, true, 2, 0, 0, 0).0[0].1, 6, "a shiny brings half again");
+        assert!(crew_work(FIRE, 1, 0, false, 2, 0, 0, 0).3, "fire guards: a charm"); assert_eq!(crew_work(FIRE, 1, 0, false, 2, 0, 0, 3).1, 10, "three charms already: coins");
+        assert!(crew_work(SPIRIT, 1, 0, false, 2, 0, 0, 0).2, "a low roll finds a shard");
+    }
+    #[test]
+    fn the_crew_cannot_overfill_the_barn() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        let d = c.mint_spirit(&pl(), 14, false);
+        c.act(vec![Action::SetCrew { tokens: vec![d.clone()] }]); feed(&mut c, &d);
+        c.mint("ore", &pl(), 40);
+        let log = night(&mut c, 1, 2);
+        assert_eq!(log.crew[0].note, 4); assert!(log.crew[0].goods.is_empty());
+        assert_eq!(c.mt_balance_of(pl(), "ore".into()).0, 40);
+    }
+    #[test]
+    #[should_panic(expected = "three spirits at most")]
+    fn a_crew_is_three_spirits() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        let t: Vec<String> = (0..4).map(|_| c.mint_spirit(&pl(), 14, false)).collect();
+        c.act(vec![Action::SetCrew { tokens: t }]);
+    }
+    #[test]
+    #[should_panic(expected = "reveal does not match")]
+    fn agent_calls_are_sealed_and_cannot_be_swapped_at_night() {
+        let mut c = setup();
+        let ag = |n: &str| -> AccountId { format!("{n}.bazaar.testnet").parse().unwrap() };
+        commit_moves(&mut c, 1, 0, "s", &[NpcMove { npc: ag("kaito"), good: 1, long: false }]);
+        let p = c.get_player(pl()).unwrap(); assert!(p.npc_moves.is_empty(), "nothing readable on chain during the day");
+        night_moves(&mut c, 1, 0, vec![NpcMove { npc: ag("kaito"), good: 1, long: true }]); // the operator tries to flip Kaito's call
+    }
+    #[test]
+    fn peeking_costs_coins_once_a_day_and_records_build_up() {
+        let mut c = setup(); let ag = |n: &str| -> AccountId { format!("{n}.bazaar.testnet").parse().unwrap() };
+        c.npcs.insert(ag("luna"), 0);
+        let mv = vec![NpcMove { npc: ag("luna"), good: 1, long: true }];
+        commit_moves(&mut c, 1, 0, "s", &mv);
+        let coins = c.get_player(pl()).unwrap().coins;
+        c.act(vec![Action::Peek { agent: 4 }]);
+        let p = c.get_player(pl()).unwrap(); assert_eq!(p.coins, coins - 25 * 100); assert_eq!(p.peeked, 1 << 4);
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::Peek { agent: 4 }]))).is_err(), "once");
+        let log = night_moves(&mut c, 1, 0, mv);
+        assert_eq!(log.npc.len(), 1); assert!(log.npc[0].pnl > 0);
+        let p = c.get_player(pl()).unwrap(); assert_eq!((p.npc_right[4], p.npc_total[4], p.peeked), (1, 1, 0));
+        assert!(c.get_npcs().iter().any(|(a, v)| a.as_str() == "luna.bazaar.testnet" && *v > 2500), "Luna kept the fee and won");
+    }
+    #[test]
+    fn a_right_call_pays_and_shows_on_the_board() {
+        let mut c = setup(); commit(&mut c, 1, 0, "s"); // event 0: fish up
+        c.act(vec![Action::PostCall { good: 1, long: true }]);
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::PostCall { good: 0, long: true }]))).is_err(), "one a day");
+        assert_eq!(c.get_calls().len(), 1); assert!(c.get_calls()[0].right.is_none());
+        let coins = c.get_player(pl()).unwrap().coins;
+        let log = night(&mut c, 1, 0);
+        assert_eq!(log.call, Some(true));
+        let p = c.get_player(pl()).unwrap(); assert_eq!((p.call_right, p.call_total, p.coins), (1, 1, coins + CALL_REWARD * 100)); assert!(p.call.is_none());
+        assert_eq!(c.get_calls()[0].right, Some(true));
+        commit(&mut c, 2, 0, "s"); c.act(vec![Action::PostCall { good: 1, long: false }]);
+        assert_eq!(night(&mut c, 2, 0).call, Some(false));
+        assert_eq!(c.get_player(pl()).unwrap().call_total, 2);
+    }
+    #[test]
+    fn a_baron_you_beat_may_curse_you_and_a_charm_blocks_it() {
+        let ag = |n: &str| -> AccountId { format!("{n}.bazaar.testnet").parse().unwrap() };
+        let (mut cursed, mut blocked) = (0, 0);
+        for k in 0..40 {
+            let salt = format!("s{k}");
+            let mut c = setup(); c.npcs.insert(ag("kaito"), 0);
+            if k % 2 == 1 { c.players.get_mut(&pl()).unwrap().charms = 1; }
+            let mv = vec![NpcMove { npc: ag("kaito"), good: 1, long: false }]; // Kaito shorts fish, the storm lifts it
+            let season = c.get_player(pl()).unwrap().season;
+            let h = hex::encode(env::sha256(commit_preimage(&pl(), season, 1, 0, "r", &salt, &encode_moves(&mv)).as_bytes()));
+            ctx(op()); c.commit_day(pl(), 1, h); ctx(pl());
+            c.open_position(1, true, 2, 100 * 100); c.sleep(false);
+            ctx(op()); let log = c.settle_day(pl(), 1, 0, "r".into(), salt, mv); ctx(pl());
+            if let Some(g) = log.grudge {
+                assert_eq!(g.from, ag("kaito")); let p = c.get_player(pl()).unwrap();
+                if g.blocked { blocked += 1; assert_eq!(p.charms, 0); assert!(p.hex.is_none()); } else { cursed += 1; assert!(p.hex.is_some()); }
+            }
+        }
+        assert!(cursed > 0 && blocked > 0, "about 30% of nights: {cursed} cursed, {blocked} blocked");
+    }
+    fn finish_season(c: &mut Contract, won: bool) {
+        for d in 1..=SEASON_DAYS { commit(c, d, 2, "s"); if d == SEASON_DAYS && won { c.players.get_mut(&pl()).unwrap().coins = DEBT + 500 * 100; } night(c, d, 2); }
+    }
+    #[test]
+    fn out_trade_a_baron_to_take_the_stall_then_defend_it_or_lose_it() {
+        let mut c = setup();
+        c.players.get_mut(&pl()).unwrap().stall_score[0] = 301 * 100; // beat Kaito's 300 on tea
+        c.players.get_mut(&pl()).unwrap().stall_score[1] = 999 * 100; // beat Rita too...
+        finish_season(&mut c, true);
+        let p = c.get_player(pl()).unwrap(); assert!(p.finished && p.won);
+        let st = c.get_stalls(pl()); assert_eq!(st.len(), 2, "tea and honey"); assert_eq!(st[0].0, 0); assert_eq!(st[0].2, 1);
+        assert_eq!(p.stall_last[0], 1); assert_eq!(p.baron_lv[0], 1); assert_eq!(c.mt_balance_of(pl(), "badge_stall_owner".into()).0, 1);
+        assert_eq!(c.nft_token(st[0].1.clone()).unwrap().metadata.title, "Tea Stall (Lv 1)");
+        // next season: rent every night, 10% more when selling tea, and the barons fight back
+        c.start_season(); let coins = c.get_player(pl()).unwrap().coins;
+        commit(&mut c, 1, 2, "s");
+        c.mint("tea", &pl(), 1); let price = c.get_player(pl()).unwrap().prices[0];
+        c.act(vec![Action::Sell { good: 0, qty: 1 }]);
+        let sold = c.get_player(pl()).unwrap().coins - coins; assert_eq!(sold, price / 10 * 110 / 100);
+        let log = night(&mut c, 1, 2); assert_eq!(log.rent, 2 * (STALL_RENT + 5) * 100);
+        // keep tea (450 needed now), lose honey
+        c.players.get_mut(&pl()).unwrap().stall_score[0] = 451 * 100;
+        for d in 2..=SEASON_DAYS { commit(&mut c, d, 2, "s"); night(&mut c, d, 2); }
+        let p = c.get_player(pl()).unwrap();
+        assert_eq!((p.stall_last[0], p.stall_last[1]), (2, -1));
+        let st = c.get_stalls(pl()); assert_eq!(st.len(), 1); assert_eq!(st[0].2, 2, "defended: level 2");
+        assert_eq!(c.get_stalls("rita.bazaar.testnet".parse().unwrap()).len(), 1, "the honey stall went back to Rita's account");
+    }
+    #[test]
+    fn no_stall_without_paying_the_debt() {
+        let mut c = setup(); c.players.get_mut(&pl()).unwrap().stall_score[0] = 999 * 100;
+        finish_season(&mut c, false);
+        assert!(c.get_stalls(pl()).is_empty()); assert!(!c.get_player(pl()).unwrap().won);
+    }
+    #[test]
+    fn all_five_stalls_and_the_story_make_the_lantern_keeper() {
+        let mut c = setup();
+        { let p = c.players.get_mut(&pl()).unwrap(); p.stall_score = vec![9999 * 100; 5]; p.chapter = STORY_CHAPTERS + 1; }
+        finish_season(&mut c, true);
+        assert_eq!(c.get_stalls(pl()).len(), 5);
+        assert_eq!(c.mt_balance_of(pl(), "badge_bazaar_keeper".into()).0, 1);
+    }
+    #[test]
+    fn trading_and_selling_a_barons_good_counts_toward_their_stall() {
+        let mut c = setup(); commit(&mut c, 1, 3, "s"); // event 3: tea up
+        c.open_position(0, true, 2, 100 * 100);
+        c.mint("tea", &pl(), 2); c.act(vec![Action::Sell { good: 0, qty: 2 }]);
+        let after_sell = c.get_player(pl()).unwrap().stall_score[0]; assert!(after_sell > 0);
+        let log = night(&mut c, 1, 3);
+        assert_eq!(c.get_player(pl()).unwrap().stall_score[0], after_sell + log.results[0].pnl);
+    }
+
 }

@@ -11,7 +11,15 @@ const Backend = (() => {
   const mode = cfg.mode || 'local';
   const KEY = 'pb_account_' + (cfg.contractId || 'local');
   const store = { get() { try { return JSON.parse(localStorage.getItem(KEY)); } catch (e) { return null; } }, set(v) { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) {} }, clear() { try { localStorage.removeItem(KEY); } catch (e) {} } };
-  let me = null, near = null, keys = null, account = null, provider = null, local = null;
+  // same shape as the server's callsFor(): who made a call today, and the call itself only if you peeked
+  function localCalls(p) {
+    const moves = (local && local.plan && local.plan.moves) || [];
+    const calls = Rules.AGENTS.map((a, k) => { const m = moves.find(x => Rules.agentOf(x.npc) === k), open = !!(p.peeked & (1 << k)); return { agent: k, has: !!m, open, ...(m && open ? { good: m.good, long: m.long } : {}) }; });
+    const seen = k => calls[k].open && calls[k].has, agents = {};
+    for (const k of [2, 3, 4]) if (seen(k)) agents[Rules.AGENTS[k].id] = { good: calls[k].good, long: calls[k].long };
+    return { calls, kaito: seen(0) ? { good: calls[0].good, long: calls[0].long } : null, agents };
+  }
+  let me = null, near = null, keys = null, account = null, provider = null, local = null, lastNonce = 0n, relayOff = false;
   const url = f => new URL(f, document.baseURI).href;
 
   async function api(path, body) {
@@ -145,8 +153,32 @@ const Backend = (() => {
       if (mode === 'mock') { await api('/mock/call', { accountId: me.accountId, method, args }); return null; }
       await loadNear();
       if (!account) account = new near.Account(me.accountId, provider, me.secretKey);
+      // Gasless: sign the move here, the game server submits it and pays the gas (NEP-366). Your account needs no NEAR.
+      const gas = near.teraToGas(method === 'act' ? '50' : '15');
+      const relayed = async () => {
+        const pk = await account.signer.getPublicKey();
+        const [ak, block] = await Promise.all([provider.viewAccessKey({ accountId: me.accountId, publicKey: pk.toString() }), provider.viewBlock({ finality: 'final' })]);
+        let nonce = BigInt(ak.nonce) + 1n; if (nonce <= lastNonce) nonce = lastNonce + 1n;
+        const da = near.buildDelegateAction({ senderId: me.accountId, receiverId: cfg.contractId, nonce, maxBlockHeight: BigInt(block.header.height) + 120n, publicKey: pk,
+          actions: [near.actions.functionCall(method, args, gas, 0n)] });
+        const { signedDelegate } = await account.signer.signDelegateAction(da);
+        const bytes = near.encodeSignedDelegate(signedDelegate);
+        let bin = ''; for (const b of bytes) bin += String.fromCharCode(b);
+        try { return (await api('/api/relay', { accountId: me.accountId, delegate: btoa(bin) })).tx || null; }
+        finally { lastNonce = nonce; } // a refused move can still use up its nonce on chain
+      };
+      if (!relayOff) {
+        try { return await relayed(); }
+        catch (e) {
+          const m = String(e && e.message || e);
+          if (/InvalidNonce|nonce/i.test(m)) { lastNonce = 0n; return await relayed(); } // a stale nonce: read it again once
+          if (!/RELAY_OFF|RELAY_LIMIT|Server error|Failed to fetch|NetworkError/i.test(m)) throw e; // the game said no: show why
+          if (/RELAY_OFF/.test(m)) relayOff = true;
+          console.warn('relay unavailable, paying gas from your own account:', m);
+        }
+      }
       const send = async () => {
-        const r = await account.callFunctionRaw({ contractId: cfg.contractId, methodName: method, args, gas: near.teraToGas(method === 'act' ? '50' : '15'), deposit: 0n });
+        const r = await account.callFunctionRaw({ contractId: cfg.contractId, methodName: method, args, gas, deposit: 0n });
         const fail = r?.status?.Failure;
         if (fail) { const raw = JSON.stringify(fail); const err = new Error(raw.replace(/.*panicked: ?/, '').replace(/["\\}]+$/g, '').slice(0, 160)); err.raw = raw; throw err; }
         return r?.transaction?.hash || null;
@@ -166,7 +198,7 @@ const Backend = (() => {
         catch (e2) { if (/NotEnoughBalance|LackBalanceForState|not have enough balance/i.test(`${e2 && e2.raw || ''} ${e2 && e2.message || e2}`)) throw new Error('GAS_LOW:again'); throw e2; }
       }
     },
-    /** Start or resume today: the event is committed before you can act. */
+    /** Start or resume today: the event (and the agents' sealed calls) are committed before you can act. */
     async beginDay() {
       if (mode !== 'local') return api('/api/day', { accountId: me.accountId });
       const p = local.engine.get_player(me.accountId);
@@ -179,16 +211,23 @@ const Backend = (() => {
         if (r.lying) moves.push({ npc: 'rita.local', good: Rules.EVENTS[r.ev].fx[0][0], long: false });
         local.plan.agents = Rules.agentMoves(Math.random, d.truth, d.rumors, d.kaito);
         for (const [id, m] of Object.entries(local.plan.agents)) moves.push({ npc: id + '.local', good: m.good, long: m.long });
-        local.engine.commit_day('operator', { player: me.accountId, day: p.day, commitment: Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join(''), npc_moves: moves });
+        local.plan.moves = moves;
+        local.engine.commit_day('operator', { player: me.accountId, day: p.day, commitment: Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join('') });
       }
       const lp = local.plan;
-      return { season: p.season, day: p.day, rumors: lp.rumors, weather: lp.weather || null, kaito: lp.kaito, agents: lp.agents, stormWarning: p.projects[1] ? lp.truth === 0 : null };
+      return { season: p.season, day: p.day, rumors: lp.rumors, weather: lp.weather || null, ...localCalls(p), stormWarning: p.projects[1] ? lp.truth === 0 : null };
+    },
+    /** Today's agent calls: sealed unless you peeked (paid on chain). */
+    async calls() {
+      if (mode !== 'local') return api('/api/calls', { accountId: me.accountId });
+      const p = local.engine.get_player(me.accountId);
+      return p.commitment && local.plan ? localCalls(p) : { calls: [], kaito: null, agents: {} };
     },
     /** Reveal the night's event and settle. */
     async settle(day) {
       if (mode !== 'local') return api('/api/settle', { accountId: me.accountId, day });
       const p = local.engine.get_player(me.accountId);
-      const log = local.engine.settle_day('operator', { player: me.accountId, day: p.day, event: local.plan.truth, rumors: Rules.encodeRumors(local.plan.rumors), salt: '' });
+      const log = local.engine.settle_day('operator', { player: me.accountId, day: p.day, event: local.plan.truth, rumors: Rules.encodeRumors(local.plan.rumors), salt: '', npc_moves: local.plan.moves || [] });
       return { log };
     },
   };

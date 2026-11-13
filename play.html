@@ -169,6 +169,20 @@ body.cineOn #hudL,body.cineOn #objBox,body.cineOn #topR,body.cineOn #menu,body.c
 .sStats{display:flex;justify-content:space-between;margin:.4em 0}.sStats i{font-style:normal}.cy{color:#8fe0ff}
 .sPow{color:var(--gold)}.sBtns{display:flex;flex-wrap:wrap;gap:.3em;margin-top:.5em;align-items:center}.sBtns .btn{font-size:.75em;padding:.35em .5em}
 .sNft{font-size:.55em;color:var(--mut);margin-top:.4em}
+.wTodo{display:flex;flex-direction:column;gap:.45em;line-height:1.5}.wTodo>div{display:flex;gap:.6em;align-items:flex-start;background:#2a2346;border-radius:8px;padding:.4em .6em}.wTodo>div>span{flex:none;width:1.4em;text-align:center}.wTodo .wDone{opacity:.6}
+.xpBar{height:.45em;background:#2a2346;border-radius:4px;overflow:hidden;margin:.25em 0 .1em}.xpBar i{display:block;height:100%;background:linear-gradient(90deg,#8ee68a,#ffd86b)}
+.cTips{display:grid;grid-template-columns:1fr 1fr;gap:.5em;margin:.5em 0 .8em}@media (max-width:760px){.cTips{grid-template-columns:1fr}}.cTips>div{background:#2a2346;border-radius:8px;padding:.5em .7em;line-height:1.6}.cTips .btn{font-size:.7em;padding:.25em .45em;margin-left:.3em}
+.cGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:.5em}@media (max-width:760px){.cGrid{grid-template-columns:1fr}}
+.cSlot{display:flex;gap:.5em;align-items:flex-start;border:3px solid #4a3f78;border-radius:10px;padding:.5em;background:linear-gradient(160deg,#3b2a6b,#1c1630 70%);line-height:1.5;font-size:.85em}.cSlot.empty{border-style:dashed;align-items:center}
+.cSlot img{width:3.2em;height:3.2em;image-rendering:pixelated;flex:none}.cSlot .btn{font-size:.75em;padding:.2em .45em}.cRumor{margin-top:.6em;background:#2a2346;border-radius:8px;padding:.45em .7em;line-height:1.5;font-size:.9em}
+.cPick,.cGoods{display:flex;flex-wrap:wrap;gap:.35em;margin-top:.4em}.chipBtn{font:inherit;font-size:.75em;color:var(--txt,#fff3d6);background:#2a2346;border:2px solid #4a3f78;border-radius:8px;padding:.25em .5em;cursor:pointer;display:inline-flex;align-items:center;gap:.3em}
+.chipBtn.on{border-color:var(--gold);background:#4a3a18}.chipBtn img{width:1.4em;height:1.4em;image-rendering:pixelated}
+.hRow{display:flex;gap:.7em;align-items:center;background:#2a2346;border-radius:8px;padding:.4em .7em;margin:.35em 0;line-height:1.5}.hRow>img{width:2.8em;height:2.8em;image-rendering:pixelated}
+.hItems{display:flex;gap:.8em;align-items:center;flex-wrap:wrap;justify-content:flex-end}.hItems img{width:1.5em;height:1.5em;image-rendering:pixelated;vertical-align:middle}
+.bCols2{display:grid;grid-template-columns:1fr 1fr;gap:.8em;font-size:.88em}@media (max-width:760px){.bCols2{grid-template-columns:1fr}}.bH{margin-bottom:.35em}
+.bCall,.bBaron{display:flex;gap:.5em;align-items:center;background:#2a2346;border-radius:8px;padding:.35em .55em;margin-bottom:.35em;line-height:1.5}.bCall .btn{font-size:.75em;padding:.2em .45em;flex:none}
+.bFace{width:2.4em;height:2.4em;image-rendering:pixelated;border-radius:50%;background:#3a2f5f;flex:none}.bVs{height:.45em;background:#ff7a6e55;border-radius:4px;overflow:hidden;margin:.2em 0}.bVs i{display:block;height:100%;background:#8ee68a}
+.nMine{background:#2a2346;border:2px solid var(--gold);border-radius:8px;padding:.6em .8em;margin:.5em 0;line-height:1.6}.nRow{display:flex;justify-content:space-between;gap:.6em;background:#2a2346;border-radius:8px;padding:.4em .7em;margin-top:.35em;line-height:1.5}
 .bGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(6em,1fr));gap:.5em;margin-top:.6em}
 .bSlot{background:#2a2346;border-radius:8px;padding:.4em;text-align:center;border:2px solid #ffffff10}.bSlot.got{border-color:#ffd86b55}
 .bSlot img{width:3.6em;height:3.6em;image-rendering:pixelated}.bSlot i{display:block;height:2.4em;line-height:2.4em;font-size:1.5em;color:#5d5280;font-style:normal}
@@ -281,13 +295,13 @@ body.dlgOn #hotbar,body.dlgOn #chainlog{display:none}
   <div id="objBox" class="ui box"><span id="obj"></span></div>
   <div id="topR" class="ui">
     <button class="dk" id="sBtn" title="Spirits (B)"><img src="assets/spirits/f_Flam.png" alt=""><span>SPIRITS</span></button>
-    <button class="dk" id="iBtn" title="Island (I)"><img src="assets/spirits/f_Skull.png" alt=""><span>ISLAND</span><i class="dot" id="iDot"></i></button>
+    <button class="dk" id="iBtn" title="Bazaar Board (I)"><img src="assets/spirits/f_Skull.png" alt=""><span>BOARD</span><i class="dot" id="iDot"></i></button>
     <button class="dk" id="wBtn" title="Wallet"><img src="assets/items/GoldCoin.png" alt=""><span>WALLET</span></button>
     <button class="dk" id="mBtn" title="Menu (Tab)"><b>☰</b><span>MENU</span></button>
   </div>
   <div id="menu" class="ui">
     <button class="mT" data-m="spirits"><img src="assets/spirits/f_Flam.png" alt=""><b>SPIRITS</b><i>key B</i></button>
-    <button class="mT" data-m="island"><img src="assets/spirits/f_Skull.png" alt=""><b>ISLAND</b><i>key I</i></button>
+    <button class="mT" data-m="island"><img src="assets/spirits/f_Skull.png" alt=""><b>BOARD</b><i>key I</i></button>
     <button class="mT" data-m="wallet"><img src="assets/items/GoldCoin.png" alt=""><b>WALLET</b><i>&nbsp;</i></button>
     <button class="mT" data-m="quests"><img src="assets/spirits/f_LanternRed.png" alt=""><b>QUESTS</b><i>key Q</i></button>
     <button class="mT" id="pBtn"><img src="assets/spirits/f_Owl.png" alt=""><b>PROFILE</b><i>key P</i></button>
@@ -343,5 +357,6 @@ body.dlgOn #hotbar,body.dlgOn #chainlog{display:none}
 <script src="quests.js"></script>
 <script src="duel.js"></script>
 <script src="island.js"></script>
+<script src="bazaar.js"></script>
 <script src="wallet.js"></script>
 <script src="story.js"></script>
