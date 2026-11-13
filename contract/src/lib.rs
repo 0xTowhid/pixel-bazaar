@@ -208,11 +208,48 @@ pub fn crew_work(el: u8, lv: u32, rar: u32, shiny: bool, event: u8, r: u8, r2: u
         _ => (vec![], sh(10 + 2 * lv + r % 20) as u64, false, false, note), // DARK: prowls the docks at night
     }
 }
+// ---------------- v8: the player market, season omens, rising debt, island goals ----------------
+pub const MARKET_FEE: u64 = 5;          // percent of every sale, burned
+pub const LISTINGS_MAX: usize = 150;    // open listings on the whole island
+pub const LISTINGS_EACH: usize = 4;     // open listings per player
+pub const PRICE_MAX: u64 = 100_000;     // coins
+/// The debt grows each season: 3,000, 3,500, 4,000 ... up to 6,000.
+pub fn debt_for(season: u32) -> u64 { (3000 + 500 * (season.saturating_sub(1) as u64).min(6)) * 100 }
+/// Omens: from season 2 you pick one of three at the start of the season. It lasts the whole season.
+/// 0 Golden Soil (+1 crop per harvest), 1 Full Nets (fish bite more), 2 Spirit Moon (catch more),
+/// 3 Light Pick (mining costs 5 energy, not 8), 4 Merchant's Luck (selling pays 5% more), 5 Harbor Tide (+15 coins every night).
+pub const OMENS: [&str; 6] = ["Golden Soil", "Full Nets", "Spirit Moon", "Light Pick", "Merchant's Luck", "Harbor Tide"];
+pub fn omen_offer(who: &AccountId, season: u32) -> Vec<u8> {
+    if season < 2 { return vec![]; }
+    let h = env::sha256(format!("{who}|{season}|omen").as_bytes());
+    let mut v: Vec<u8> = vec![]; let mut i = 0;
+    while v.len() < 3 { let k = h[i % 32] % OMENS.len() as u8; if !v.contains(&k) { v.push(k); } i += 1; if i > 64 { break; } }
+    v
+}
+/// Island goals: one shared goal a week for every player. (what counts, goal per 25 players, your part to share the reward)
+/// 0 crops harvested, 1 fish caught, 2 spirits caught, 3 goods sold.
+pub const GOALS: [(&str, u64, u32); 4] = [("Harvest crops", 400, 8), ("Catch fish", 200, 5), ("Catch spirits", 60, 2), ("Sell goods", 600, 10)];
+pub const GOAL_REWARD: u64 = 80;        // coins for everyone who did their part, once the island reaches the goal
+pub const WEEK_MS: u64 = 7 * 86_400_000;
 pub const NFT_BASE: &str = "https://raw.githubusercontent.com/0xTowhid/pixel-bazaar/main/nft";
 
 #[derive(BorshStorageKey)]
 #[near]
-enum Key { Players, Balances, Supply, Npcs, Tokens, Owners, ByOwner, Links, Notes, Feed, Boss, Calls }
+enum Key { Players, Balances, Supply, Npcs, Tokens, Owners, ByOwner, Links, Notes, Feed, Boss, Calls, Market, Goal }
+
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct Listing { pub id: u32, pub seller: AccountId, pub token: String, pub price: u64, pub at: u64 }
+#[near(serializers = [json])]
+pub struct ListingView { pub id: u32, pub seller: AccountId, pub token: String, pub price: u64, pub at: u64, pub item: Option<Tok> }
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct Goal { pub week: u64, pub kind: u8, pub target: u64, pub progress: u64, pub helpers: u32 }
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct Goals { pub now: Goal, pub last: Option<Goal> }
+#[near(serializers = [json])]
+pub struct Stats { pub players: u32, pub listings: u32, pub burned: U128, pub sales: u32 }
 
 #[near(serializers = [borsh, json])]
 #[derive(Clone)]
@@ -282,6 +319,9 @@ pub struct Player {
     pub crew: Vec<String>, pub fed: Vec<String>, pub peeked: u8, pub npc_right: Vec<u16>, pub npc_total: Vec<u16>,
     pub call: Option<Call>, pub call_right: u16, pub call_total: u16,
     pub stall_score: Vec<i64>, pub baron_score: Vec<i64>, pub baron_lv: Vec<u8>, pub stall_last: Vec<i8>,
+    // v8: this season's debt, the omen, coins from market sales made while your season was over, your part of the island goal
+    pub debt: u64, pub omen: Option<u8>, pub omen_offer: Vec<u8>, pub market_due: u64,
+    pub goal_week: u64, pub goal_part: u32, pub goal_claimed: u64,
 }
 #[near(serializers = [borsh, json])]
 #[derive(Clone)]
@@ -339,6 +379,8 @@ pub enum Action {
     Forage { world: u8 },
     // up to three spirits work while you sleep; pay to see an agent's sealed call; make your own call
     SetCrew { tokens: Vec<String> }, Peek { agent: u8 }, PostCall { good: u8, long: bool },
+    // v8: the player market (spirits and legendary fish, for coins), the season's omen, the island goal
+    List { token: String, price: u64 }, Unlist { id: u32 }, Buy { id: u32 }, PickOmen { omen: u8 }, ClaimGoal,
 }
 
 #[near(serializers = [borsh, json])]
@@ -362,6 +404,7 @@ pub struct Contract {
     // kept in their own storage slots, so a normal move does not load them
     notes: Lazy<Vec<Note>>, next_note: u32, feed: Lazy<Vec<FeedItem>>, boss: Lazy<Option<Boss>>, boss_window: u64,
     calls: Lazy<Vec<CallPost>>,
+    market: Lazy<Vec<Listing>>, next_listing: u32, burned: u128, sales: u32, player_count: u32, goals: Lazy<Option<Goals>>,
 }
 
 fn new_player(season: u32) -> Player {
@@ -384,6 +427,7 @@ fn new_player(season: u32) -> Player {
         crew: vec![], fed: vec![], peeked: 0, npc_right: vec![0; AGENTS.len()], npc_total: vec![0; AGENTS.len()],
         call: None, call_right: 0, call_total: 0,
         stall_score: vec![0; AGENTS.len()], baron_score: vec![0; AGENTS.len()], baron_lv: vec![0; AGENTS.len()], stall_last: vec![0; AGENTS.len()],
+        debt: debt_for(season), omen: None, omen_offer: vec![], market_due: 0, goal_week: u64::MAX, goal_part: 0, goal_claimed: u64::MAX,
     }
 }
 /// Commitment string the operator hashes on day start and reveals at settlement. `moves` is encode_moves() of the
@@ -401,6 +445,7 @@ pub fn settle(p: &Position, price: u64) -> i64 {
 /// A roll for mining, fishing and the cat, fixed by the day's commitment: resubmitting a reverted transaction gives
 /// the same result, so a script cannot retry until it gets lucky.
 fn roll(commitment: &str, who: &AccountId, what: &str, n: u32) -> u8 { env::sha256(format!("{commitment}|{who}|{what}|{n}").as_bytes())[0] }
+fn fmt_coins(cents: u64) -> String { let c = cents / 100; if c >= 1000 { format!("{},{:03}", c / 1000, c % 1000) } else { c.to_string() } }
 fn ripe(pl: &Plot) -> bool { pl.crop.map(|c| pl.grown >= CROPS[c as usize].1).unwrap_or(false) }
 
 #[near]
@@ -410,7 +455,8 @@ impl Contract {
         Self { operator, players: LookupMap::new(Key::Players), balances: LookupMap::new(Key::Balances), supply: LookupMap::new(Key::Supply), npcs: IterableMap::new(Key::Npcs), leaderboard: vec![],
             tokens: LookupMap::new(Key::Tokens), owners: LookupMap::new(Key::Owners), by_owner: LookupMap::new(Key::ByOwner), links: LookupMap::new(Key::Links), next_token: 0,
             notes: Lazy::new(Key::Notes, vec![]), next_note: 0, feed: Lazy::new(Key::Feed, vec![]), boss: Lazy::new(Key::Boss, None), boss_window: u64::MAX,
-            calls: Lazy::new(Key::Calls, vec![]) }
+            calls: Lazy::new(Key::Calls, vec![]),
+            market: Lazy::new(Key::Market, vec![]), next_listing: 0, burned: 0, sales: 0, player_count: 0, goals: Lazy::new(Key::Goal, None) }
     }
     fn assert_operator(&self) { require!(env::predecessor_account_id() == self.operator, "operator only"); }
 
@@ -430,7 +476,7 @@ impl Contract {
     #[private]
     pub fn on_register(&mut self, id: AccountId, #[callback_result] created: Result<(), PromiseError>) -> bool {
         let ok = created.is_ok();
-        if ok { self.players.insert(id.clone(), new_player(1)); log!("player {} joined", id); }
+        if ok { self.players.insert(id.clone(), new_player(1)); self.player_count += 1; log!("player {} joined", id); }
         ok
     }
     #[payable]
@@ -455,6 +501,8 @@ impl Contract {
         p.lead = old.lead; p.wallet = old.wallet; p.book = old.book; p.shards = old.shards; p.clues = old.clues; p.chapter = old.chapter; p.boss_wins = old.boss_wins; p.duel_wins = old.duel_wins; p.legends = old.legends; p.rep = old.rep; p.voted = old.voted; p.charms = old.charms; p.boss_seen = old.boss_seen; p.boss_hits = old.boss_hits; p.boss_claimed = old.boss_claimed;
         p.crew = old.crew; p.npc_right = old.npc_right; p.npc_total = old.npc_total; p.call_right = old.call_right; p.call_total = old.call_total;
         p.baron_lv = old.baron_lv; p.stall_last = old.stall_last;
+        p.coins += old.market_due; p.omen_offer = omen_offer(&id, p.season);
+        p.goal_week = old.goal_week; p.goal_part = old.goal_part; p.goal_claimed = old.goal_claimed;
         self.players.insert(id, p);
     }
 
@@ -508,6 +556,8 @@ impl Contract {
         let mut badges: Vec<&str> = vec![];
         let lead_el = self.lead_element(&id, &p);
         let fate = |p: &Player, kind: usize, v: u8| p.fate_day == p.day && p.fate.len() == 3 && p.fate[kind] == v;
+        let omen = p.omen;
+        let mut goal_n = [0u64; 4]; // this move's part of the island goal: crops, fish, spirits, goods sold
         if let Some(h) = p.hex.take() { // someone cursed you: it lands now
             match h.kind { 0 => p.energy = p.energy.saturating_sub(15), 1 => p.coins = p.coins.saturating_sub(30 * 100), _ => {} }
             p.last_hex = Some(h);
@@ -533,14 +583,15 @@ impl Contract {
                     let pl = p.plots.get(plot as usize).cloned().unwrap_or_else(|| env::panic_str("no such plot"));
                     require!(ripe(&pl), "not ripe yet");
                     let (good, days, _, yld, regrow, _) = CROPS[pl.crop.unwrap() as usize];
-                    self.barn_add(&id, good, yld);
+                    let yld = yld + if omen == Some(0) { 1 } else { 0 }; // Golden Soil
+                    self.barn_add(&id, good, yld); goal_n[0] += yld as u64;
                     p.plots[plot as usize] = if regrow > 0 { Plot { crop: pl.crop, grown: days - regrow, watered_day: pl.watered_day } } else { Plot::default() };
                     p.harvested += yld; p.daily[2] = p.daily[2].saturating_add(yld as u8);
                     if p.harvested == yld { badges.push("first_harvest"); }
                     if p.harvested >= 50 && p.harvested - yld < 50 { badges.push("green_thumb"); }
                 }
                 Action::Mine { rock } => {
-                    let cost = if fate(&p, 1, 2) { 12 } else { 8 }; use_energy(&mut p, cost); // Heavy Boots
+                    let cost = if omen == Some(3) { 5 } else { 8 } + if fate(&p, 1, 2) { 4 } else { 0 }; use_energy(&mut p, cost); // Light Pick, Heavy Boots
                     p.daily[3] = p.daily[3].saturating_add(1);
                     require!(rock < ROCKS, "no such rock");
                     if p.mined_day != p.day { p.mined_day = p.day; p.mined = 0; }
@@ -559,10 +610,10 @@ impl Contract {
                     let r = roll(&commit, &id, "fish", p.catches_today as u32);
                     p.catches_today += 1;
                     // the mini-game must be won, and then the catch is still decided on chain (7 in 10)
-                    let bite = (if lead_el == Some(WATER) { 210i32 } else { 179 } + if fate(&p, 0, 0) { 40 } else { 0 } - if fate(&p, 1, 4) { 30 } else { 0 }).clamp(0, 255) as u8; // water spirit, The River, Butterfingers
+                    let bite = (if lead_el == Some(WATER) { 210i32 } else { 179 } + if fate(&p, 0, 0) { 40 } else { 0 } - if fate(&p, 1, 4) { 30 } else { 0 } + if omen == Some(1) { 30 } else { 0 }).clamp(0, 255) as u8; // water spirit, The River, Butterfingers
                     if ok && r < bite {
                         let n = if p.projects[0] { 2 } else { 1 };
-                        self.barn_add(&id, 1, n); p.fish_caught += n; p.daily[1] = p.daily[1].saturating_add(n as u8);
+                        self.barn_add(&id, 1, n); p.fish_caught += n; goal_n[1] += n as u64; p.daily[1] = p.daily[1].saturating_add(n as u8);
                         if p.fish_caught >= 10 && p.fish_caught - n < 10 { badges.push("angler"); }
                         // a legend on the line? the first one in season you don't have yet
                         let season = [lead_el == Some(FIRE), lead_el == Some(WATER) && p.day >= 5, fate(&p, 0, 0), p.chapter >= 5, p.legends & 0b1111 == 0b1111];
@@ -589,7 +640,8 @@ impl Contract {
                     self.burn(GOODS[g], &id, qty as u128); p.sold += qty;
                     let stall = AGENTS.iter().position(|a| a.1 == g);
                     let held = stall.map(|k| self.stall_token(&id, k as u8).is_some()).unwrap_or(false);
-                    let bonus = if g == 0 && p.projects[2] { 115 } else { 100 } + if held { 10 } else { 0 }; // your own stall pays 10% more
+                    let bonus = if g == 0 && p.projects[2] { 115 } else { 100 } + if held { 10 } else { 0 } + if omen == Some(4) { 5 } else { 0 }; // your own stall pays 10% more, Merchant's Luck 5%
+                    goal_n[3] += qty as u64;
                     let mut got = 0u64;
                     for _ in 0..qty {
                         let v = p.prices[g] / 10 * bonus / 100; p.coins += v; got += v; // milli-coins -> cents
@@ -649,11 +701,11 @@ impl Contract {
                 Action::Catch { ok } => {
                     let w = p.wild.take().unwrap_or_else(|| env::panic_str("there is no spirit here"));
                     let sp = SPECIES[w.species as usize];
-                    let mut chance = CATCH_CHANCE[sp.3 as usize] + if fate(&p, 0, 2) { 26 } else { 0 }; // The Lantern
+                    let mut chance = CATCH_CHANCE[sp.3 as usize] + if fate(&p, 0, 2) { 26 } else { 0 } + if omen == Some(2) { 26 } else { 0 }; // The Lantern, Spirit Moon
                     if fate(&p, 1, 3) { chance = chance.saturating_sub(20); } // The Fog
                     if lead_el == Some(sp.2) { chance += 38; } // a spirit of the same element calms it
                     if ok && (roll(&commit, &id, "catch", p.enc_today as u32) as u16) < chance {
-                        self.mint_spirit(&id, w.species, w.shiny); p.daily[0] = p.daily[0].saturating_add(1);
+                        self.mint_spirit(&id, w.species, w.shiny); p.daily[0] = p.daily[0].saturating_add(1); goal_n[2] += 1;
                         p.book |= 1u64 << w.species;
                         let caught = p.book.count_ones();
                         if caught == 1 { badges.push("first_spirit"); }
@@ -860,6 +912,51 @@ impl Contract {
                     self.calls.push(CallPost { who: id.clone(), season: p.season, day: p.day, good, long, at: env::block_timestamp_ms(), right: None });
                     if self.calls.len() > CALLS_KEPT { (*self.calls).remove(0); }
                 }
+                Action::List { token, price } => {
+                    require!(self.owners.get(&token) == Some(&id), "not yours");
+                    require!(matches!(self.tokens.get(&token), Some(Tok::Spirit { .. }) | Some(Tok::Fish { .. })), "only spirits and legendary fish can be listed");
+                    require!(price >= 1 && price <= PRICE_MAX, "price is 1 to 100,000 coins");
+                    require!(self.market.len() < LISTINGS_MAX, "the market is full, try later");
+                    require!(self.market.iter().filter(|l| l.seller == id).count() < LISTINGS_EACH, "4 listings at a time");
+                    if p.lead.as_deref() == Some(token.as_str()) { p.lead = None; }
+                    p.crew.retain(|t| *t != token);
+                    let me = env::current_account_id();
+                    self.move_token(&token, &id, &me, Some("listed on the bazaar market"));
+                    self.next_listing += 1;
+                    self.market.push(Listing { id: self.next_listing, seller: id.clone(), token, price, at: env::block_timestamp_ms() });
+                }
+                Action::Unlist { id: lid } => {
+                    let i = self.market.iter().position(|l| l.id == lid && l.seller == id).unwrap_or_else(|| env::panic_str("no such listing of yours"));
+                    let l = (*self.market).remove(i);
+                    let me = env::current_account_id();
+                    self.move_token(&l.token, &me, &id, Some("taken off the market"));
+                }
+                Action::Buy { id: lid } => {
+                    let i = self.market.iter().position(|l| l.id == lid).unwrap_or_else(|| env::panic_str("that was already sold"));
+                    let l = self.market[i].clone();
+                    require!(l.seller != id, "that is your own listing");
+                    let cost = l.price * 100; require!(p.coins >= cost, "not enough coins");
+                    p.coins -= cost;
+                    let fee = cost * MARKET_FEE / 100; self.burned += fee as u128; self.sales += 1;
+                    if let Some(s) = self.players.get_mut(&l.seller) { if s.finished { s.market_due += cost - fee; } else { s.coins += cost - fee; } }
+                    (*self.market).remove(i);
+                    let me = env::current_account_id();
+                    self.move_token(&l.token, &me, &id, Some("bought on the bazaar market"));
+                    let what = match self.tokens.get(&l.token) { Some(Tok::Spirit { species, .. }) => SPECIES[*species as usize].1.to_string(), Some(Tok::Fish { kind }) => LEGENDS[*kind as usize].0.to_string(), _ => "an item".into() };
+                    self.post(&id, format!("bought a {what} from {} for {} coins", l.seller, l.price));
+                }
+                Action::PickOmen { omen: k } => {
+                    require!(p.omen.is_none(), "this season's omen is already chosen");
+                    require!(p.omen_offer.contains(&k), "that omen was not in your cards");
+                    p.omen = Some(k);
+                }
+                Action::ClaimGoal => {
+                    let g = self.goals_now();
+                    let done = |x: &Goal| x.progress >= x.target && x.week == p.goal_week && p.goal_part >= GOALS[x.kind as usize].2 && p.goal_claimed != x.week;
+                    let ok = done(&g.now) || g.last.as_ref().map(|x| done(x)).unwrap_or(false);
+                    require!(ok, "nothing to claim from the island goal");
+                    p.goal_claimed = p.goal_week; p.coins += GOAL_REWARD * 100;
+                }
                 Action::SendTo { token, to } => { // the in-game wallet: send a spirit, badge or fish to any NEAR account
                     require!(to != id, "that is you");
                     require!(self.owners.get(&token) == Some(&id), "not yours");
@@ -868,6 +965,7 @@ impl Contract {
                 }
             }
         }
+        if goal_n.iter().any(|&n| n > 0) { self.goal_add(&id, &mut p, goal_n); }
         for b in badges { self.badge(b, &id); }
         self.players.insert(id, p);
     }
@@ -883,13 +981,14 @@ impl Contract {
     pub fn pay_debt(&mut self) {
         let id = env::predecessor_account_id();
         let p = self.player_mut(&id);
-        require!(!p.finished && p.coins >= DEBT, "not enough coins");
-        p.coins -= DEBT; p.finished = true; p.won = true; p.seasons_won += 1; p.best_score = p.best_score.max(p.coins + DEBT);
-        let (season, coins, day, beat) = (p.season, p.coins, p.day, (p.coins + DEBT) as i64 - p.start_coins as i64 > p.kaito_pnl);
-        self.badge("debt_free", &id); self.post(&id, format!("paid off the 3,000 coin debt on day {day}"));
+        let debt = p.debt;
+        require!(!p.finished && p.coins >= debt, "not enough coins");
+        p.coins -= debt; p.finished = true; p.won = true; p.seasons_won += 1; p.best_score = p.best_score.max(p.coins + debt);
+        let (season, coins, day, beat) = (p.season, p.coins, p.day, (p.coins + debt) as i64 - p.start_coins as i64 > p.kaito_pnl);
+        self.badge("debt_free", &id); self.post(&id, format!("paid off the {} coin debt on day {day}", fmt_coins(debt)));
         if day <= 6 { self.badge("early_bird", &id); }
         if beat { self.badge("beat_kaito", &id); }
-        self.rank(Entry { account: id.clone(), season, score: coins + DEBT, day, won: true });
+        self.rank(Entry { account: id.clone(), season, score: coins + debt, day, won: true });
         let mut p = self.players.get(&id).cloned().unwrap();
         for b in self.resolve_stalls(&id, &mut p) { self.badge(b, &id); }
         self.players.insert(id, p);
@@ -1001,15 +1100,17 @@ impl Contract {
         // rent from the stalls you hold
         let mut rent = 0u64;
         for k in 0..AGENTS.len() { if let Some(t) = self.stall_token(&player, k as u8) { if let Some(Tok::Stall { level, .. }) = self.tokens.get(&t) { rent += (STALL_RENT + 5 * *level as u64) * 100; } } }
+        if p.omen == Some(5) { rent += 15 * 100; } // Harbor Tide
         p.coins += rent;
         p.prices = prices.clone(); p.commitment = None; p.npc_moves = vec![]; p.asleep = false; p.passed_out = false;
         p.energy = ENERGY_MAX; p.catches_today = 0; p.votes_today = 0; p.enc_today = 0; p.fed_today = 0; p.wild = None;
         p.daily = vec![0; 7]; p.quests_claimed = 0; p.fed = vec![]; p.peeked = 0;
         if let Some(t) = p.lead.clone() { if self.owners.get(&t) == Some(&player) { self.add_xp(&t, 10); } } // your companion grows with you
         if day >= SEASON_DAYS {
-            p.finished = true; p.won = p.coins >= DEBT;
-            if p.won { p.coins -= DEBT; badges.push("debt_free"); }
-            let score = if p.won { p.coins + DEBT } else { p.coins };
+            let debt = p.debt;
+            p.finished = true; p.won = p.coins >= debt;
+            if p.won { p.coins -= debt; badges.push("debt_free"); }
+            let score = if p.won { p.coins + debt } else { p.coins };
             if p.won { p.seasons_won += 1; }
             p.best_score = p.best_score.max(score);
             if score as i64 - p.start_coins as i64 > p.kaito_pnl { badges.push("beat_kaito"); }
@@ -1213,6 +1314,13 @@ impl Contract {
     }
     pub fn get_npcs(&self) -> Vec<(AccountId, i64)> { self.npcs.iter().map(|(a, c)| (a.clone(), *c)).collect() }
     pub fn get_operator(&self) -> AccountId { self.operator.clone() }
+    /// Everything for sale on the player market, newest last.
+    pub fn get_market(&self) -> Vec<ListingView> {
+        self.market.iter().map(|l| ListingView { id: l.id, seller: l.seller.clone(), token: l.token.clone(), price: l.price, at: l.at, item: self.tokens.get(&l.token).cloned() }).collect()
+    }
+    /// This week's island goal (and last week's, which can still be claimed).
+    pub fn get_goal(&self) -> Goals { self.goals_now() }
+    pub fn get_stats(&self) -> Stats { Stats { players: self.player_count, listings: self.market.len() as u32, burned: U128(self.burned), sales: self.sales } }
 }
 
 
@@ -1233,6 +1341,31 @@ impl Contract {
         if let Some(p) = self.players.get_mut(from) { if p.lead.as_deref() == Some(tid) { p.lead = None; } }
         log!(r#"EVENT_JSON:{{"standard":"nep171","version":"1.2.0","event":"nft_transfer","data":[{{"old_owner_id":"{}","new_owner_id":"{}","token_ids":["{}"]{}}}]}}"#,
             from, to, tid, memo.map(|m| format!(r#","memo":"{}""#, m.replace(['"', '\\'], "'"))).unwrap_or_default());
+    }
+    /// The island goal for this week, rolling over to a new one each week (last week's stays claimable for a week).
+    fn goals_now(&self) -> Goals {
+        let week = env::block_timestamp_ms() / WEEK_MS;
+        let fresh = |w: u64, players: u32| { let kind = env::sha256(format!("pixel-bazaar|goal|{w}").as_bytes())[0] % GOALS.len() as u8;
+            Goal { week: w, kind, target: GOALS[kind as usize].1 * (1 + players as u64 / 25), progress: 0, helpers: 0 } };
+        match &*self.goals {
+            Some(g) if g.now.week == week => g.clone(),
+            Some(g) => Goals { now: fresh(week, self.player_count), last: if g.now.week + 1 == week { Some(g.now.clone()) } else { None } },
+            None => Goals { now: fresh(week, self.player_count), last: None },
+        }
+    }
+    fn goal_add(&mut self, _id: &AccountId, p: &mut Player, n: [u64; 4]) {
+        let mut g = self.goals_now();
+        let add = n[g.now.kind as usize]; if add == 0 { *self.goals = Some(g); return; }
+        if p.goal_week != g.now.week {
+            // last week's reward, if you earned it and forgot to claim
+            if let Some(l) = &g.last { if l.week == p.goal_week && l.progress >= l.target && p.goal_part >= GOALS[l.kind as usize].2 && p.goal_claimed != l.week { p.coins += GOAL_REWARD * 100; p.goal_claimed = l.week; } }
+            p.goal_week = g.now.week; p.goal_part = 0; g.now.helpers += 1;
+        }
+        let before = g.now.progress;
+        p.goal_part = p.goal_part.saturating_add(add as u32); g.now.progress += add;
+        let reached = before < g.now.target && g.now.progress >= g.now.target;
+        *self.goals = Some(g.clone());
+        if reached { let me = env::current_account_id(); self.post(&me, format!("THE ISLAND DID IT! Goal reached: {}. Everyone who helped, claim {} coins on the Board.", GOALS[g.now.kind as usize].0, GOAL_REWARD)); }
     }
     fn post(&mut self, who: &AccountId, text: String) {
         self.feed.push(FeedItem { at: env::block_timestamp_ms(), who: who.clone(), text });
@@ -2034,4 +2167,113 @@ mod tests {
         assert_eq!(c.get_player(pl()).unwrap().stall_score[0], after_sell + log.results[0].pnl);
     }
 
+
+    // ---------------- v8 ----------------
+    fn second() -> AccountId { accounts(2) }
+    fn as_second(c: &mut Contract) { c.players.insert(second(), new_player(1)); let h = hex::encode(env::sha256(commit_preimage(&second(), 1, 1, 2, "r", "s", "").as_bytes())); ctx(op()); c.commit_day(second(), 1, h); ctx(second()); }
+    fn a_spirit(c: &mut Contract, who: &AccountId) -> String { c.mint_spirit(who, 0, false) }
+    #[test]
+    fn market_list_buy_burns_five_percent_and_pays_the_seller() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        let t = a_spirit(&mut c, &pl()); c.act(vec![Action::SetLead { token: t.clone() }, Action::SetCrew { tokens: vec![t.clone()] }]);
+        c.act(vec![Action::List { token: t.clone(), price: 200 }]);
+        let p = c.get_player(pl()).unwrap(); assert!(p.lead.is_none() && p.crew.is_empty(), "a listed spirit leaves your side");
+        assert_eq!(c.owners.get(&t).unwrap().as_str(), "bazaar.testnet", "the market holds it");
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::SetLead { token: t.clone() }]))).is_err());
+        let seller_before = c.get_player(pl()).unwrap().coins;
+        as_second(&mut c); c.players.get_mut(&second()).unwrap().coins = 500 * 100;
+        let id = c.get_market()[0].id;
+        c.act(vec![Action::Buy { id }]);
+        assert_eq!(c.owners.get(&t), Some(&second()));
+        assert_eq!(c.get_player(second()).unwrap().coins, 300 * 100);
+        assert_eq!(c.get_player(pl()).unwrap().coins, seller_before + 190 * 100, "95% to the seller");
+        assert_eq!(c.get_stats().burned.0, 10 * 100); assert_eq!(c.get_stats().sales, 1);
+        assert!(c.get_market().is_empty());
+    }
+    #[test]
+    fn market_rules() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        let t = a_spirit(&mut c, &pl());
+        c.act(vec![Action::List { token: t.clone(), price: 50 }]);
+        let id = c.get_market()[0].id;
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::Buy { id }]))).is_err(), "not your own");
+        c.act(vec![Action::Unlist { id }]); assert_eq!(c.owners.get(&t), Some(&pl()));
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::List { token: t.clone(), price: 0 }]))).is_err(), "price 0");
+        c.badge("first_spirit", &pl());
+        let b = c.by_owner.get(&pl()).unwrap().iter().find(|x| x.starts_with('b')).cloned().unwrap();
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::List { token: b.clone(), price: 5 }]))).is_err(), "badges stay yours");
+        for _ in 0..4 { let x = a_spirit(&mut c, &pl()); c.act(vec![Action::List { token: x, price: 5 }]); }
+        let x = a_spirit(&mut c, &pl());
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::List { token: x.clone(), price: 5 }]))).is_err(), "4 at a time");
+        as_second(&mut c);
+        let id = c.get_market()[0].id;
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::Buy { id }]))).is_ok());
+        let id = c.get_market()[0].id; c.players.get_mut(&second()).unwrap().coins = 0;
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::Buy { id }]))).is_err(), "no coins");
+    }
+    #[test]
+    fn a_sale_after_your_season_ended_waits_for_the_next_season() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        let t = a_spirit(&mut c, &pl()); c.act(vec![Action::List { token: t, price: 100 }]);
+        c.players.get_mut(&pl()).unwrap().finished = true;
+        as_second(&mut c); let id = c.get_market()[0].id; c.act(vec![Action::Buy { id }]);
+        assert_eq!(c.get_player(pl()).unwrap().market_due, 95 * 100);
+        ctx(pl()); c.start_season();
+        assert_eq!(c.get_player(pl()).unwrap().coins, START_COINS + 95 * 100);
+    }
+    #[test]
+    fn debt_rises_each_season_and_omens_start_in_season_two() {
+        assert_eq!(debt_for(1), 300_000); assert_eq!(debt_for(2), 350_000); assert_eq!(debt_for(20), 600_000);
+        let mut c = setup(); assert!(c.get_player(pl()).unwrap().omen_offer.is_empty());
+        finish_season(&mut c, true); c.start_season();
+        let p = c.get_player(pl()).unwrap(); assert_eq!(p.debt, 350_000); assert_eq!(p.omen_offer.len(), 3);
+        let not = (0..6u8).find(|k| !p.omen_offer.contains(k)).unwrap();
+        commit(&mut c, 1, 2, "s");
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::PickOmen { omen: not }]))).is_err());
+        c.act(vec![Action::PickOmen { omen: p.omen_offer[0] }]);
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::PickOmen { omen: p.omen_offer[1] }]))).is_err(), "one per season");
+        // paying needs the new debt
+        c.players.get_mut(&pl()).unwrap().coins = DEBT; assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.pay_debt())).is_err());
+        c.players.get_mut(&pl()).unwrap().coins = 350_000; c.pay_debt(); assert!(c.get_player(pl()).unwrap().won);
+    }
+    #[test]
+    fn omens_change_the_rules() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        c.players.get_mut(&pl()).unwrap().omen = Some(3); c.act(vec![Action::Mine { rock: 0 }]);
+        assert_eq!(c.get_player(pl()).unwrap().energy, ENERGY_MAX - 5, "Light Pick");
+        c.players.get_mut(&pl()).unwrap().omen = Some(0);
+        c.players.get_mut(&pl()).unwrap().plots[0] = Plot { crop: Some(0), grown: 2, watered_day: 0 };
+        let before = c.bal("carrot", &pl()); c.act(vec![Action::Harvest { plot: 0 }]);
+        assert_eq!(c.bal("carrot", &pl()) - before, 3, "Golden Soil: 2 + 1");
+        c.players.get_mut(&pl()).unwrap().omen = Some(5); let coins = c.get_player(pl()).unwrap().coins;
+        let l = night(&mut c, 1, 2); assert_eq!(l.rent, 15 * 100); assert_eq!(c.get_player(pl()).unwrap().coins, coins + 15 * 100);
+    }
+    #[test]
+    fn the_island_goal() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        let g = c.get_goal().now; let kind = g.kind;
+        // do the goal's thing enough times
+        let p = c.players.get_mut(&pl()).unwrap(); p.coins = 10_000 * 100;
+        let need = g.target;
+        let n0 = [0u64; 4];
+        let mut n = n0; n[kind as usize] = need;
+        let mut pp = c.get_player(pl()).unwrap(); c.goal_add(&pl(), &mut pp, n); c.players.insert(pl(), pp);
+        let g = c.get_goal().now; assert!(g.progress >= g.target); assert_eq!(g.helpers, 1);
+        let coins = c.get_player(pl()).unwrap().coins;
+        c.act(vec![Action::ClaimGoal]); assert_eq!(c.get_player(pl()).unwrap().coins, coins + GOAL_REWARD * 100);
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::ClaimGoal]))).is_err(), "once");
+        as_second(&mut c);
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::ClaimGoal]))).is_err(), "did not help");
+        assert!(c.get_feed().iter().any(|f| f.text.starts_with("THE ISLAND DID IT")));
+    }
+    #[test]
+    fn harvests_count_toward_the_goal_when_it_is_a_harvest_week() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        c.players.get_mut(&pl()).unwrap().plots[0] = Plot { crop: Some(0), grown: 2, watered_day: 0 };
+        c.mint("tea", &pl(), 3);
+        c.act(vec![Action::Harvest { plot: 0 }, Action::Sell { good: 0, qty: 3 }]);
+        let g = c.get_goal().now; let p = c.get_player(pl()).unwrap();
+        let expect = match g.kind { 0 => 2, 3 => 3, _ => 0 };
+        assert_eq!(g.progress, expect); assert_eq!(p.goal_part as u64, expect);
+    }
 }

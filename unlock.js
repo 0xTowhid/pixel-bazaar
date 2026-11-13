@@ -7,6 +7,7 @@ const UNLOCKS = [
   { id: 'crew', day: 2, icon: 'f_Flam', title: 'NIGHT CREW', text: 'Your spirits can work while you sleep. Press B, then NIGHT CREW.' },
   { id: 'duels', day: 3, icon: 'f_KappaGreen', title: 'SPIRIT DUELS', text: 'Challenge Mei to a 3 vs 3 spirit duel. Rita duels at the Moon Market at night.' },
   { id: 'calls', day: 3, icon: 'f_Eye2', title: 'CALLS AND CURSES', text: 'Post your own call on the Bazaar Board, and curse (or protect yourself from) other players.' },
+  { id: 'market', day: 3, icon: 'f_GoldRacoon', title: 'THE PLAYER MARKET', text: 'Sell spirits and legendary fish to other players for coins, on the Bazaar Board. 5% of every sale is burned.' },
   { id: 'barons', day: 4, icon: 'f_Skull', title: 'THE BARON RACE', text: 'Each baron owns a stall. Out-trade one on their good this season and the stall NFT is yours. Peek at their sealed calls too.' },
 ];
 function unlocked(id) {

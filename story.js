@@ -147,7 +147,7 @@ const GUIDE = [
 ];
 // the short version for brand-new players: three pages, then you learn by playing (the hints teach each thing the first time)
 const GUIDE_SHORT = [
-  { t: 'YOUR GOAL', f: 'LanternRed', b: `You owe the <b class="gold">Harbor Master 3,000 coins</b>. You have 300 and <b class="gold">10 days</b>.
+  { t: 'YOUR GOAL', f: 'LanternRed', b: `You owe the <b class="gold">Harbor Master 3,000 coins</b>. You have 300 and <b class="gold">10 days</b>. (He raises it every season.)
       <br><br>Farm, fish, catch spirits and trade on rumors to pay him. Someone also stole the Great Lantern: find out who.` },
   { t: 'ONE DAY', f: 'Owl', b: `<ol class="gList"><li><b>Day:</b> farm, sell, catch spirits, listen to rumors about tomorrow's prices.</li>
       <li><b>After 18:00:</b> go home and <b>sleep</b>.</li>

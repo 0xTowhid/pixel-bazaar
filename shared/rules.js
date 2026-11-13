@@ -298,6 +298,19 @@
     const luna = rng() < .7 ? truth : Math.floor(rng() * EVENTS.length);
     return { pell: { good: kaito.good, long: !kaito.long }, bolt: bet(mei), luna: bet(luna) };
   }
-  const Rules = { AGENTS, agentMoves, CREW, crewWork, encodeMoves, agentOf, baronBar, ISLAND, LEGENDS, FOES, DUEL_ENERGY, beats, fighter, duel, GOODS, CROPS, EVENTS, SOURCES, NPC_IDS, ITEMS, PROJECTS, BADGES, ENERGY, ELEMENTS, RARITY, SPECIES, SPAWN, ZONES, CATCH_CHANCE, ENCOUNTERS_A_DAY, FEEDS_A_DAY, spiritLevel, FATE, QUESTS, CHAPTERS, mulberry32, seasonAccuracy, planDay, encodeRumors, decodeRumors, rumorRight, evIndex, hearts };
+  // ---- v8: the player market, omens, rising debt, island goals (same numbers as the contract) ----
+  const debtFor = season => (3000 + 500 * Math.min(6, Math.max(0, (season || 1) - 1))) * 100; // cents
+  const OMENS = [
+    { name: 'Golden Soil', icon: 'f_Bamboo', text: 'Every harvest gives one extra crop.' },
+    { name: 'Full Nets', icon: 'f_Axolot', text: 'Fish bite much more often.' },
+    { name: 'Spirit Moon', icon: 'f_Spirit', text: 'Spirits are easier to catch.' },
+    { name: 'Light Pick', icon: 'f_Mole', text: 'Mining costs 5 energy instead of 8.' },
+    { name: "Merchant's Luck", icon: 'f_GoldRacoon', text: 'Everything you sell pays 5% more.' },
+    { name: 'Harbor Tide', icon: 'f_Octopus', text: '+15 coins every night.' },
+  ];
+  const MARKET = { FEE: 5, EACH: 4, PRICE_MAX: 100000 };
+  const GOALS = [{ name: 'Harvest crops', per: 400, part: 8 }, { name: 'Catch fish', per: 200, part: 5 }, { name: 'Catch spirits', per: 60, part: 2 }, { name: 'Sell goods', per: 600, part: 10 }];
+  const GOAL_REWARD = 80;
+  const Rules = { debtFor, OMENS, MARKET, GOALS, GOAL_REWARD, AGENTS, agentMoves, CREW, crewWork, encodeMoves, agentOf, baronBar, ISLAND, LEGENDS, FOES, DUEL_ENERGY, beats, fighter, duel, GOODS, CROPS, EVENTS, SOURCES, NPC_IDS, ITEMS, PROJECTS, BADGES, ENERGY, ELEMENTS, RARITY, SPECIES, SPAWN, ZONES, CATCH_CHANCE, ENCOUNTERS_A_DAY, FEEDS_A_DAY, spiritLevel, FATE, QUESTS, CHAPTERS, mulberry32, seasonAccuracy, planDay, encodeRumors, decodeRumors, rumorRight, evIndex, hearts };
   if (typeof module !== 'undefined' && module.exports) module.exports = Rules; else root.Rules = Rules;
 })(typeof window !== 'undefined' ? window : globalThis);

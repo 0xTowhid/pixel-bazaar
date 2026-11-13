@@ -29,7 +29,7 @@ function currentGoal() {
   const goWorld = (world, kind, there, go) => WD.id === world ? { text: there, target: obj(world, kind) } : { text: go, target: inTown ? at(townGate(world)) : exit() };
   if (hour >= 18 && !p.asleep) return { text: inTown ? "It's late: go home and sleep (E on your door)" : "It's late: head back to town and sleep", target: inTownAt(World.P.homeDoor) };
   if (S.step <= 2) return { text: STEPS[S.step].text, target: inTown ? STEPS[S.step].target() : exit() };
-  if (S.coins >= DEBT) return { text: 'You have 3,000! Pay the Harbor Master', target: inTownAt({ x: NPCS.master.x / TW, y: NPCS.master.y / TW }) };
+  if (S.coins >= DEBT) return { text: `You have ${fmt(DEBT)}! Pay the Harbor Master`, target: inTownAt({ x: NPCS.master.x / TW, y: NPCS.master.y / TW }) };
   const ch = p.chapter, tag = ch <= 5 ? `CH.${ch} · ` : '';
   if (ch === 1) {
     if (!p.book) { const w = typeof wilds !== 'undefined' && wilds[0]; return { text: tag + 'Catch a spirit: walk up to a glowing wisp, press E', target: w ? { x: w.x, y: w.y } : null }; }
@@ -46,7 +46,7 @@ function currentGoal() {
     return goWorld('sky', 'tablet', tag + 'Read the tablet, then wind the gears', tag + 'Ride the wind to the Clockwork Sky (north-east)');
   }
   if (ch === 5) return goWorld('woods', 'gate', tag + 'Wake the Great Spirit at the old gate (north)', tag + 'Go to the old gate deep in the Whispering Woods');
-  return { text: 'Reach 3,000 coins, then see the Harbor Master', target: null };
+  return { text: `Reach ${fmt(DEBT)} coins, then see the Harbor Master`, target: null };
 }
 
 // ---------- after every sync: pay finished quests and move the story on ----------
@@ -127,7 +127,7 @@ async function openQuests() {
   el.innerHTML = `<div class="qCols"><div class="qStory"><div class="gname">THE LANTERN MYSTERY</div><div class="sub" style="margin-bottom:.6em">who stole the Great Lantern?</div>${chapters}
       <div class="sub" style="margin-top:.6em">CLUES FOUND</div><div class="clueRow">${clues.map(([n, ok]) => `<span title="${n}">${ok ? '✦' : '?'}</span>`).join('')}</div></div>
     <div class="qBoard"><div class="gname" style="color:#ffd9a0">QUEST BOARD</div><div class="sub" style="color:#d9b88a;margin-bottom:.6em">new quests every morning · rewards pay out by themselves</div>${quests}
-      <div class="qNote ghost"><div class="sub2"><span>ALWAYS</span><span></span></div><div class="qT">Pay the Harbor Master 3,000 coins</div><div class="qR">reward: freedom, badges, a new season</div></div></div></div>
+      <div class="qNote ghost"><div class="sub2"><span>ALWAYS</span><span></span></div><div class="qT">Pay the Harbor Master ${fmt(DEBT)} coins</div><div class="qR">reward: freedom, badges, a new season</div></div>${omenNote()}${goalNote()}</div></div>
     <div style="text-align:right;margin-top:.6em"><button class="btn big" id="qClose">CLOSE (Q)</button></div>`;
   el.classList.add('on'); sfx('menu');
   $('qClose').onclick = () => el.classList.remove('on');

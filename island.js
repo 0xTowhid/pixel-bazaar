@@ -148,15 +148,17 @@ function curseHTML() {
 async function openIsland(tab) {
   if (tab) ISL.tab = tab; $('iDot').classList.remove('on');
   if (ISL.tab === 'town') { ISL.tab = 'calls'; closeIsland(); openTown(); return; } // projects and records keep their own screen
-  const TABS = [['calls', 'CALLS', 'calls'], ['barons', `BARONS · ${(S.stalls || []).length}/5`, 'barons'], ['feed', 'FEED'], ['boss', bossUp() ? '⚠ BOSS' : 'BOSS'], ['curse', 'CURSES', 'calls'], ['town', 'TOWN']].filter(x => !x[2] || unlocked(x[2]));
+  const gs = goalState();
+  const TABS = [['calls', 'CALLS', 'calls'], ['barons', `BARONS · ${(S.stalls || []).length}/5`, 'barons'], ['market', 'MARKET', 'market'], ['goal', gs && gs.claim ? '★ GOAL' : 'GOAL'], ['feed', 'FEED'], ['boss', bossUp() ? '⚠ BOSS' : 'BOSS'], ['curse', 'CURSES', 'calls'], ['town', 'TOWN']].filter(x => (!x[2] || unlocked(x[2])) && ((x[0] !== 'market' && x[0] !== 'goal') || MKT.goals)); // market and goal need the v8 contract
   if (ISL.tab === 'notes' || !TABS.some(x => x[0] === ISL.tab)) ISL.tab = TABS[0][0]; // ghost notes became calls
-  if (!$('island').classList.contains('on')) { await pollIsland(true); }
+  if (!$('island').classList.contains('on')) { await Promise.all([pollIsland(true), loadMarket(true)]); }
+  else if (ISL.tab === 'market' || ISL.tab === 'goal') await loadMarket();
   if (ISL.tab === 'calls') { try { ISL.posts = await Backend.view('get_calls', {}); } catch (e) { ISL.posts = ISL.posts || []; } }
   const el = $('island'), t = ISL.tab;
   const feed = ISL.feed.slice().reverse().map(f => `<div class="fRowI"><span class="sub">${ago(f.at)}</span> ${f.who === Backend.contractId ? `<b class="dn">⚠ ${f.text}</b>` : `<b class="${f.who === Backend.accountId ? 'gold' : 'cy'}">${f.who === Backend.accountId ? 'You' : shortName(f.who)}</b> ${shortText(f.text)}`}</div>`).join('') || '<div class="sub">Quiet so far. Catch something rare, beat a rival or pay the debt and the whole island hears about it.</div>';
-  el.innerHTML = `<div class="gname">THE BAZAAR BOARD</div><div class="sub">in the town square · calls are sealed on NEAR and revealed at night · rep ${S.player.rep || 0}</div>
+  el.innerHTML = `<div class="gname">THE BAZAAR BOARD</div><div class="sub">in the town square${MKT.stats ? ` · <b class="cy">${MKT.stats.players} players</b> on the island` : ''} · your rep ${S.player.rep || 0}</div>
     <div class="tabs">${TABS.map(([k, n]) => `<button class="tab ${t === k ? 'on' : ''}" data-it="${k}">${n}</button>`).join('')}</div>
-    <div class="isBody">${t === 'calls' ? callsHTML() : t === 'barons' ? baronsHTML() : t === 'feed' ? `<div class="fList">${baronActivity()}${feed}</div>` : t === 'boss' ? bossHTML() : curseHTML()}</div>
+    <div class="isBody">${t === 'calls' ? callsHTML() : t === 'barons' ? baronsHTML() : t === 'market' ? marketHTML() : t === 'goal' ? goalHTML() : t === 'feed' ? `<div class="fList">${baronActivity()}${feed}</div>` : t === 'boss' ? bossHTML() : curseHTML()}</div>
     <div style="text-align:right;margin-top:.8em"><button class="btn big" id="iClose">CLOSE (I)</button></div>`;
   el.classList.add('on'); sfx('menu');
   el.querySelectorAll('[data-it]').forEach(b => b.onclick = () => openIsland(b.dataset.it));
@@ -166,6 +168,8 @@ async function openIsland(tab) {
   if ($('cBuy')) $('cBuy').onclick = () => { queue({ t: 'BuyCharm' }, 'charm', true); flush.after = () => { sfx('coin'); openIsland('curse'); }; };
   el.querySelectorAll('[data-who]').forEach(b => b.onclick = () => { queue({ t: 'Curse', target: b.dataset.who, kind: +b.dataset.k }, 'curse', true); flush.after = () => { sfx('alert'); toast(`You cursed ${shortName(b.dataset.who)}. Unless they carry a charm...`, 4); pollIsland(true); openIsland('feed'); }; });
   if (t === 'calls') bindCalls(el);
+  if (t === 'market') bindMarket(el);
+  if (t === 'goal') bindGoal();
   el.querySelectorAll('canvas[data-face]').forEach(c => portrait(c.dataset.face, c));
   clearInterval(ISL.anim); ISL.anim = setInterval(() => { if (!el.classList.contains('on')) { clearInterval(ISL.anim); return; } const f = Math.floor(performance.now() / 150); el.querySelectorAll('.dSpr').forEach(s => { const w = s.clientWidth, n = +s.dataset.strip || 4; s.style.backgroundSize = `${n * w}px ${w}px`; s.style.backgroundPosition = `${-(f % n) * w}px 0`; }); }, 80);
 }

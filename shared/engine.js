@@ -3,6 +3,11 @@
 (function (root) {
   'use strict';
   const START_COINS = 300 * 100, DEBT = 3000 * 100, SEASON_DAYS = 10, NG = 13;
+  // v8: rising debt, omens, the player market, the island goal (same numbers as the contract)
+  const debtFor = season => (3000 + 500 * Math.min(6, Math.max(0, season - 1))) * 100;
+  const OMENS = ['Golden Soil', 'Full Nets', 'Spirit Moon', 'Light Pick', "Merchant's Luck", 'Harbor Tide'];
+  const MARKET_FEE = 5, LISTINGS_MAX = 150, LISTINGS_EACH = 4, PRICE_MAX = 100000;
+  const GOALS = [['Harvest crops', 400, 8], ['Catch fish', 200, 5], ['Catch spirits', 60, 2], ['Sell goods', 600, 10]], GOAL_REWARD = 80, WEEK_MS = 7 * 86400000;
   const GOODS = ['tea', 'fish', 'honey', 'sushi', 'carrot', 'strawberry', 'pumpkin', 'tomato', 'corn', 'eggplant', 'apple', 'jade', 'ore'];
   const BASE = [20000, 35000, 50000, 80000, 15000, 30000, 60000, 25000, 20000, 35000, 40000, 120000, 12000];
   const EVENTS = [[[1, 1500]], [[1, 620]], [[0, 620]], [[0, 1500]], [[2, 620]], [[2, 1500]], [[3, 1500], [6, 1300]], [[6, 1500], [8, 1400]], [[5, 600]], [[4, 1450], [7, 1450], [9, 1300]]];
@@ -31,7 +36,8 @@
       note_day: 0, votes_today: 0, voted: [], rep: 0, curse_day: 0, hex: null, last_hex: null, charms: 0, boss_seen: 0, boss_hits: 0, boss_claimed: 0,
       cursed_day: 0, cursed_season: 0, sold: 0, duel_seed: '', duel_last: 0, forage_day: [0, 0, 0, 0, 0],
       crew: [], fed: [], peeked: 0, npc_right: [0, 0, 0, 0, 0], npc_total: [0, 0, 0, 0, 0], call: null, call_right: 0, call_total: 0,
-      stall_score: [0, 0, 0, 0, 0], baron_score: [0, 0, 0, 0, 0], baron_lv: [0, 0, 0, 0, 0], stall_last: [0, 0, 0, 0, 0] };
+      stall_score: [0, 0, 0, 0, 0], baron_score: [0, 0, 0, 0, 0], baron_lv: [0, 0, 0, 0, 0], stall_last: [0, 0, 0, 0, 0],
+      debt: debtFor(season), omen: null, omen_offer: [], market_due: 0, goal_week: -1, goal_part: 0, goal_claimed: -1 };
   };
   const preimage = (player, season, day, event, rumors, salt, moves) => `${player}|${season}|${day}|${event}|${rumors}|${salt}|${moves || ''}`;
   function settle(pos, price) { const e = Math.max(1, pos.entry); const mv = Math.trunc((price - e) * 1e6 / e); return Math.trunc(pos.stake * pos.lev * mv * (pos.long ? 1 : -1) / 1e6); }
@@ -47,8 +53,26 @@
       this.players = {}; this.balances = {}; this.supply = {}; this.npcs = {}; this.leaderboard = [];
       this.tokens = {}; this.owners = {}; this.byOwner = {}; this.links = {}; this.nextToken = 0;
       this.notes = []; this.nextNote = 0; this.feed = []; this.boss = null; this.bossWindow = -1; this.calls = []; this.now = () => Date.now();
+      this.market = []; this.nextListing = 0; this.burned = 0; this.sales = 0; this.playerCount = 0; this.goals = null;
     }
     // ---- the island (shared by every player) ----
+    _h8(str, i) { if (this.sha) return parseInt(this.sha(str).slice(2 * i, 2 * i + 2), 16); return (fnv(str + '|' + i)) & 255; }
+    _omenOffer(who, season) { if (season < 2) return []; const v = []; for (let i = 0; v.length < 3 && i < 64; i++) { const k = this._h8(`${who}|${season}|omen`, i % 32) % OMENS.length; if (!v.includes(k)) v.push(k); } return v; }
+    _goalsNow() {
+      const week = Math.floor(this.now() / WEEK_MS), g = this.goals;
+      const fresh = w => { const kind = this._h8('pixel-bazaar|goal|' + w, 0) % GOALS.length; return { week: w, kind, target: GOALS[kind][1] * (1 + Math.floor(this.playerCount / 25)), progress: 0, helpers: 0 }; };
+      if (g && g.now.week === week) return clone(g);
+      return { now: fresh(week), last: g && g.now.week + 1 === week ? clone(g.now) : null };
+    }
+    _goalAdd(p, n) {
+      const g = this._goalsNow(), add = n[g.now.kind]; if (!add) { this.goals = g; return; }
+      if (p.goal_week !== g.now.week) {
+        const l = g.last; if (l && l.week === p.goal_week && l.progress >= l.target && p.goal_part >= GOALS[l.kind][2] && p.goal_claimed !== l.week) { p.coins += GOAL_REWARD * 100; p.goal_claimed = l.week; }
+        p.goal_week = g.now.week; p.goal_part = 0; g.now.helpers++;
+      }
+      const before = g.now.progress; p.goal_part += add; g.now.progress += add; this.goals = g;
+      if (before < g.now.target && g.now.progress >= g.now.target) this._post(this.contractId, `THE ISLAND DID IT! Goal reached: ${GOALS[g.now.kind][0]}. Everyone who helped, claim ${GOAL_REWARD} coins on the Board.`);
+    }
     _post(who, text) { this.feed.push({ at: this.now(), who, text }); if (this.feed.length > R.ISLAND.FEED_KEPT) this.feed.shift(); }
     _bossRoll(w) { if (this.sha) { const h = this.sha('pixel-bazaar|boss|' + w); return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16)]; } const f = fnv('pixel-bazaar|boss|' + w); return [f & 255, (f >>> 8) & 255]; }
     _maybeSpawnBoss(now) {
@@ -151,7 +175,7 @@
       if (i >= 0) { if (better(e, this.leaderboard[i]) <= 0) return; this.leaderboard.splice(i, 1); }
       this.leaderboard.push(e); this.leaderboard.sort((x, y) => (y.won - x.won) || (y.score - x.score) || (x.day - y.day)); this.leaderboard.length = Math.min(20, this.leaderboard.length); }
 
-    register_player(c, name) { this._op(c); const id = `${name}.${this.contractId}`; req(!this.players[id], 'name taken'); this.players[id] = newPlayer(1); return id; }
+    register_player(c, name) { this._op(c); const id = `${name}.${this.contractId}`; req(!this.players[id], 'name taken'); this.players[id] = newPlayer(1); this.playerCount++; return id; }
     create_npc(c, name) { this._op(c); this.npcs[`${name}.${this.contractId}`] = 1000 * 100; }
 
     start_season(c) {
@@ -161,6 +185,7 @@
       p.seasons_won = old.seasons_won; p.best_score = old.best_score;
       p.lead = old.lead; p.wallet = old.wallet; p.book = old.book; p.shards = old.shards; p.clues = old.clues; p.chapter = old.chapter; p.boss_wins = old.boss_wins; p.duel_wins = old.duel_wins; p.legends = old.legends; p.rep = old.rep; p.voted = old.voted; p.charms = old.charms; p.boss_seen = old.boss_seen; p.boss_hits = old.boss_hits; p.boss_claimed = old.boss_claimed;
       p.crew = old.crew; p.npc_right = old.npc_right; p.npc_total = old.npc_total; p.call_right = old.call_right; p.call_total = old.call_total; p.baron_lv = old.baron_lv; p.stall_last = old.stall_last;
+      p.coins += old.market_due; p.omen_offer = this._omenOffer(c, p.season); p.goal_week = old.goal_week; p.goal_part = old.goal_part; p.goal_claimed = old.goal_claimed;
       this.players[c] = p;
     }
     open_position(c, { good, long, lev, stake }) {
@@ -186,12 +211,13 @@
     act(c, { actions }) {
       req(actions && actions.length > 0 && actions.length <= 60, '1 to 60 actions');
       this._p(c); const allBefore = clone(this.players), balBefore = { ...this.balances }, supBefore = { ...this.supply };
-      const isl = clone({ n: this.notes, nn: this.nextNote, f: this.feed, b: this.boss, w: this.bossWindow, c: this.calls });
+      const isl = clone({ n: this.notes, nn: this.nextNote, f: this.feed, b: this.boss, w: this.bossWindow, c: this.calls, m: this.market, ml: this.nextListing, bu: this.burned, sa: this.sales, g: this.goals });
       const nft = clone({ t: this.tokens, o: this.owners, b: this.byOwner, l: this.links, n: this.nextToken });
       try { this._act(c, actions); }
       catch (e) {
         this.players = allBefore; this.balances = balBefore; this.supply = supBefore;
         this.notes = isl.n; this.nextNote = isl.nn; this.feed = isl.f; this.boss = isl.b; this.bossWindow = isl.w; this.calls = isl.c;
+        this.market = isl.m; this.nextListing = isl.ml; this.burned = isl.bu; this.sales = isl.sa; this.goals = isl.g;
         this.tokens = nft.t; this.owners = nft.o; this.byOwner = nft.b; this.links = nft.l; this.nextToken = nft.n; throw e;
       }
     }
@@ -201,7 +227,7 @@
       const leadEl = this._leadEl(c, p);
       const fate = (k, v) => p.fate_day === p.day && p.fate.length === 3 && p.fate[k] === v, inc = i => { p.daily[i] = Math.min(255, p.daily[i] + 1); };
       const energy = n => { req(p.energy >= n, 'you are too tired'); p.energy -= n; };
-      const badges = [];
+      const badges = [], omen = p.omen, goalN = [0, 0, 0, 0];
       if (p.hex) { const h = p.hex; p.hex = null; if (h.kind === 0) p.energy = Math.max(0, p.energy - 15); if (h.kind === 1) p.coins = Math.max(0, p.coins - 3000); p.last_hex = h; }
       for (const a of actions) {
         switch (a.t) {
@@ -209,8 +235,8 @@
           case 'Water': { energy(1); const pl = p.plots[a.plot] || fail('no such plot'); req(pl.crop !== null && pl.watered_day !== p.day, 'nothing to water'); pl.watered_day = p.day; break; }
           case 'Harvest': {
             energy(1); const pl = p.plots[a.plot] || fail('no such plot'); req(ripe(pl), 'not ripe yet');
-            const [good, days, , yld, regrow] = CROPS[pl.crop];
-            this._barnAdd(c, good, yld);
+            const [good, days, , y0, regrow] = CROPS[pl.crop], yld = y0 + (omen === 0 ? 1 : 0);
+            this._barnAdd(c, good, yld); goalN[0] += yld;
             p.plots[a.plot] = regrow ? { crop: pl.crop, grown: days - regrow, watered_day: pl.watered_day } : emptyPlot();
             p.harvested += yld; p.daily[2] = Math.min(255, p.daily[2] + yld);
             if (p.harvested === yld) badges.push('first_harvest');
@@ -218,7 +244,7 @@
             break;
           }
           case 'Mine': {
-            energy(fate(1, 2) ? 12 : 8); req(a.rock < ROCKS, 'no such rock'); inc(3);
+            energy((omen === 3 ? 5 : 8) + (fate(1, 2) ? 4 : 0)); req(a.rock < ROCKS, 'no such rock'); inc(3);
             if (p.mined_day !== p.day) { p.mined_day = p.day; p.mined = 0; }
             req(!(p.mined & (1 << a.rock)), 'already mined today'); p.mined |= 1 << a.rock;
             const r = roll('mine', a.rock), jade = (leadEl === EARTH ? 96 : 64) + (fate(0, 1) ? 32 : 0);
@@ -231,7 +257,7 @@
           case 'Fish': {
             energy(4); req(p.catches_today < 6, 'the fish stopped biting for today');
             const r = roll('fish', p.catches_today); p.catches_today++;
-            if (a.ok && r < Math.max(0, Math.min(255, (leadEl === WATER ? 210 : 179) + (fate(0, 0) ? 40 : 0) - (fate(1, 4) ? 30 : 0)))) { const n = p.projects[0] ? 2 : 1; this._barnAdd(c, 1, n); p.fish_caught += n; p.daily[1] = Math.min(255, p.daily[1] + n); if (p.fish_caught >= 10 && p.fish_caught - n < 10) badges.push('angler');
+            if (a.ok && r < Math.max(0, Math.min(255, (leadEl === WATER ? 210 : 179) + (fate(0, 0) ? 40 : 0) - (fate(1, 4) ? 30 : 0) + (omen === 1 ? 30 : 0)))) { const n = p.projects[0] ? 2 : 1; this._barnAdd(c, 1, n); p.fish_caught += n; goalN[1] += n; p.daily[1] = Math.min(255, p.daily[1] + n); if (p.fish_caught >= 10 && p.fish_caught - n < 10) badges.push('angler');
               const season = [leadEl === FIRE, leadEl === WATER && p.day >= 5, fate(0, 0), p.chapter >= 5, (p.legends & 15) === 15];
               const k = R.LEGENDS.findIndex((_, k) => season[k] && !(p.legends & (1 << k)));
               if (k >= 0 && roll('legend', p.catches_today) < R.LEGENDS[k].chance) {
@@ -245,7 +271,7 @@
             const g = a.good; req(g >= 0 && g < NG && g !== 3 && a.qty > 0, 'cannot sell that'); req(this._bal(GOODS[g], c) >= a.qty, 'not enough in your barn');
             this._burn(GOODS[g], c, a.qty); p.sold += a.qty;
             const k = R.AGENTS.findIndex(x => x.stall === g), held = k >= 0 && !!this._stall(c, k);
-            const bonus = (g === 0 && p.projects[2] ? 115 : 100) + (held ? 10 : 0); let got = 0;
+            const bonus = (g === 0 && p.projects[2] ? 115 : 100) + (held ? 10 : 0) + (omen === 4 ? 5 : 0); let got = 0; goalN[3] += a.qty;
             for (let i = 0; i < a.qty; i++) { const v = Math.trunc(Math.trunc(p.prices[g] / 10) * bonus / 100); p.coins += v; got += v; p.prices[g] = Math.max(1, Math.trunc(p.prices[g] * 98 / 100)); }
             if (k >= 0) p.stall_score[k] += Math.trunc(got / 5);
             break;
@@ -279,9 +305,9 @@
           }
           case 'Catch': {
             const w = p.wild || fail('there is no spirit here'); p.wild = null;
-            const sp = SP[w.species]; let chance = R.CATCH_CHANCE[sp.rar] + (fate(0, 2) ? 26 : 0); if (fate(1, 3)) chance = Math.max(0, chance - 20); if (leadEl === sp.el) chance += 38;
+            const sp = SP[w.species]; let chance = R.CATCH_CHANCE[sp.rar] + (fate(0, 2) ? 26 : 0) + (omen === 2 ? 26 : 0); if (fate(1, 3)) chance = Math.max(0, chance - 20); if (leadEl === sp.el) chance += 38;
             if (a.ok && roll('catch', p.enc_today) < chance) {
-              this._mintSpirit(c, w.species, w.shiny); inc(0); p.book = this._bookAdd(p.book, w.species);
+              this._mintSpirit(c, w.species, w.shiny); inc(0); goalN[2]++; p.book = this._bookAdd(p.book, w.species);
               const caught = this._bookCount(p.book);
               if (caught === 1) badges.push('first_spirit'); if (caught === 10) badges.push('spirit_tamer'); if (w.shiny) badges.push('shiny_hunter');
               if (w.shiny || sp.rar >= 2) this._post(c, `caught a ${w.shiny ? 'SHINY ' : ''}${sp.name}`);
@@ -431,18 +457,47 @@
             this.calls.push({ who: c, season: p.season, day: p.day, good: a.good, long: !!a.long, at: this.now(), right: null }); if (this.calls.length > 120) this.calls.shift();
             break;
           }
+          case 'List': {
+            req(this.owners[a.token] === c, 'not yours'); const t = this.tokens[a.token]; req(t && (t.type === 'Spirit' || t.type === 'Fish'), 'only spirits and legendary fish can be listed');
+            req(a.price >= 1 && a.price <= PRICE_MAX, 'price is 1 to 100,000 coins'); req(this.market.length < LISTINGS_MAX, 'the market is full, try later');
+            req(this.market.filter(l => l.seller === c).length < LISTINGS_EACH, '4 listings at a time');
+            if (p.lead === a.token) p.lead = null; p.crew = p.crew.filter(x => x !== a.token);
+            this._move(a.token, c, this.contractId);
+            this.market.push({ id: ++this.nextListing, seller: c, token: a.token, price: a.price, at: this.now() }); break;
+          }
+          case 'Unlist': {
+            const i = this.market.findIndex(l => l.id === a.id && l.seller === c); req(i >= 0, 'no such listing of yours');
+            const [l] = this.market.splice(i, 1); this._move(l.token, this.contractId, c); break;
+          }
+          case 'Buy': {
+            const i = this.market.findIndex(l => l.id === a.id); req(i >= 0, 'that was already sold');
+            const l = this.market[i]; req(l.seller !== c, 'that is your own listing');
+            const cost = l.price * 100; req(p.coins >= cost, 'not enough coins'); p.coins -= cost;
+            const fee = Math.trunc(cost * MARKET_FEE / 100); this.burned += fee; this.sales++;
+            const s = this.players[l.seller]; if (s) { if (s.finished) s.market_due += cost - fee; else s.coins += cost - fee; }
+            this.market.splice(i, 1); this._move(l.token, this.contractId, c);
+            const t = this.tokens[l.token], what = t.type === 'Spirit' ? SP[t.species].name : R.LEGENDS[t.kind].name;
+            this._post(c, `bought a ${what} from ${l.seller} for ${l.price} coins`); break;
+          }
+          case 'PickOmen': { req(p.omen === null || p.omen === undefined, "this season's omen is already chosen"); req(p.omen_offer.includes(a.omen), 'that omen was not in your cards'); p.omen = a.omen; break; }
+          case 'ClaimGoal': {
+            const g = this._goalsNow(), done = x => x && x.progress >= x.target && x.week === p.goal_week && p.goal_part >= GOALS[x.kind][2] && p.goal_claimed !== x.week;
+            req(done(g.now) || done(g.last), 'nothing to claim from the island goal');
+            p.goal_claimed = p.goal_week; p.coins += GOAL_REWARD * 100; break;
+          }
           default: fail('unknown action');
         }
       }
+      if (goalN.some(n => n > 0)) this._goalAdd(p, goalN);
       for (const b of badges) this._badge(b, c);
     }
     sleep(c, { passed_out }) { const p = this._p(c); req(!p.finished && !p.asleep, 'already asleep'); req(p.commitment, 'the day has not started yet'); p.asleep = true; p.passed_out = !!passed_out; }
     pay_debt(c) {
-      const p = this._p(c); req(!p.finished && p.coins >= DEBT, 'not enough coins');
-      p.coins -= DEBT; p.finished = true; p.won = true; p.seasons_won++; p.best_score = Math.max(p.best_score, p.coins + DEBT);
-      this._badge('debt_free', c); this._post(c, `paid off the 3,000 coin debt on day ${p.day}`); if (p.day <= 6) this._badge('early_bird', c);
-      if (p.coins + DEBT - p.start_coins > p.kaito_pnl) this._badge('beat_kaito', c);
-      this._rank({ account: c, season: p.season, score: p.coins + DEBT, day: p.day, won: true });
+      const p = this._p(c), debt = p.debt; req(!p.finished && p.coins >= debt, 'not enough coins');
+      p.coins -= debt; p.finished = true; p.won = true; p.seasons_won++; p.best_score = Math.max(p.best_score, p.coins + debt);
+      this._badge('debt_free', c); this._post(c, `paid off the ${(debt / 100).toLocaleString('en-US')} coin debt on day ${p.day}`); if (p.day <= 6) this._badge('early_bird', c);
+      if (p.coins + debt - p.start_coins > p.kaito_pnl) this._badge('beat_kaito', c);
+      this._rank({ account: c, season: p.season, score: p.coins + debt, day: p.day, won: true });
       for (const b of this._resolveStalls(c, p)) this._badge(b, c);
     }
     commit_day(c, { player, day, commitment }) {
@@ -508,13 +563,14 @@
       }
       const crew = this._crewNight(player, p, secret, event);
       let rent = 0; for (let k = 0; k < 5; k++) { const t = this._stall(player, k); if (t) rent += (R.CREW.STALL_RENT + 5 * this.tokens[t].level) * 100; }
+      if (p.omen === 5) rent += 1500; // Harbor Tide
       p.coins += rent;
       p.prices = prices; p.commitment = null; p.npc_moves = []; p.asleep = false; p.passed_out = false; p.energy = ENERGY_MAX; p.catches_today = 0;
       p.enc_today = 0; p.fed_today = 0; p.wild = null; p.daily = [0, 0, 0, 0, 0, 0, 0]; p.quests_claimed = 0; p.votes_today = 0; p.fed = []; p.peeked = 0;
       if (p.lead && this.owners[p.lead] === player) this._xp(p.lead, 10);
       if (day >= SEASON_DAYS) {
-        p.finished = true; p.won = p.coins >= DEBT; if (p.won) { p.coins -= DEBT; badges.push('debt_free'); }
-        const score = p.won ? p.coins + DEBT : p.coins;
+        const debt = p.debt; p.finished = true; p.won = p.coins >= debt; if (p.won) { p.coins -= debt; badges.push('debt_free'); }
+        const score = p.won ? p.coins + debt : p.coins;
         if (p.won) p.seasons_won++; p.best_score = Math.max(p.best_score, score);
         if (score - p.start_coins > p.kaito_pnl) badges.push('beat_kaito');
         this._rank({ account: player, season: p.season, score, day, won: p.won });
@@ -539,7 +595,10 @@
     }
     get_leaderboard() { return this.leaderboard.slice(); }
     get_npcs() { return Object.entries(this.npcs); }
+    get_market() { return this.market.map(l => ({ ...l, item: this.tokens[l.token] ? clone(this.tokens[l.token]) : null })); }
+    get_goal() { return this._goalsNow(); }
+    get_stats() { return { players: this.playerCount, listings: this.market.length, burned: String(this.burned), sales: this.sales }; }
   }
-  const api = { Engine, preimage, START_COINS, DEBT, SEASON_DAYS, ITEMS, GOODS, BARN_CAP, MAX_PLOTS, PLOT_COST };
+  const api = { Engine, preimage, START_COINS, DEBT, debtFor, OMENS, GOALS, GOAL_REWARD, MARKET_FEE, SEASON_DAYS, ITEMS, GOODS, BARN_CAP, MAX_PLOTS, PLOT_COST };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.BazaarEngine = api;
 })(typeof window !== 'undefined' ? window : globalThis);

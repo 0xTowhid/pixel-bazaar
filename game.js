@@ -4,7 +4,8 @@
 
 const { TS, TW } = World;
 let VW = 960; const VH = 540; // logical canvas size; width follows the screen shape
-const SEASON_DAYS = 10, DAY_SECONDS = 480, START_COINS = 300, DEBT = 3000;
+const SEASON_DAYS = 10, DAY_SECONDS = 480, START_COINS = 300;
+let DEBT = 3000; // grows each season (Rules.debtFor); set from your player on every sync
 const STAKE_STEP = 50;
 
 const { GOODS, EVENTS, SOURCES } = Rules;
@@ -136,7 +137,7 @@ async function boot() {
   const firstTime = !safeGet('pb_intro|' + Backend.accountId);
   let tour = false;
   if (firstTime) { await playIntro(); tour = await showWelcome(); if (tour) tour = await showGuide(true); safeSet('pb_intro|' + Backend.accountId, '1'); }
-  showPaper(() => { if (tour) startTour(); else toast('You owe the Harbor Master 3,000 coins. You have ' + fmt(S.coins) + ' and ' + (SEASON_DAYS - S.day + 1) + ' days.', 6); });
+  showPaper(() => { if (tour) startTour(); else toast('You owe the Harbor Master ' + fmt(DEBT) + ' coins. You have ' + fmt(S.coins) + ' and ' + (SEASON_DAYS - S.day + 1) + ' days.', 6); setTimeout(maybeOmen, 1500); });
 }
 // What the chain does not keep (your notes on who lies, the tutorial step, price history) lives in this browser.
 const memKey = p => 'pb_mem|' + Backend.accountId + '|' + p.season;
@@ -162,7 +163,7 @@ async function newSeason() {
   const p = await Backend.player();
   S = freshState(p); makeCast();
   await beginDay(true);
-  showPaper(() => toast('New season. You owe 3,000 again. Your farm, seeds, friends and items are still yours.', 5));
+  showPaper(() => { toast(`New season. You owe ${fmt(DEBT)} this time: the Harbor Master raises it every season. Your farm, spirits and items are still yours.`, 6); setTimeout(maybeOmen, 1500); });
 }
 async function sync() {
   const p = await Backend.player();
@@ -176,7 +177,7 @@ async function sync() {
   if (bridge && !S.bridge) { World.repairBridge(); MINI = World.minimap(176, 102); }
   S.bridge = !!bridge; S.boat = !!boat;
   if (S.chest) { World.P.chestProp.sx = 9; }
-  S.player = p;
+  S.player = p; DEBT = (p.debt || 300000) / 100; // a v7 contract has no rising debt
   S.spirits = await Backend.spirits().catch(() => S.spirits || []);
   S.stalls = await Backend.view('get_stalls', { account_id: Backend.accountId }).catch(() => S.stalls || []);
   setTimeout(checkProgress, 50); setTimeout(checkHex, 80);
@@ -442,13 +443,13 @@ async function endSeason(won, early) {
   S.over = true;
   const score = Math.round(won ? S.coins + DEBT : S.coins);
   if (won && score > S.best) { S.best = score; safeSet('pb2_best', score); }
-  const share = won ? `I paid off a 3,000 coin debt in Pixel Bazaar on day ${S.day}, trading rumors with leverage on NEAR. Rita lied to me ${S.rec.rita.tot - S.rec.rita.ok} times. #NEARHackathon`
-    : `The Harbor Master took my stall in Pixel Bazaar. I got to ${fmt(score)} of 3,000. #NEARHackathon`;
+  const share = won ? `I paid off a ${fmt(DEBT)} coin debt in Pixel Bazaar on day ${S.day}, trading rumors with leverage on NEAR. Rita lied to me ${S.rec.rita.tot - S.rec.rita.ok} times. #NEARHackathon`
+    : `The Harbor Master took my stall in Pixel Bazaar. I got to ${fmt(score)} of ${fmt(DEBT)}. #NEARHackathon`;
   let board = [];
   try { board = (await Backend.leaderboard()).slice(0, 5); } catch (e) {}
   const acct = Backend.accountId, link = Backend.explorerAccount(acct);
   openCard(`<div class="ntitle">${won ? 'DEBT PAID · THE STALL IS YOURS' : 'THE HARBOR MASTER TOOK YOUR STALL'}</div>
-    <div class="sub" style="margin:.6em 0">${won ? `You cleared 3,000 coins ${early ? 'early, on day ' + S.day : 'by the last day'}. Coins left over: ${fmt(Math.max(0, S.coins))}.` : `You reached ${fmt(score)} of 3,000 coins.`}
+    <div class="sub" style="margin:.6em 0">${won ? `You cleared ${fmt(DEBT)} coins ${early ? 'early, on day ' + S.day : 'by the last day'}. Coins left over: ${fmt(Math.max(0, S.coins))}.` : `You reached ${fmt(score)} of ${fmt(DEBT)} coins.`}
     ${Backend.mode !== 'local' ? `<br>Season result recorded for ${link ? `<a href="${link}" target="_blank" rel="noopener">${acct}</a>` : acct}.` : ''}</div>
     ${stallResultsHTML()}
     ${board.length ? '<div class="gname" style="font-size:1em;margin-top:.4em">LEADERBOARD</div>' + board.map((e, i) => `<div class="tr"><span>${i + 1}. ${e.account}</span><span class="${e.won ? 'up' : 'dn'}">${fmt(e.score / 100)}${e.won ? ' · paid day ' + e.day : ''}</span></div>`).join('') : ''}
@@ -465,7 +466,7 @@ const STEPS = [
   { text: 'Plant a seed behind your house and water it', target: () => at({ x: World.P.plots[0].x + .5, y: World.P.plots[0].y + .8 }) },
   { text: "Open a trade at Tomo's stall", target: () => NPCS.tomo },
   { text: 'Go home and sleep after 18:00', target: () => at(World.P.homeDoor) },
-  { text: 'Reach 3,000 coins, then see the Harbor Master', target: () => S.coins >= DEBT ? NPCS.master : null, chapter: true },
+  { get text() { return `Reach ${fmt(DEBT)} coins, then see the Harbor Master`; }, target: () => S.coins >= DEBT ? NPCS.master : null, chapter: true },
 ];
 function advance() { S.step = Math.min(S.step + 1, STEPS.length - 1); sfx('ok'); saveMem(); }
 
@@ -563,8 +564,8 @@ function talkTo(n) {
   if (n === NPCS.tomo) { say(n, 'Welcome! Seeds, and everything the barons don\'t sell: crops, apples, sushi. Tea, honey, carrots, fish and jade? Their stalls are just below.', [{ t: 'TRADE', fn: () => { closeDlg(); openTrade(); } }, { t: 'SELL', fn: () => { closeDlg(); openSell(); } }, { t: 'SEEDS', fn: () => { closeDlg(); openSeeds(); } }, { t: 'GIFT', fn: () => giftMenu('tomo') }, { t: 'LEAVE', fn: closeDlg }]); return; }
   if (n === NPCS.kaito) { const k = S.kaito; say(n, k ? `You paid, so here it is: ${k.long ? 'long' : 'short'} ${GOODS[k.good].name.toLowerCase()}, five times over. Follow me if you dare.` : heldStall(0) ? 'Enjoy MY tea stall while it lasts. I want it back by season\'s end.' : `My call is sealed on NEAR until tonight. ${Rules.AGENTS[0].peek} coins at the Bazaar Board and I'll show you. I'm right more often than not.`, [{ t: 'BAZAAR BOARD', fn: () => { closeDlg(); openIsland('calls'); } }, { t: 'LEAVE', fn: closeDlg }]); return; }
   if (n === NPCS.master) {
-    if (S.coins >= DEBT) { say(n, `${fmt(S.coins)} coins? Well, well. Pay the 3,000 and the stall is yours for good.`, [{ t: 'PAY 3,000', fn: async () => { closeDlg(); const r = await guarded('Paying the Harbor Master', () => Backend.call('pay_debt'), 'pay_debt'); if (r === null && Backend.mode === 'chain') return; await sync(); endSeason(true, true); } }, { t: 'NOT YET', fn: closeDlg }]); return; }
-    say(n, `You owe me 3,000 by the end of day ${SEASON_DAYS}. You have ${fmt(S.coins)}. Tick tock.`);
+    if (S.coins >= DEBT) { say(n, `${fmt(S.coins)} coins? Well, well. Pay the ${fmt(DEBT)} and the stall is yours for good.`, [{ t: 'PAY ' + fmt(DEBT), fn: async () => { closeDlg(); const r = await guarded('Paying the Harbor Master', () => Backend.call('pay_debt'), 'pay_debt'); if (r === null && Backend.mode === 'chain') return; await sync(); endSeason(true, true); } }, { t: 'NOT YET', fn: closeDlg }]); return; }
+    say(n, `You owe me ${fmt(DEBT)} by the end of day ${SEASON_DAYS}. You have ${fmt(S.coins)}. Tick tock.`);
     return;
   }
   if (n === NPCS.fisher) {

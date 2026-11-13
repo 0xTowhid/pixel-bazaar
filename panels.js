@@ -8,7 +8,7 @@ function showPaper(after) {
   const movers = GOODS.map((g, i) => ({ g, i, p: S.price[g.id], c: S.closes[g.id] && S.closes[g.id].length > 1 ? S.price[g.id] / S.closes[g.id][S.closes[g.id].length - 2] - 1 : 0 }))
     .filter(x => x.g.id !== 'ore').sort((a, b) => Math.abs(b.c) - Math.abs(a.c)).slice(0, 6);
   const headline = ev ? ev.title.toUpperCase() + (l.results.some(r => r.liquidated) ? ' · YOU GOT LIQUIDATED' : '') : 'A NEW SEASON AT THE BAZAAR';
-  const story = ev ? `${GOODS[ev.fx[0][0]].name} moved ${Math.round((ev.fx[0][1] - 1) * 100)}% on the news. ${ev.farm || ''}` : 'The Harbor Master wants 3,000 coins in ten days. Locals are already whispering.';
+  const story = ev ? `${GOODS[ev.fx[0][0]].name} moved ${Math.round((ev.fx[0][1] - 1) * 100)}% on the news. ${ev.farm || ''}` : 'The Harbor Master wants ' + fmt(DEBT) + ' coins in ten days. Locals are already whispering.';
   const k = S.kaito, kn = k ? `Kaito went ${k.long ? 'LONG' : 'SHORT'} ${GOODS[k.good].name.toUpperCase()} x5 at dawn. Follow or fade?` : `Kaito made his call at dawn. It is sealed on NEAR until tonight: peek at the Bazaar Board for ${Rules.AGENTS[0].peek} coins.`;
   const letters = S.letters.map(key => {
     const r = S.rumors[key], s = SOURCES[key];
