@@ -141,7 +141,7 @@
     [5, 1, 60, 'Solve a world puzzle'], [6, 2, 20, 'Feed your companion twice'], [0, 1, 20, 'Catch a spirit']];
   // ---- the story ----
   const CHAPTERS = [
-    { n: 1, title: 'The Debt', goal: 'Catch your first spirit and harvest 5 crops', story: 'The Lantern is out and you owe the Harbor Master. Get on your feet first.' },
+    { n: 1, title: 'The Debt', goal: "Catch your first spirit, then sell anything at Tomo's stall", story: 'The Lantern is out and you owe the Harbor Master. Get on your feet first.' },
     { n: 2, title: 'Whispers in the Woods', goal: 'Solve the brazier puzzle in the Whispering Woods', story: 'Ghost lights lead north. Someone passed through the woods carrying a flame.' },
     { n: 3, title: 'The Sunken Shrine', goal: 'Find a water spirit, then solve the bell puzzle in the Sunken Shrine', story: 'Footprints end at the sea. The shrine keeper saw something, before the water rose.' },
     { n: 4, title: 'The Clockwork Sky', goal: 'Find a wind spirit, then solve the gear puzzle in the Clockwork Sky', story: 'A thief with wings? The clock above the clouds stopped the night the Lantern went out.' },

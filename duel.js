@@ -75,31 +75,35 @@ function renderPicker() {
 
 async function fight() {
   const foe = DUEL.foe, f = Rules.FOES[foe], team = DUEL.pick.map(t => S.spirits.find(s => s.token_id === t));
-  const c = S.player.commitment; if (!c) { toast('The day has not started on NEAR yet.', 3); return; }
-  // the same rolls the contract will use
-  const rolls = await Promise.all([...Array(420).keys()].map(n => rollJS(c, Backend.accountId, 'duel' + foe, n)));
-  let n = 0; const sim = Rules.duel(team.map(s => [s.species, s.level]), f.team, () => rolls[n++]);
-  const coinsBefore = S.player.coins, winsBefore = S.player.duel_wins || 0;
+  if (!S.player.commitment) { toast('The day has not started on NEAR yet.', 3); return; }
+  const lineup = team.map(s => [s.species, s.level]); // levels before the fight, as the contract sees them
+  const coinsBefore = S.player.coins;
+  // the fight runs on chain first, rolled from that block's randomness, so nobody can know the result in advance
+  $('duel').innerHTML = `<div class="dWait"><div class="gname">THE SPIRITS FACE OFF...</div><div class="sub">the duel is being fought on NEAR</div></div>`;
   queue({ t: 'Duel', foe, team: DUEL.pick.slice() }, 'spirit duel', true);
-  const chain = new Promise(res => { flush.after = () => res(); });
-  await showFight(team, f, sim);
-  await chain;
-  const won = (S.player.duel_wins || 0) > winsBefore, ran = S.player.duel_day && S.player.duel_day[foe] === S.day;
+  await new Promise(res => { flush.after = () => res(); });
+  const ran = S.player.duel_day && S.player.duel_day[foe] === S.day && S.player.duel_seed;
   if (!ran) { closeDuel(); return; } // the transaction failed; the error toast already says why
-  if (won !== sim.won) console.warn('duel: chain and preview differ');
+  // replay every hit from the seed the contract saved
+  const seed = S.player.duel_seed;
+  const rolls = await Promise.all([...Array(420).keys()].map(n => rollJS(seed, Backend.accountId, 'duel' + foe, n)));
+  let n = 0; const sim = Rules.duel(lineup, f.team, () => rolls[n++]);
+  const won = !!(S.player.duel_last & 0x80);
+  if (won !== sim.won) console.warn('duel: chain and replay differ');
+  await showFight(team, f, sim, lineup);
   sfx(won ? 'success' : 'alert');
   $('dStage').insertAdjacentHTML('beforeend', `<div class="dEnd ${won ? 'win' : 'lose'}"><div class="gname">${won ? 'VICTORY!' : 'DEFEAT'}</div>
     <div>${(won ? LINES.win : LINES.lose)[foe]}</div>
     <div class="sub" style="margin:.6em 0">${won ? `+${Math.round((S.player.coins - coinsBefore) / 100)} coins · each fighter +20 XP${foe === 2 ? ' · +1 lantern shard · Champion badge NFT' : ''}` : 'each fighter +6 XP · try again tomorrow'}</div>
-    <div class="sub">decided on NEAR from today's commitment, so nobody can reroll it</div>
+    <div class="sub">fought on NEAR with that block's randomness: nobody could know the result before, and nobody can reroll it</div>
     <button class="btn big gold" id="dDone">${won && foe === 2 ? 'THE LANTERN!' : 'OK'}</button></div>`);
   $('dDone').onclick = () => { closeDuel(); checkProgress(); };
 }
 
-function showFight(team, f, sim) {
+function showFight(team, f, sim, lineup) {
   const el = $('duel');
   const side = (list, k) => list.map((x, i) => `<div class="dF" id="dF${k}${i}">${spriteBox(x[0], k ? 'left' : 'right', true)}<div class="dHp"><i style="width:100%"></i></div><div class="sub">${Rules.SPECIES[x[0]].name.toUpperCase()} · LV ${x[1]}</div></div>`).join('');
-  const mine = team.map(s => [s.species, s.level]);
+  const mine = lineup;
   el.innerHTML = `<div id="dStage"><div class="dSide">${side(mine, 0)}</div><div class="dVs">VS</div><div class="dSide foe">${side(f.team, 1)}</div><div id="dLog" class="sub"></div></div>`;
   const max = [mine.map(x => Rules.fighter(...x).hp), f.team.map(x => Rules.fighter(...x).hp)];
   const front = (k, i) => { document.querySelectorAll(`#dStage .dF[id^=dF${k}]`).forEach((d, j) => d.classList.toggle('front', j === i)); };

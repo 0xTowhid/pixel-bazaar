@@ -112,6 +112,16 @@ body:not(.ingame) #hudL,body:not(.ingame) #objBox,body:not(.ingame) #topR,body:n
 #trade.wideAg{width:min(94%,48em)}
 .agList{display:flex;flex-direction:column;gap:.5em;text-align:left;max-height:60vh;overflow:auto}.agRow{display:flex;gap:.7em;align-items:center;background:#2a2346;border-radius:8px;padding:.5em}
 .agRow canvas{width:3em;height:3em;image-rendering:pixelated;border-radius:6px;background:#1c1630}.agTxt{flex:1;line-height:1.5}.agBal{text-align:right;min-width:5em}
+#wallet{width:min(96%,46em);max-height:92%;overflow:auto}.wBody{min-height:14em}
+.wHome{display:flex;gap:1.2em;align-items:flex-start;flex-wrap:wrap}.wQr{width:11em;height:11em;background:#fff;border-radius:8px;padding:.3em;flex:none}.wQr svg{width:100%;height:100%}
+.wInfo{flex:1;min-width:14em}.wAddr{font-size:1.05em;color:var(--gold);word-break:break-all;margin:.3em 0 .5em}.wBal{font-size:1.5em;color:#fff3d6;margin:.2em 0}
+.wNote{margin-top:.8em;line-height:1.6;background:#2a2346;border-radius:8px;padding:.6em .8em;font-size:.85em}
+.wGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(9.5em,1fr));gap:.6em;max-height:22em;overflow:auto}
+.wItem{background:#2a2346;border-radius:10px;padding:.5em;text-align:center;display:flex;flex-direction:column;gap:.3em;align-items:center;font-size:.85em}
+.wItem img{width:4.5em;height:4.5em;image-rendering:pixelated;border-radius:6px}.wItem b{color:#fff3d6}
+.wForm{display:flex;flex-direction:column;gap:.6em;max-width:28em}.wForm label{display:flex;flex-direction:column;gap:.3em;font-size:.85em;color:var(--mut)}
+.wForm input{font:inherit;padding:.5em .6em;border-radius:6px;border:2px solid var(--mut);background:#1c1630;color:#fff3d6}
+.wSendOne{text-align:center}.wSendOne img{width:6em;height:6em;image-rendering:pixelated;border-radius:8px}.wSendOne .wForm{margin:0 auto}
 #island{width:min(96%,52em);max-height:92%;overflow:auto}.isBody{min-height:16em;margin-top:.6em}
 .fList{display:flex;flex-direction:column;gap:.45em;max-height:24em;overflow:auto}.fRowI{line-height:1.5;border-bottom:1px solid #ffffff12;padding-bottom:.35em}
 .nList{display:grid;grid-template-columns:repeat(auto-fill,minmax(15em,1fr));gap:.4em;margin:.6em 0}.nLine{text-align:left;font-size:.75em;line-height:1.5}
@@ -130,6 +140,7 @@ body:not(.ingame) #hudL,body:not(.ingame) #objBox,body:not(.ingame) #topR,body:n
 .dNum{position:absolute;top:.3em;left:.4em;background:var(--gold);color:#1c1630;border-radius:50%;width:1.5em;height:1.5em;line-height:1.5em;font-style:normal}
 .dSpr{width:3.6em;height:3.6em;margin:0 auto;image-rendering:pixelated;background-repeat:no-repeat}.dSpr.big{width:6em;height:6em}
 .dWheel{margin:.8em 0;text-align:center}.dBtns{display:flex;justify-content:space-between;align-items:center;gap:.6em;flex-wrap:wrap}
+.dWait{text-align:center;padding:4em 1em;animation:bPulse 1.4s ease-in-out infinite}
 #dStage{position:relative;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:.5em;min-height:20em}
 .dSide{display:flex;flex-direction:column;gap:.4em}.dVs{font-size:2em;color:var(--gold)}
 .dF{position:relative;text-align:center;opacity:.45;transform:scale(.8);transition:all .25s}.dF.front{opacity:1;transform:scale(1.1)}.dF.ko{filter:grayscale(1);opacity:.25}
@@ -199,6 +210,7 @@ body:not(.ingame) #hudL,body:not(.ingame) #objBox,body:not(.ingame) #topR,body:n
 @media (pointer:coarse){.kh{display:none}#pad{display:block}body.panelOn #pad,body.dlgOn #pad{display:none}}
 #topR{right:1.2%;top:2%;display:flex;gap:.5em}
 #topR button{padding:.35em .6em;cursor:pointer}
+@media (max-width:1400px){#topR{gap:.25em}#topR button{padding:.3em .42em;font-size:.82em}#topR .kh{display:none}}
 #busy{left:50%;top:45%;transform:translate(-50%,-50%);padding:.7em 1.2em;display:none;color:var(--gold);z-index:5}
 #chainlog{left:1.2%;bottom:3%;font-size:clamp(7px,1vw,11px);display:flex;flex-direction:column-reverse;gap:.25em;max-width:40%;pointer-events:auto}
 #chainlog div{background:#1c1630cc;padding:.25em .5em;border-radius:4px;transition:opacity .6s}
@@ -241,7 +253,7 @@ body.dlgOn #hotbar,body.dlgOn #chainlog{display:none}
     <div class="box"><span>ENERGY</span><div class="debtbar"><div id="enFill" style="background:#78e678"></div></div></div>
   </div>
   <div id="objBox" class="ui box"><span id="obj"></span></div>
-  <div id="topR" class="ui"><button class="box" id="iBtn">ISLAND<span class="kh"> (I)</span></button><button class="box" id="sBtn">SPIRITS<span class="kh"> (B)</span></button><button class="box" id="pBtn">PROFILE<span class="kh"> (P)</span></button><button class="box" id="jBtn">JOURNAL<span class="kh"> (J)</span></button><button class="box" id="fsBtn">FULL SCREEN</button><button class="box" id="mute">♪ ON</button></div>
+  <div id="topR" class="ui"><button class="box" id="wBtn">WALLET</button><button class="box" id="iBtn">ISLAND<span class="kh"> (I)</span></button><button class="box" id="sBtn">SPIRITS<span class="kh"> (B)</span></button><button class="box" id="pBtn">PROFILE<span class="kh"> (P)</span></button><button class="box" id="jBtn">JOURNAL<span class="kh"> (J)</span></button><button class="box" id="fsBtn">FULL SCREEN</button><button class="box" id="mute">♪ ON</button></div>
   <div id="zone" class="ui"></div>
   <div id="hint" class="ui box"></div>
   <div id="toast" class="ui box"></div>
@@ -262,6 +274,7 @@ body.dlgOn #hotbar,body.dlgOn #chainlog{display:none}
   <div id="fate" class="ui box panel"></div>
   <div id="duel" class="ui box panel"></div>
   <div id="island" class="ui box panel"></div>
+  <div id="wallet" class="ui box panel"></div>
   <div id="bossBar" class="ui box"></div>
   <div id="catch" class="ui box"></div>
   <div id="cine"><canvas id="fxcv"></canvas><div class="lb top"></div><div class="lb bot"></div>
@@ -292,4 +305,5 @@ body.dlgOn #hotbar,body.dlgOn #chainlog{display:none}
 <script src="quests.js"></script>
 <script src="duel.js"></script>
 <script src="island.js"></script>
+<script src="wallet.js"></script>
 <script src="story.js"></script>

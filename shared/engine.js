@@ -28,7 +28,8 @@
       harvested: 0, jade_found: 0, fish_caught: 0, kaito_pnl: 0, start_coins: START_COINS, seasons_won: 0, best_score: 0,
       lead: null, enc_today: 0, fed_today: 0, wild: null, wallet: null, book: 0, shards: 0, clues: 0, solved_day: [0, 0, 0],
       fate_day: 0, fate: [], daily: [0, 0, 0, 0, 0, 0, 0], quests_claimed: 0, chapter: 1, boss_wins: 0, duel_day: [0, 0, 0], duel_wins: 0, legends: 0,
-      note_day: 0, votes_today: 0, voted: [], rep: 0, curse_day: 0, hex: null, last_hex: null, charms: 0, boss_seen: 0, boss_hits: 0, boss_claimed: 0 };
+      note_day: 0, votes_today: 0, voted: [], rep: 0, curse_day: 0, hex: null, last_hex: null, charms: 0, boss_seen: 0, boss_hits: 0, boss_claimed: 0,
+      cursed_day: 0, cursed_season: 0, sold: 0, duel_seed: '', duel_last: 0 };
   };
   const preimage = (player, season, day, event, rumors, salt) => `${player}|${season}|${day}|${event}|${rumors}|${salt}`;
   function settle(pos, price) { const e = Math.max(1, pos.entry); const mv = Math.trunc((price - e) * 1e6 / e); return Math.trunc(pos.stake * pos.lev * mv * (pos.long ? 1 : -1) / 1e6); }
@@ -58,6 +59,7 @@
       this.boss = { id: this.boss ? this.boss.id + 1 : 1, species, hp: R.ISLAND.BOSS_HP, max: R.ISLAND.BOSS_HP, ends, hitters: [], killed_by: null };
       this._post(this.contractId, `THE ${SP[species].name.toUpperCase()} DESCENDS ON THE ISLAND! Everyone, fight!`);
     }
+    _seed8() { const b = new Uint8Array(8); (globalThis.crypto || require('crypto').webcrypto).getRandomValues(b); return [...b].map(x => x.toString(16).padStart(2, '0')).join(''); }
     get_notes(world) { return this.notes.filter(n => n.world === world); }
     get_feed() { return this.feed.slice(); }
     get_boss() {
@@ -203,7 +205,7 @@
           case 'Cat': { req(p.cat_day !== p.day, 'Mochi already found something today'); req(!fate(1, 1), 'The Crow scared Mochi today'); p.cat_day = p.day; const r = roll('cat', 0); if (r < 128) p.coins += 1000; else p.seeds[r % 7] += 1; break; }
           case 'Sell': {
             const g = a.good; req(g >= 0 && g < NG && g !== 3 && a.qty > 0, 'cannot sell that'); req(this._bal(GOODS[g], c) >= a.qty, 'not enough in your barn');
-            this._burn(GOODS[g], c, a.qty); const bonus = g === 0 && p.projects[2] ? 115 : 100;
+            this._burn(GOODS[g], c, a.qty); p.sold += a.qty; const bonus = g === 0 && p.projects[2] ? 115 : 100;
             for (let i = 0; i < a.qty; i++) { p.coins += Math.trunc(Math.trunc(p.prices[g] / 10) * bonus / 100); p.prices[g] = Math.max(1, Math.trunc(p.prices[g] * 98 / 100)); }
             break;
           }
@@ -275,7 +277,7 @@
           }
           case 'AdvanceStory': {
             req(p.chapter <= 5, 'the story is complete');
-            const done = [null, p.book && p.harvested >= 5, p.clues & 1, p.clues & 2, p.clues & 4, p.boss_wins & 1][p.chapter];
+            const done = [null, p.book && p.sold > 0, p.clues & 1, p.clues & 2, p.clues & 4, p.boss_wins & 1][p.chapter];
             req(done, 'this chapter is not finished yet'); p.chapter++;
             if (p.chapter >= 2 && p.chapter <= 4) { p.shards++; p.coins += 10000; } if (p.chapter === 5) { p.shards += 2; p.coins += 20000; }
             if (p.chapter > 5) { badges.push('lantern_keeper'); this._mintSpirit(c, 37, false); p.book = this._bookAdd(p.book, 37); }
@@ -289,7 +291,9 @@
             energy(R.DUEL_ENERGY);
             const mine = a.team.map((t, i) => { req(!a.team.slice(0, i).includes(t), 'each spirit fights once'); this._ownsSpirit(c, t); const k = this.tokens[t]; return [k.species, R.spiritLevel(k.xp)]; });
             p.duel_day[f] = p.day;
-            let n = 0; const won = R.duel(mine, R.FOES[f].team, () => roll('duel' + f, n++)).won;
+            const seed = this._seed8(); let n = 0;
+            const won = R.duel(mine, R.FOES[f].team, () => this._roll(seed, c, 'duel' + f, n++)).won;
+            p.duel_seed = seed; p.duel_last = f | (won ? 0x80 : 0);
             a.team.forEach(t => this._xp(t, won ? 20 : 6));
             if (won) { p.coins += R.FOES[f].coins * 100; p.duel_wins++; if (f === 2) { p.boss_wins |= 1; p.shards++; badges.push('spirit_champion'); } this._post(c, `beat ${R.FOES[f].name} in a spirit duel`); }
             break;
@@ -314,6 +318,8 @@
             req(a.kind >= 0 && a.kind < 3, 'no such curse'); req(a.target !== c, 'you cannot curse yourself');
             req(p.curse_day !== p.day, 'one curse a day'); req(p.coins >= R.ISLAND.CURSE_COST * 100, 'a curse costs 40 coins');
             const t = this.players[a.target] || fail('no such player');
+            req(t.cursed_day !== t.day || t.cursed_season !== t.season, 'someone already cursed them today');
+            t.cursed_day = t.day; t.cursed_season = t.season;
             p.coins -= R.ISLAND.CURSE_COST * 100; p.curse_day = p.day;
             const blocked = t.charms > 0, name = R.ISLAND.CURSES[a.kind].name;
             if (blocked) { t.charms--; t.last_hex = { from: c, kind: a.kind, blocked: true }; } else t.hex = { from: c, kind: a.kind, blocked: false };
@@ -355,6 +361,10 @@
           case 'SendToWallet': {
             const to = p.wallet || fail('link a wallet first'); req(this.owners[a.token] === c, 'not yours');
             if (p.lead === a.token) p.lead = null; this._move(a.token, c, to); break;
+          }
+          case 'SendTo': {
+            req(a.to && a.to !== c, 'that is you'); req(this.owners[a.token] === c, 'not yours');
+            if (p.lead === a.token) p.lead = null; this._move(a.token, c, a.to); break;
           }
           default: fail('unknown action');
         }

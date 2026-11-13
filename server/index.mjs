@@ -148,12 +148,13 @@ const routes = {
     const name = String(body.name || '').toLowerCase();
     if (!/^[a-z0-9](?:[a-z0-9_-]{1,30})$/.test(name)) throw new Error('Names use 2-31 lowercase letters, numbers, - or _.');
     if (!/^ed25519:[1-9A-HJ-NP-Za-km-z]{40,50}$/.test(body.publicKey || '')) throw new Error('bad public key');
+    if (body.fullKey && (!/^ed25519:[1-9A-HJ-NP-Za-km-z]{40,50}$/.test(body.fullKey) || body.fullKey === body.publicKey)) throw new Error('bad wallet key');
     if (/[-_]{2}|[-_]$/.test(name)) throw new Error('Names cannot end with - or _ or have two in a row.');
     if (!MOCK && limited(clientIp(req))) throw new Error('Too many new players from your network. Try again in an hour.');
     const accountId = `${name}.${CONTRACT}`;
     if (await view('get_player', { account_id: accountId })) throw new Error('That name is taken.');
     if (!MOCK && ((await balanceOf(OPERATOR)) < MIN_RESERVE + +PLAYER_FUNDING || (await balanceOf(CONTRACT)) < CONTRACT_MIN)) { console.error('operator balance low: sign-ups paused'); throw new Error('New sign-ups are paused for a moment. Please try again later.'); }
-    await operatorCall('register_player', { name, public_key: body.publicKey }, PLAYER_FUNDING);
+    await operatorCall('register_player', { name, public_key: body.publicKey, full_key: body.fullKey || null }, PLAYER_FUNDING);
     if (!(await view('get_player', { account_id: accountId }))) throw new Error('Account creation failed. Try another name.');
     return { accountId };
   },

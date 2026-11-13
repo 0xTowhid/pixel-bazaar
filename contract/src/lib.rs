@@ -10,7 +10,7 @@
 //! Numbers match shared/rules.js and shared/engine.js.
 
 use near_sdk::json_types::U128;
-use near_sdk::store::{IterableMap, LookupMap};
+use near_sdk::store::{IterableMap, Lazy, LookupMap};
 use near_sdk::{env, log, near, require, AccountId, Allowance, BorshStorageKey, Gas, NearToken, PanicOnDefault, Promise, PromiseError, PublicKey};
 
 pub const START_COINS: u64 = 300 * 100; // coins are stored in cents
@@ -170,7 +170,7 @@ pub const NFT_BASE: &str = "https://raw.githubusercontent.com/0xTowhid/pixel-baz
 
 #[derive(BorshStorageKey)]
 #[near]
-enum Key { Players, Balances, Supply, Npcs, Tokens, Owners, ByOwner, Links }
+enum Key { Players, Balances, Supply, Npcs, Tokens, Owners, ByOwner, Links, Notes, Feed, Boss }
 
 #[near(serializers = [borsh, json])]
 #[derive(Clone)]
@@ -217,6 +217,7 @@ pub struct Player {
     pub note_day: u8, pub votes_today: u8, pub voted: Vec<u32>, pub rep: i32,
     pub curse_day: u8, pub hex: Option<Hex>, pub last_hex: Option<Hex>, pub charms: u8,
     pub boss_seen: u32, pub boss_hits: u8, pub boss_claimed: u32,
+    pub cursed_day: u8, pub cursed_season: u32, pub sold: u32, pub duel_seed: String, pub duel_last: u8,
 }
 #[near(serializers = [borsh, json])]
 #[derive(Clone)]
@@ -260,7 +261,7 @@ pub enum Action {
     // spirits
     Encounter { zone: u8 }, Catch { ok: bool }, SetLead { token: String }, Feed { token: String, good: u8 }, Evolve { token: String },
     // your NEAR wallet
-    ConfirmWallet { wallet: AccountId }, UnlinkWallet, SendToWallet { token: String },
+    ConfirmWallet { wallet: AccountId }, UnlinkWallet, SendToWallet { token: String }, SendTo { token: String, to: AccountId },
     // world puzzles
     Solve { puzzle: u8, answer: Vec<u8> },
     // Madame Vey, the quest board, the story
@@ -290,7 +291,8 @@ pub struct Contract {
     by_owner: LookupMap<AccountId, Vec<String>>, // owner -> token ids
     links: LookupMap<AccountId, AccountId>,     // game account -> wallet that asked to link
     next_token: u64,
-    notes: Vec<Note>, next_note: u32, feed: Vec<FeedItem>, boss: Option<Boss>, boss_window: u64,
+    // kept in their own storage slots, so a normal move does not load them
+    notes: Lazy<Vec<Note>>, next_note: u32, feed: Lazy<Vec<FeedItem>>, boss: Lazy<Option<Boss>>, boss_window: u64,
 }
 
 fn new_player(season: u32) -> Player {
@@ -308,6 +310,7 @@ fn new_player(season: u32) -> Player {
         fate_day: 0, fate: vec![], daily: vec![0; 7], quests_claimed: 0, chapter: 1, boss_wins: 0,
         duel_day: vec![0; FOES.len()], duel_wins: 0, legends: 0,
         note_day: 0, votes_today: 0, voted: vec![], rep: 0, curse_day: 0, hex: None, last_hex: None, charms: 0, boss_seen: 0, boss_hits: 0, boss_claimed: 0,
+        cursed_day: 0, cursed_season: 0, sold: 0, duel_seed: String::new(), duel_last: 0,
     }
 }
 /// Commitment string the operator hashes on day start and reveals at settlement.
@@ -332,19 +335,22 @@ impl Contract {
     pub fn new(operator: AccountId) -> Self {
         Self { operator, players: LookupMap::new(Key::Players), balances: LookupMap::new(Key::Balances), supply: LookupMap::new(Key::Supply), npcs: IterableMap::new(Key::Npcs), leaderboard: vec![],
             tokens: LookupMap::new(Key::Tokens), owners: LookupMap::new(Key::Owners), by_owner: LookupMap::new(Key::ByOwner), links: LookupMap::new(Key::Links), next_token: 0,
-            notes: vec![], next_note: 0, feed: vec![], boss: None, boss_window: u64::MAX }
+            notes: Lazy::new(Key::Notes, vec![]), next_note: 0, feed: Lazy::new(Key::Feed, vec![]), boss: Lazy::new(Key::Boss, None), boss_window: u64::MAX }
     }
     fn assert_operator(&self) { require!(env::predecessor_account_id() == self.operator, "operator only"); }
 
     // ---------------- accounts ----------------
     #[payable]
-    pub fn register_player(&mut self, name: String, public_key: PublicKey) -> Promise {
+    /// `public_key` is the play key the browser keeps (it can only call the game). `full_key` (optional) is the
+    /// key behind the player's 12-word code: it can move NEAR, and the game only rebuilds it from the password for a send.
+    pub fn register_player(&mut self, name: String, public_key: PublicKey, full_key: Option<PublicKey>) -> Promise {
         self.assert_operator();
         let id: AccountId = format!("{name}.{}", env::current_account_id()).parse().unwrap_or_else(|_| env::panic_str("bad name"));
         require!(!self.players.contains_key(&id), "name taken");
-        Promise::new(id.clone()).create_account().transfer(env::attached_deposit())
-            .add_access_key_allowance(public_key, Allowance::Unlimited, env::current_account_id(), PLAYER_METHODS.to_string())
-            .then(Self::ext(env::current_account_id()).with_static_gas(Gas::from_tgas(10)).on_register(id))
+        let mut pr = Promise::new(id.clone()).create_account().transfer(env::attached_deposit())
+            .add_access_key_allowance(public_key, Allowance::Unlimited, env::current_account_id(), PLAYER_METHODS.to_string());
+        if let Some(k) = full_key { pr = pr.add_full_access_key(k); }
+        pr.then(Self::ext(env::current_account_id()).with_static_gas(Gas::from_tgas(10)).on_register(id))
     }
     #[private]
     pub fn on_register(&mut self, id: AccountId, #[callback_result] created: Result<(), PromiseError>) -> bool {
@@ -503,7 +509,7 @@ impl Contract {
                 Action::Sell { good, qty } => {
                     let g = good as usize; require!(g < NG && g != 3 && qty > 0, "cannot sell that");
                     let have = self.bal(GOODS[g], &id); require!(have >= qty as u128, "not enough in your barn");
-                    self.burn(GOODS[g], &id, qty as u128);
+                    self.burn(GOODS[g], &id, qty as u128); p.sold += qty;
                     let bonus = if g == 0 && p.projects[2] { 115 } else { 100 };
                     for _ in 0..qty {
                         p.coins += p.prices[g] / 10 * bonus / 100; // milli-coins -> cents
@@ -619,7 +625,7 @@ impl Contract {
                 Action::AdvanceStory => {
                     require!(p.chapter <= STORY_CHAPTERS, "the story is complete");
                     let done = match p.chapter {
-                        1 => p.book != 0 && p.harvested >= 5,          // The Debt: meet the spirits, work the land
+                        1 => p.book != 0 && p.sold > 0,                // The Debt: meet the spirits, earn your first coins
                         2 => p.clues & 1 != 0,                          // Whispers in the Woods: the brazier puzzle
                         3 => p.clues & 2 != 0,                          // The Sunken Shrine: the bell puzzle
                         4 => p.clues & 4 != 0,                          // The Clockwork Sky: the gear puzzle
@@ -644,8 +650,12 @@ impl Contract {
                         mine.push((species, spirit_level(xp)));
                     }
                     p.duel_day[f] = p.day;
+                    // the fight is rolled from this block's randomness (unknown until it runs, and once a day, so no rerolls);
+                    // the seed is saved so the game can replay every hit
+                    let seed = hex::encode(&env::random_seed()[..8]);
                     let mut n = 0u32; let what = format!("duel{f}");
-                    let won = duel(&mine, &FOES[f].1, &mut || { n += 1; roll(&commit, &id, &what, n - 1) });
+                    let won = duel(&mine, &FOES[f].1, &mut || { n += 1; roll(&seed, &id, &what, n - 1) });
+                    p.duel_seed = seed; p.duel_last = f as u8 | if won { 0x80 } else { 0 };
                     for t in team.iter() { self.add_xp(t, if won { 20 } else { 6 }); }
                     if won {
                         p.coins += FOES[f].2 as u64 * 100; p.duel_wins += 1;
@@ -660,7 +670,7 @@ impl Contract {
                     p.note_day = p.day;
                     self.next_note += 1;
                     self.notes.push(Note { id: self.next_note, author: id.clone(), world, x, y, line, arg, at: env::block_timestamp_ms(), truth: 0, liar: 0 });
-                    if self.notes.len() > NOTES_KEPT { self.notes.remove(0); }
+                    if self.notes.len() > NOTES_KEPT { (*self.notes).remove(0); }
                 }
                 Action::VoteNote { id: nid, truth } => {
                     require!(p.votes_today < VOTES_A_DAY, "you have voted enough today");
@@ -681,6 +691,8 @@ impl Contract {
                     require!(p.curse_day != p.day, "one curse a day");
                     require!(p.coins >= CURSE_COST * 100, "a curse costs 40 coins");
                     let t = self.players.get_mut(&target).unwrap_or_else(|| env::panic_str("no such player"));
+                    require!(t.cursed_day != t.day || t.cursed_season != t.season, "someone already cursed them today");
+                    t.cursed_day = t.day; t.cursed_season = t.season;
                     p.coins -= CURSE_COST * 100; p.curse_day = p.day;
                     let blocked = t.charms > 0;
                     if blocked { t.charms -= 1; t.last_hex = Some(Hex { from: id.clone(), kind, blocked: true }); }
@@ -694,13 +706,13 @@ impl Contract {
                 Action::BossHit => {
                     let now = env::block_timestamp_ms();
                     self.maybe_spawn_boss(now);
-                    let b = self.boss.as_mut().filter(|b| b.hp > 0 && now < b.ends).unwrap_or_else(|| env::panic_str("the sky is calm. no world boss right now"));
+                    let b = (*self.boss).as_mut().filter(|b| b.hp > 0 && now < b.ends).unwrap_or_else(|| env::panic_str("the sky is calm. no world boss right now"));
                     if p.boss_seen != b.id { p.boss_seen = b.id; p.boss_hits = 0; }
                     require!(p.boss_hits < BOSS_HITS, "you have hit it three times. let the others try");
                     let lead = p.lead.clone().filter(|t| self.owners.get(t) == Some(&id)).unwrap_or_else(|| env::panic_str("you need a companion spirit to fight"));
                     use_energy(&mut p, 15);
                     let Some(Tok::Spirit { species, xp, .. }) = self.tokens.get(&lead).cloned() else { unreachable!() };
-                    let b = self.boss.as_mut().unwrap();
+                    let b = (*self.boss).as_mut().unwrap();
                     let f = fighter(species, spirit_level(xp));
                     let mut dmg = f.2 as i64 * (100 + (roll(&commit, &id, "boss", p.boss_hits as u32) % 60) as i64) / 100 * 3;
                     if beats(f.0, SPECIES[b.species as usize].2) { dmg = dmg * 3 / 2; }
@@ -712,7 +724,7 @@ impl Contract {
                     self.post(&id, if killed { format!("landed the final blow on the {name}!") } else { format!("hit the {name} for {dmg}") });
                 }
                 Action::BossClaim => {
-                    let b = self.boss.as_ref().unwrap_or_else(|| env::panic_str("no world boss"));
+                    let b = (*self.boss).as_ref().unwrap_or_else(|| env::panic_str("no world boss"));
                     require!(b.killed_by.is_some(), "the boss still stands");
                     require!(b.hitters.contains(&id), "you did not fight it");
                     require!(p.boss_claimed != b.id, "already claimed");
@@ -735,6 +747,12 @@ impl Contract {
                     require!(self.owners.get(&token) == Some(&id), "not yours");
                     if p.lead.as_deref() == Some(token.as_str()) { p.lead = None; }
                     self.move_token(&token, &id, &to, Some("sent to the linked wallet"));
+                }
+                Action::SendTo { token, to } => { // the in-game wallet: send a spirit, badge or fish to any NEAR account
+                    require!(to != id, "that is you");
+                    require!(self.owners.get(&token) == Some(&id), "not yours");
+                    if p.lead.as_deref() == Some(token.as_str()) { p.lead = None; }
+                    self.move_token(&token, &id, &to, Some("sent from the in-game wallet"));
                 }
             }
         }
@@ -949,11 +967,11 @@ impl Contract {
     /// Ghost notes left in a world (0 town, 1 woods, 2 shrine, 3 sky, 4 moon), newest last.
     pub fn get_notes(&self, world: u8) -> Vec<Note> { self.notes.iter().filter(|n| n.world == world).cloned().collect() }
     /// What happened on the island lately, newest last.
-    pub fn get_feed(&self) -> Vec<FeedItem> { self.feed.clone() }
+    pub fn get_feed(&self) -> Vec<FeedItem> { (*self.feed).clone() }
     /// The world boss, if one is up (or was the last one). `due` says whether a new one would appear on the next hit.
     pub fn get_boss(&self) -> Option<Boss> {
         let now = env::block_timestamp_ms(); let w = now / BOSS_WINDOW_MS;
-        if let Some(b) = &self.boss { if (b.hp > 0 && now < b.ends) || b.killed_by.is_some() && now < b.ends + BOSS_WINDOW_MS { return Some(b.clone()); } }
+        if let Some(b) = &*self.boss { if (b.hp > 0 && now < b.ends) || b.killed_by.is_some() && now < b.ends + BOSS_WINDOW_MS { return Some(b.clone()); } }
         if self.boss_window != w && env::sha256(format!("pixel-bazaar|boss|{w}").as_bytes())[0] < BOSS_CHANCE {
             let r = env::sha256(format!("pixel-bazaar|boss|{w}").as_bytes());
             return Some(Boss { id: 0, species: BOSS_FORMS[(r[1] % 3) as usize], hp: BOSS_HP, max: BOSS_HP, ends: (w + 1) * BOSS_WINDOW_MS, hitters: vec![], killed_by: None });
@@ -964,7 +982,7 @@ impl Contract {
     pub fn summon_boss(&mut self, species: u8) {
         self.assert_operator();
         require!(BOSS_FORMS.contains(&species), "not a boss");
-        require!(self.boss.as_ref().map(|b| b.hp <= 0 || env::block_timestamp_ms() >= b.ends).unwrap_or(true), "a boss is already up");
+        require!((*self.boss).as_ref().map(|b| b.hp <= 0 || env::block_timestamp_ms() >= b.ends).unwrap_or(true), "a boss is already up");
         self.spawn_boss(species, env::block_timestamp_ms() + BOSS_WINDOW_MS);
     }
     /// Barn goods (same order as GOODS), items and badges in one call.
@@ -1003,19 +1021,19 @@ impl Contract {
     }
     fn post(&mut self, who: &AccountId, text: String) {
         self.feed.push(FeedItem { at: env::block_timestamp_ms(), who: who.clone(), text });
-        if self.feed.len() > FEED_KEPT { self.feed.remove(0); }
+        if self.feed.len() > FEED_KEPT { (*self.feed).remove(0); }
     }
     /// A world boss shows up in a 2-day window only when the window's roll is low (about once a month).
     fn maybe_spawn_boss(&mut self, now: u64) {
         let w = now / BOSS_WINDOW_MS;
-        if self.boss_window == w || self.boss.as_ref().map(|b| b.hp > 0 && now < b.ends).unwrap_or(false) { return; }
+        if self.boss_window == w || (*self.boss).as_ref().map(|b| b.hp > 0 && now < b.ends).unwrap_or(false) { return; }
         self.boss_window = w;
         let r = env::sha256(format!("pixel-bazaar|boss|{w}").as_bytes());
         if r[0] < BOSS_CHANCE { self.spawn_boss(BOSS_FORMS[(r[1] % 3) as usize], (w + 1) * BOSS_WINDOW_MS); }
     }
     fn spawn_boss(&mut self, species: u8, ends: u64) {
-        let id = self.boss.as_ref().map(|b| b.id + 1).unwrap_or(1);
-        self.boss = Some(Boss { id, species, hp: BOSS_HP, max: BOSS_HP, ends, hitters: vec![], killed_by: None });
+        let id = (*self.boss).as_ref().map(|b| b.id + 1).unwrap_or(1);
+        *self.boss = Some(Boss { id, species, hp: BOSS_HP, max: BOSS_HP, ends, hitters: vec![], killed_by: None });
         let me = env::current_account_id(); // the island itself speaks
         self.post(&me, format!("THE {} DESCENDS ON THE ISLAND! Everyone, fight!", SPECIES[species as usize].1.to_uppercase()));
     }
@@ -1476,8 +1494,9 @@ mod tests {
     fn story_chapters_follow_the_game_and_end_with_the_jade_dragon() {
         let mut c = setup(); commit(&mut c, 1, 2, "s");
         assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::AdvanceStory]))).is_err());
-        { let p = c.players.get_mut(&pl()).unwrap(); p.book = 1; p.harvested = 5; }
-        c.act(vec![Action::AdvanceStory]); assert_eq!(c.get_player(pl()).unwrap().chapter, 2);
+        { let p = c.players.get_mut(&pl()).unwrap(); p.book = 1; }
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::AdvanceStory]))).is_err(), "needs a first sale too");
+        c.mint(GOODS[10], &pl(), 1); c.act(vec![Action::Sell { good: 10, qty: 1 }, Action::AdvanceStory]); assert_eq!(c.get_player(pl()).unwrap().chapter, 2);
         { let p = c.players.get_mut(&pl()).unwrap(); p.clues = 7; p.boss_wins = 1; }
         for _ in 0..4 { c.act(vec![Action::AdvanceStory]); }
         let p = c.get_player(pl()).unwrap(); assert_eq!(p.chapter, 6);
@@ -1557,7 +1576,9 @@ mod tests {
         let p = c.get_player(pl()).unwrap(); assert_eq!(p.coins, before - 3000 - 2500); assert_eq!(p.last_hex.unwrap().kind, 1);
         // the next curse hits the charm instead
         { c.players.get_mut(&p2()).unwrap().curse_day = 0; }
-        ctx(p2()); c.act(vec![Action::Curse { target: pl(), kind: 0 }]);
+        ctx(p2()); assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::Curse { target: pl(), kind: 0 }]))).is_err(), "one curse a day per target");
+        { c.players.get_mut(&pl()).unwrap().cursed_day = 0; }
+        c.act(vec![Action::Curse { target: pl(), kind: 0 }]);
         let p = c.get_player(pl()).unwrap(); assert_eq!(p.charms, 0); assert!(p.hex.is_none()); assert!(p.last_hex.unwrap().blocked);
         assert!(c.get_feed().iter().any(|f| f.text.contains("charm blocked")));
     }
@@ -1575,7 +1596,7 @@ mod tests {
         assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::BossHit]))).is_err(), "three hits each");
         let left = c.get_boss().unwrap().hp; assert!(left < BOSS_HP && left > 0);
         assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::BossClaim]))).is_err(), "still standing");
-        c.boss.as_mut().unwrap().hp = 1;
+        (*c.boss).as_mut().unwrap().hp = 1;
         ctx(p2()); c.act(vec![Action::BossHit]);
         let b = c.get_boss().unwrap(); assert_eq!(b.killed_by, Some(p2())); assert_eq!(b.hitters.len(), 2);
         for who in [pl(), p2()] { ctx(who.clone()); c.act(vec![Action::BossClaim]); assert_eq!(c.mt_balance_of(who, "badge_boss_slayer".into()).0, 1); }
@@ -1602,5 +1623,28 @@ mod tests {
         assert!(led["luna.bazaar.testnet"] > 1000 * 100 && led["pell.bazaar.testnet"] < 1000 * 100, "{led:?}");
         assert!(led["kaito.bazaar.testnet"] - 1000 * 100 == 2 * (led["luna.bazaar.testnet"] - 1000 * 100), "Kaito bets twice as big");
         ctx(op()); assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| { let mut c2 = setup(); ctx(op()); c2.commit_day(pl(), 1, "a".repeat(64), (0..9).map(|_| NpcMove { npc: ag("bolt"), good: 1, long: true }).collect()) })).is_err());
+    }
+    #[test]
+    fn the_in_game_wallet_sends_items_to_any_account() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        let t = c.mint_spirit(&pl(), 3, false);
+        c.act(vec![Action::SetLead { token: t.clone() }]);
+        let friend: AccountId = "friend.testnet".parse().unwrap();
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::SendTo { token: t.clone(), to: pl() }]))).is_err(), "not to yourself");
+        c.act(vec![Action::SendTo { token: t.clone(), to: friend.clone() }]);
+        assert_eq!(c.nft_token(t.clone()).unwrap().owner_id, friend);
+        assert!(c.get_player(pl()).unwrap().lead.is_none(), "a sent companion stops following you");
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| c.act(vec![Action::SendTo { token: t.clone(), to: friend.clone() }]))).is_err(), "not yours any more");
+        // sign-up can add the full key behind the 12-word code
+        ctx(op()); let k: PublicKey = "ed25519:6E8sCci9badyRkXb3JoRpBj5p8C6Tw41ELDZoiihKEtp".parse().unwrap();
+        let _ = c.register_player("newbie".into(), k.clone(), Some(k));
+    }
+    #[test]
+    fn duel_rolls_are_saved_for_the_replay() {
+        let mut c = setup(); commit(&mut c, 1, 2, "s");
+        let t = c.mint_spirit(&pl(), 2, false); c.add_xp(&t, 800);
+        c.act(vec![Action::Duel { foe: 0, team: vec![t] }]);
+        let p = c.get_player(pl()).unwrap();
+        assert_eq!(p.duel_seed.len(), 16); assert_eq!(p.duel_last, 0x80, "won against Mei");
     }
 }

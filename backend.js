@@ -71,8 +71,10 @@ const Backend = (() => {
             phrase = await phraseFromPassword(accountId, a.password);
           }
           await loadKeys();
-          const kp = keys.keyFromPhrase(phrase);
-          if (a.kind === 'new') await api('/api/register', { name, publicKey: kp.publicKey });
+          // two keys from the same 12 words: the play key (kept here, can only call the game)
+          // and the full wallet key (standard NEAR path; never stored, only rebuilt from the password for a send)
+          const kp = keys.keyFromPhrase(phrase, 1), full = keys.keyFromPhrase(phrase, 0);
+          if (a.kind === 'new') await api('/api/register', { name, publicKey: kp.publicKey, fullKey: full.publicKey });
           else await api('/api/check-key', { accountId, publicKey: kp.publicKey });
           me = { accountId, secretKey: kp.secretKey }; store.set(me); account = null;
           return { accountId, phrase: a.kind === 'new' ? phrase : null };
@@ -107,6 +109,31 @@ const Backend = (() => {
       await loadNear(); return provider.callFunction({ contractId: cfg.contractId, method, args });
     },
     spirits() { return this.view('get_spirits', { account_id: me.accountId }); },
+    /** NEAR on the player's account: { total, available } in NEAR (numbers). */
+    async balance() {
+      if (mode === 'local') return { total: 0.05, available: 0.05, test: true };
+      if (mode === 'mock') return { total: 0.05, available: 0.05, test: true };
+      await loadNear();
+      const a = await provider.viewAccount({ accountId: me.accountId });
+      const total = Number(BigInt(a.amount) / 10n ** 18n) / 1e6, locked = Number(a.storage_usage) * 1e-5;
+      return { total, available: Math.max(0, total - locked) };
+    },
+    /** Send NEAR out. The full key is rebuilt from the password (or the 12 words) just for this, then dropped. */
+    async sendNear(secret, to, amount) {
+      if (!/^[a-z0-9._-]{2,64}$/.test(to) || !(to.endsWith('.near') || to.endsWith('.testnet') || /^[0-9a-f]{64}$/.test(to))) throw new Error('That does not look like a NEAR address.');
+      const n = Number(amount); if (!(n > 0)) throw new Error('Enter an amount.');
+      if (mode !== 'chain') { await new Promise(r => setTimeout(r, 400)); return 'test-' + Date.now(); }
+      await loadKeys(); await loadNear();
+      const words = secret.trim().split(/\s+/).length === 12 ? secret.trim().toLowerCase().split(/\s+/).join(' ') : await phraseFromPassword(me.accountId, secret);
+      const full = keys.keyFromPhrase(words, 0);
+      const keyOk = await provider.viewAccessKey({ accountId: me.accountId, publicKey: full.publicKey }).then(() => true, () => false);
+      if (!keyOk) throw new Error('Wrong password, or this account has no wallet key.');
+      const acc = new near.Account(me.accountId, provider, full.secretKey);
+      const yocto = BigInt(Math.round(n * 1e6)) * 10n ** 18n;
+      const r = await acc.transfer({ receiverId: to, amount: yocto });
+      const fail = r?.status?.Failure; if (fail) throw new Error(JSON.stringify(fail).slice(0, 160));
+      return r?.transaction?.hash || null;
+    },
     nfts() { return this.view('nft_tokens_for_owner', { account_id: me.accountId }); },
     linkRequest() { return this.view('get_link_request', { game_account: me.accountId }); },
     get network() { return cfg.network || 'testnet'; },

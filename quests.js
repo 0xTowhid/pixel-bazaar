@@ -15,7 +15,7 @@ async function questSlots() {
   for (let i = 0; picked.length < 3; i++) { const q = (await rollJS(c, Backend.accountId, 'quest', i)) % Rules.QUESTS.length; if (!picked.includes(q)) picked.push(q); }
   S._qs = { c, v: picked }; return picked;
 }
-const chapterDone = p => [null, p.book && p.harvested >= 5, p.clues & 1, p.clues & 2, p.clues & 4, p.boss_wins & 1][p.chapter];
+const chapterDone = p => [null, p.book && p.sold > 0, p.clues & 1, p.clues & 2, p.clues & 4, p.boss_wins & 1][p.chapter];
 
 // ---------- after every sync: pay finished quests and move the story on ----------
 let progressBusy = false;

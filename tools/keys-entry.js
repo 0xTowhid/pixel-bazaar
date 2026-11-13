@@ -19,11 +19,12 @@ function slip10(seed, path) {
   }
   return key;
 }
-/** 12 words -> { publicKey: 'ed25519:...', secretKey: 'ed25519:...' } */
-export function keyFromPhrase(phrase) {
+/** 12 words -> { publicKey: 'ed25519:...', secretKey: 'ed25519:...' }.
+ *  index 0 is the standard NEAR wallet key (the full key, only rebuilt for a send); index 1 is the play key the browser keeps. */
+export function keyFromPhrase(phrase, index = 0) {
   const words = phrase.trim().toLowerCase().split(/\s+/).join(' ');
   if (!validateMnemonic(words, wordlist)) throw new Error('That recovery code is not valid. Check the 12 words.');
-  const priv = slip10(mnemonicToSeedSync(words, ''), [44, 397, 0]);
+  const priv = slip10(mnemonicToSeedSync(words, ''), [44, 397, index]);
   const pub = ed25519.getPublicKey(priv);
   const full = new Uint8Array(64); full.set(priv); full.set(pub, 32);
   return { publicKey: 'ed25519:' + base58.encode(pub), secretKey: 'ed25519:' + base58.encode(full) };

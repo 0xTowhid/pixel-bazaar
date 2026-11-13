@@ -133,7 +133,6 @@ async function boot() {
   if (p.finished) await mustDo('Starting a new season', () => Backend.call('start_season'), 'start_season');
   else if (p.asleep) { await mustDo('Finishing last night', () => Backend.settle(p.day), 'settle_day'); toast('You slept through the night.', 3); }
   await beginDay(true);
-  checkWalletLink();
   const firstTime = !safeGet('pb_intro|' + Backend.accountId);
   let tour = false;
   if (firstTime) { await playIntro(); tour = await showWelcome(); safeSet('pb_intro|' + Backend.accountId, '1'); }
@@ -460,7 +459,7 @@ function advance() { S.step = Math.min(S.step + 1, STEPS.length - 1); sfx('ok');
 
 // ---------- UI ----------
 let dlg = null, cardCb = null;
-const uiOpen = () => !!dlg || (S && (S.fishing || S.story || S.catching)) || ['trade', 'card', 'journal', 'profile', 'netErr', 'book', 'quests', 'fate', 'duel', 'island'].some(id => $(id)?.classList.contains('on'));
+const uiOpen = () => !!dlg || (S && (S.fishing || S.story || S.catching)) || ['trade', 'card', 'journal', 'profile', 'netErr', 'book', 'quests', 'fate', 'duel', 'island', 'wallet'].some(id => $(id)?.classList.contains('on'));
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // what the chain said, in words a player understands
 function niceErr(m) {
@@ -499,7 +498,7 @@ function closeDlg() { dlg = null; $('dialog').classList.remove('on'); }
 const CLOSERS = {
   trade: () => closeTrade(), journal: () => $('journal').classList.remove('on'), profile: () => $('profile').classList.remove('on'),
   book: () => $('book').classList.remove('on'), quests: () => $('quests').classList.remove('on'), fate: () => $('fate').classList.remove('on'),
-  island: () => closeIsland(), duel: () => { if (!$('dStage')) closeDuel(); }, wallet: () => typeof closeWallet === 'function' && closeWallet(),
+  island: () => closeIsland(), duel: () => { if (!$('dStage') && !document.querySelector('#duel .dWait')) closeDuel(); }, wallet: () => typeof closeWallet === 'function' && closeWallet(),
 };
 document.addEventListener('pointerdown', e => {
   if (!S || busyN) return;
@@ -741,7 +740,7 @@ addEventListener('keydown', e => {
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; keys[k] = true;
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
   if (k === 'e' || k === ' ' || k === 'Enter') interact();
-  if (k === 'Escape') { closeTrade(); $('journal').classList.remove('on'); $('profile').classList.remove('on'); $('book').classList.remove('on'); $('quests').classList.remove('on'); if (DUEL.on && !$('dStage')) closeDuel(); closeIsland(); if (dlg) closeDlg(); }
+  if (k === 'Escape') { closeTrade(); $('journal').classList.remove('on'); $('profile').classList.remove('on'); $('book').classList.remove('on'); $('quests').classList.remove('on'); if (DUEL.on && !$('dStage')) closeDuel(); closeIsland(); closeWallet(); if (dlg) closeDlg(); }
   if (k === 'q' && S && S.player && !dlg && !$('card').classList.contains('on')) $('quests').classList.contains('on') ? $('quests').classList.remove('on') : openQuests();
   if (k === 'i' && S && S.player && !dlg && !$('card').classList.contains('on')) $('island').classList.contains('on') ? closeIsland() : openIsland();
   if (k === 'b' && S && S.player && !dlg && !$('card').classList.contains('on')) $('book').classList.contains('on') ? $('book').classList.remove('on') : openBook();
@@ -762,12 +761,13 @@ $('mute').onclick = toggleMusic; $('jBtn').onclick = () => { initAudio(); if (S)
 $('pBtn').onclick = () => { initAudio(); if (S) openProfile(); };
 $('sBtn').onclick = () => { initAudio(); if (S && S.player) openBook(); };
 $('iBtn').onclick = () => { initAudio(); if (S && S.player) openIsland(); };
+$('wBtn').onclick = () => { initAudio(); if (S && S.player) openWallet(); };
 $('bossBar').onclick = () => { if (S && S.player) openIsland('boss'); };
 $('objBox').onclick = () => { initAudio(); if (S && S.player) openQuests(); };
 // Full screen: the Fullscreen API where the browser has it (Android, desktop); on iPhone, add to the home screen.
 const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
 const standalone = () => matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone;
-function fsLabel() { $('fsBtn').textContent = fsEl() ? 'EXIT FULL' : 'FULL SCREEN'; $('fsBtn').style.display = !fsEl() && standalone() ? 'none' : ''; }
+function fsLabel() { $('fsBtn').textContent = fsEl() ? '⛶ EXIT' : (matchMedia('(max-width:1400px)').matches ? '⛶' : 'FULL SCREEN'); $('fsBtn').style.display = !fsEl() && standalone() ? 'none' : ''; }
 async function toggleFull() {
   const d = document.documentElement;
   try {
@@ -810,7 +810,7 @@ addEventListener('resize', () => { fit(); layoutTop(); }); fit(); setTimeout(lay
 let MINI, last = performance.now(), wx = [];
 for (let i = 0; i < 160; i++) wx.push({ x: Math.random() * VW, y: Math.random() * VH, s: .6 + Math.random() * .8 });
 function update(dt) {
-  const pOn = ['trade', 'card', 'journal', 'profile', 'netErr', 'cine', 'tour', 'book', 'catch', 'quests', 'fate', 'duel', 'island'].some(id => $(id)?.classList.contains('on'));
+  const pOn = ['trade', 'card', 'journal', 'profile', 'netErr', 'cine', 'tour', 'book', 'catch', 'quests', 'fate', 'duel', 'island', 'wallet'].some(id => $(id)?.classList.contains('on'));
   document.body.classList.toggle('dlgOn', !!dlg);
   if ((layoutTop.n = (layoutTop.n || 0) + 1) % 20 === 0) layoutTop();
   if (pOn !== document.body.classList.contains('panelOn')) { document.body.classList.toggle('panelOn', pOn); if (pOn) for (const k in keys) keys[k] = false; }

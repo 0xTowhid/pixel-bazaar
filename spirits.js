@@ -167,7 +167,7 @@ async function openBook(tab) {
         ${lead === s.token_id ? '<span class="up">✓ COMPANION</span>' : `<button class="btn" data-lead="${s.token_id}">COMPANION</button>`}
         <button class="btn" data-feed="${s.token_id}">FEED</button>
         ${canEvo ? `<button class="btn gold" data-evo="${s.token_id}">EVOLVE!</button>` : ''}
-        ${S.player.wallet ? `<button class="btn" data-send="${s.token_id}">TO WALLET</button>` : ''}
+        <button class="btn" data-send="${s.token_id}">SEND</button>
       </div><div class="sNft">NFT #${s.token_id}</div></div>`;
   };
   const caughtBits = BigInt(S.player.book || 0);
@@ -181,16 +181,15 @@ async function openBook(tab) {
     ${bookTab === 'mine' ? (sps.length ? `<div class="sub" style="margin:.4em 0">Your companion follows you and grows every night. Lantern shards: ${S.player.shards || 0}. Feed: up to ${Rules.FEEDS_A_DAY} a day (crops +6 XP, fish/honey/sushi +12, jade +25).</div><div class="sGrid">${sps.map(card).join('')}</div>`
       : '<div class="sub" style="margin:1em 0;line-height:1.7">No spirits yet. Look for glowing wisps around the farm, the town, and the Whispering Woods (north). Walk up and press E / A.</div>')
       : bookTab === 'fish' ? await legendsHTML() : `<div class="bGrid">${book}</div>`}
-    <div style="margin-top:1em;display:flex;gap:.5em;flex-wrap:wrap"><button class="btn" id="bWallet">${S.player.wallet ? 'WALLET: ' + S.player.wallet : 'LINK A NEAR WALLET'}</button><button class="btn big" id="bClose">CLOSE (B)</button></div>`;
+    <div style="margin-top:1em;display:flex;gap:.5em;flex-wrap:wrap"><button class="btn" id="bWallet">WALLET</button><button class="btn big" id="bClose">CLOSE (B)</button></div>`;
   el.classList.add('on'); sfx('menu');
   el.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => openBook(b.dataset.tab));
   el.querySelectorAll('[data-lead]').forEach(b => b.onclick = () => { queue({ t: 'SetLead', token: b.dataset.lead }, 'companion', true); flush.after = () => openBook(); });
   el.querySelectorAll('[data-evo]').forEach(b => b.onclick = () => evolve(b.dataset.evo));
   el.querySelectorAll('[data-feed]').forEach(b => b.onclick = () => feedMenu(b.dataset.feed));
-  el.querySelectorAll('[data-send]').forEach(b => b.onclick = () => sendToWallet(b.dataset.send));
-  el.querySelectorAll('[data-sendf]').forEach(b => b.onclick = () => { queue({ t: 'SendToWallet', token: b.dataset.sendf }, 'send to wallet', true); flush.after = () => { sfx('success'); toast(`Sent to your wallet ${S.player.wallet}.`, 4); openBook('fish'); }; });
+  el.querySelectorAll('[data-send],[data-sendf]').forEach(b => b.onclick = () => sendFromBook(b.dataset.send || b.dataset.sendf));
   $('bClose').onclick = () => el.classList.remove('on');
-  $('bWallet').onclick = () => walletPanel();
+  $('bWallet').onclick = () => { el.classList.remove('on'); openWallet(); };
 }
 function feedMenu(token) {
   const s = S.spirits.find(x => x.token_id === token);
@@ -219,46 +218,6 @@ function evolve(token) {
 }
 
 // ---------- your NEAR wallet ----------
-async function walletPanel() {
-  const p = S.player, req = await Backend.linkRequest().catch(() => null);
-  const mockish = Backend.mode !== 'chain';
-  $('book').innerHTML = `<div class="gname">YOUR NEAR WALLET</div>
-    <div style="line-height:1.7;margin:.6em 0">Your spirits and badges are real NEAR NFTs (NEP-171). Link a wallet once, then send any of them to it: you will see them in your wallet, can send them to friends or list them on a marketplace, and can send them back to play.</div>
-    ${p.wallet ? `<div class="up" style="margin:.6em 0">LINKED: ${esc(p.wallet)}</div><button class="btn" id="wUnlink">UNLINK</button>`
-      : req ? `<div style="margin:.6em 0">The wallet <b class="gold">${esc(req)}</b> asked to link to this game account.</div><button class="btn big gold" id="wConfirm">YES, THAT IS MY WALLET</button>`
-      : `<ol class="wSteps"><li>Connect your wallet and approve one small transaction (it says "link_wallet").</li><li>Come back here and confirm it.</li></ol>
-         ${mockish ? `<div class="sub">Test mode: type a wallet name instead.</div><input id="wName" placeholder="you.testnet"> ` : ''}<button class="btn big gold" id="wConnect">CONNECT A WALLET</button>`}
-    <div style="margin-top:1em"><button class="btn big" id="wBack">BACK</button></div>`;
-  $('wBack').onclick = () => openBook();
-  if ($('wUnlink')) $('wUnlink').onclick = () => { queue({ t: 'UnlinkWallet' }, 'unlink wallet', true); flush.after = () => walletPanel(); };
-  if ($('wConfirm')) $('wConfirm').onclick = () => { queue({ t: 'ConfirmWallet', wallet: req }, 'link wallet', true); flush.after = () => { toast('Wallet linked. Now you can send spirits and badges to it.', 4); walletPanel(); }; };
-  if ($('wConnect')) $('wConnect').onclick = () => mockish ? mockLink() : connectWallet();
-}
-async function mockLink() {
-  const w = ($('wName').value || '').trim().toLowerCase(); if (!w) return;
-  await fetch('/mock/call', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ accountId: w, method: 'link_wallet', args: { game_account: Backend.accountId } }) }).catch(() => {});
-  if (Backend.mode === 'local') { try { Backend.localEngine().link_wallet(w, { game_account: Backend.accountId }); } catch (e) {} }
-  walletPanel();
-}
-async function connectWallet() {
-  try {
-    if (!document.querySelector('link[href="assets/wallet.css"]')) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'assets/wallet.css'; document.head.appendChild(l); }
-    $('busy').textContent = 'Opening wallets...'; $('busy').style.display = 'block';
-    const m = await import('./vendor/wallet.mjs');
-    const { selector, modal } = await m.openWallets(Backend.network, Backend.contractId);
-    $('busy').style.display = 'none';
-    const go = async () => {
-      const wallet = await selector.wallet(); const accts = await wallet.getAccounts(); const wid = accts[0] && accts[0].accountId;
-      if (!wid) return;
-      safeSet('pb_linking', wid);
-      toast('Approve the link_wallet transaction in your wallet...', 5);
-      await wallet.signAndSendTransaction({ receiverId: Backend.contractId, actions: [{ type: 'FunctionCall', params: { methodName: 'link_wallet', args: { game_account: Backend.accountId }, gas: '30000000000000', deposit: '1' } }] });
-      walletPanel();
-    };
-    if (selector.isSignedIn()) await go();
-    else { modal.show(); selector.on('signedIn', () => { modal.hide(); go().catch(e => toast(e.message || String(e), 4)); }); }
-  } catch (e) { $('busy').style.display = 'none'; toast('Wallet: ' + (e.message || e), 4); }
-}
 const popcount = n => { let c = 0; for (; n; n &= n - 1) c++; return c; };
 // the five legendary fish: riddles until you catch one, then the NFT itself
 async function legendsHTML() {
@@ -271,7 +230,7 @@ async function legendsHTML() {
       return `<div class="sCard" style="border-color:${has ? L.tint : '#4a3f72'}"><div class="sTop"><b>${has ? L.name.toUpperCase() : '???'}</b><span style="background:${L.tint}">LEGEND</span></div>
         ${has ? `<img src="nft/fish/${k}.png" alt="" style="width:8em;height:8em;border-radius:8px">` : `<div style="font-size:3.4em;text-align:center;color:#5d5280;margin:.25em 0">?</div>`}
         <div class="sub" style="line-height:1.6;min-height:3.2em">"${L.riddle}"</div>
-        <div class="sBtns">${has ? (tok ? `<span class="up">✓ CAUGHT</span>${S.player.wallet ? `<button class="btn" data-sendf="${tok.token_id}">TO WALLET</button>` : ''}<span class="sNft">NFT #${tok.token_id}</span>` : '<span class="up">✓ CAUGHT · IN YOUR WALLET</span>') : '<span class="sub">not caught yet</span>'}</div></div>`;
+        <div class="sBtns">${has ? (tok ? `<span class="up">✓ CAUGHT</span><button class="btn" data-sendf="${tok.token_id}">SEND</button><span class="sNft">NFT #${tok.token_id}</span>` : '<span class="up">✓ CAUGHT · SENT AWAY</span>') : '<span class="sub">not caught yet</span>'}</div></div>`;
     }).join('')}</div>`;
 }
 function showLegend(k) {
@@ -281,15 +240,4 @@ function showLegend(k) {
     <div style="text-align:center;line-height:1.7">You pulled up the <b class="gold">${L.name.toUpperCase()}</b>. Nobody else has yours: it is a one-of-one NFT on NEAR.<br>${popcount(S.player.legends)} of 5 legends caught. Press B to see the others' riddles.</div>
     <div style="text-align:center;margin-top:1em"><button class="btn big gold" id="cardBtn">WHAT A FISH!</button></div>`, null, true);
 }
-function sendToWallet(token) {
-  const s = S.spirits.find(x => x.token_id === token);
-  queue({ t: 'SendToWallet', token }, 'send to wallet', true);
-  flush.after = () => { if (!S.spirits.find(x => x.token_id === token)) { sfx('success'); toast(`${s.name} (#${token}) is in your wallet ${S.player.wallet} now.`, 4); } openBook(); };
-}
-// After a wallet redirect (or on any start): a wallet asked to link? Ask the player once.
-async function checkWalletLink() {
-  try {
-    const req = await Backend.linkRequest();
-    if (req && S.player.wallet !== req) { toast(`The wallet ${req} asked to link. Press B, then the wallet button, to confirm.`, 6); }
-  } catch (e) {}
-}
+async function sendFromBook(token) { $('book').classList.remove('on'); await openWallet('items'); sendItem(token); }
